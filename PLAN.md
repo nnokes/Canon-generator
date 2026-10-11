@@ -184,12 +184,12 @@ Per-voice fields:
 |---|---|
 | `delay` | Entry offset after the leader, in beats. |
 | `interval` + `domain` | `degree` transposes by scale steps, so it stays in the scale and the exact intervals change: the generalized "diatonic" answer, which is Tymoczko's *scalar* transposition. `absolute` transposes by an exact cents value or ratio, with optional `quantize: nearest`: Tymoczko's *chromatic* transposition. Albrechtsberger says that only unison and octave canons can copy whole and half steps exactly (Mann p. 228), which is why `degree` is the ordinary case. In a harmonic series, a degree shift means partial *n* → *n+k*. An absolute ratio *r* means *n* → *n·r*, which stays inside the series when *r* is a whole number. One interval per follower (Mann p. 228). |
-| `scale` | Optional. The follower answers in a *different* scale system or spectrum, mapped degree by degree (Tymoczko's *interscalar* transposition). Examples: a harmonic-series dux answered in a stretched spectrum, or the tonal "e for e♭" answer (Mann p. 258). |
+| `scale` | Optional. The follower answers in a *different* scale system or spectrum (Tymoczko's *interscalar* transposition): degree *x* of the dux's scale maps to degree *x + c* of the follower's scale, where *c* is the interval in steps. Examples: a harmonic-series dux answered in a stretched spectrum, or the tonal "e for e♭" answer (Mann p. 258). |
 | `transform` | `P` (prime), `I` (inversion), `R` (retrograde) or `RI` (retrograde inversion). Plus two segment transforms from Albrechtsberger's riddle canons: `segmentRetrograde` (each segment, such as each measure, is reversed in place; Mann Ex. 233–234) and `segmentPermute` (the beats inside each segment are reordered by a permutation, ties and rests included; Ex. 237–238). |
 | `axis` | The inversion axis. `axis.kind` is `degree` (mirror in scale steps), `log` (mirror in cents or log-frequency; around f0 this maps harmonic partials onto subharmonics, Fux's arithmetic/harmonic division taken literally) or `partial` (n ↦ N+1−n inside a spectrum). |
 | `timeScale` | Augmentation (2), diminution (0.5), or any float. Ratios give mensuration (prolation) canons; irrational ratios give Nancarrow-style tempo canons. |
 | `talea` | An optional duration cycle that replaces the leader's rhythm while keeping its pitch order (isorhythm: shared *color*, per-voice *talea*). This is the core of Ligeti mode. |
-| `loop`, `spiral` | Perpetual canon, and *per tonos* (each pass transposed by `spiral`, which drifts indefinitely in a microtonal system). |
+| `loop`, `spiral` | Perpetual canon, and *per tonos*. In the default `spiral.kind: transpose`, each pass is transposed by `spiral`, which drifts indefinitely in a microtonal system. In `spiral.kind: scaleWalk` (M7), the scale itself moves by a small voice leading on each pass, and the dux is re-mapped by interscalar transposition (Tymoczko ch. 4). |
 | `register`, `out` | Octave placement, and the output route (MSP voice, MPE channel). |
 
 Whole-canon fields:
@@ -345,14 +345,20 @@ This is a much smaller search than the chain, and M4 uses it for rounds.
 
 | Metric | How it is measured | Use |
 |---|---|---|
-| conjunct motion | mean absolute melodic step, in cents | melody smoothness |
+| conjunct motion | mean absolute melodic step, in **scale steps of the active scale** (the scale is a ruler, ch. 4), with cents alongside | melody smoothness |
 | acoustic consonance | the chosen consonance model | the dissonance curve |
 | harmonic consistency | distance between successive vertical chord types, ignoring octave, voice order and transposition (OPT in OPTIC terms). Compared **only between verticals with the same number of sounding voices**; otherwise left undefined | texture uniformity |
-| macroharmony | pitch-class spread over a sliding window | Ligeti band width; spectral density |
-| centricity | how concentrated the pitch-class weight is | a *Lontano*-style single-pitch start |
+| macroharmony | distinct pitch classes in a sliding window, merging any within `pcTolerance` cents; plus the **circulation rate** (new pitch classes per beat) and **macroharmonic consistency** (overlap between successive windows) (ch. 5) | Ligeti band width and unfolding speed; spectral density |
+| centricity | how concentrated the duration-weighted pitch-class distribution is (maximum share or entropy), with extra weight for the bass and phrase ends. This formula is ours | a *Lontano*-style single-pitch start |
+| evenness (ours, after ch. 3) | distance from each vertical to the nearest perfectly even chord with the same number of notes | cluster ↔ equal-division axis; Ligeti band widening |
 
-Also **voice-leading size**: the summed absolute motion, in cents, of the voices sounding in
-*both* of two consecutive slices. In a canon this depends only on the dux's intervals at the
+Also **voice-leading size**: the motion, in cents, of the voices sounding in *both* of two
+consecutive slices, under a selectable norm (`vlNorm`: taxicab by default, or Euclidean or
+Chebyshev; ch. 2).
+**Answer distortion** (ours): the cents gap between a follower's `degree` answer and its
+`absolute` answer, reported by the answer finder.
+**Boundary events**: voice crossings and unisons, the places where the canon's path touches
+the edge of chord space (ch. 3). In a canon this depends only on the dux's intervals at the
 different delays. The `spectral` and `micropoly` profiles can set targets or envelopes for any
 of these metrics.
 
@@ -364,6 +370,11 @@ of these metrics.
   minimal-voice-leading search over unordered chords.
 - Entries, exits and "holes" change the number of sounding voices, so they are reported as
   separate counts and never folded into a distance.
+- Pitch-class metrics fold at the scale system's period. Non-periodic systems (harmonic
+  series, inharmonic spectra) fold at a configurable `pcPeriod` (default 1200 cents), and the
+  report says so.
+- Melodic rules (step vs. leap, leap compensation) count scale steps of the active scale.
+  Consonance counts cents. This is how Fux's melodic rules carry over to any tuning.
 
 **Answer finder** (Albrechtsberger: hidden answers, p. 230; riddle canons, pp. 255–261).
 Given any dux, including one you wrote yourself, it searches every follower setting:
@@ -448,8 +459,8 @@ Each milestone gets a checklist in `docs/Mx-checklist.md` when work on it starts
 | **M4** | Generator: strict first-species canons | `cg.generate` with a left-to-right search, backtracking, beam, seed, node budget, diagnostics. 2 voices, then N; `fux-relaxed` for N > 2. The block method for rounds (§3.5). Time-sliced in `[v8]` with progress. | Valid 2-voice canons at the octave, fifth and fourth with delays of 1–4 bars. 3–4-voice rounds, built by the block method, with no 6/4 on strong beats and smooth perpetual joins. Same seed, same canon. A 32-note canon finishes in a time budget recorded in M0 without hanging Max. |
 | **M5** | Rhythm: species 2–5 and florid | A rhythmic grid; passing and neighbour notes; suspensions (4th species); florid mixtures. Rules follow Fux's chapters on the second to fifth species (pp. 41–70). | A 4th-species canon at the 2nd/9th with chains of suspensions. A florid 2-voice canon passes `fux-strict`. |
 | **M6** | Transformations under rules, plus convergence | Generation with I, R and RI voices (outside-in order) and time-scaled voices. Convergence-point solver and "converge at x" endings. | Contrary-motion, crab, table and mensuration canons generated under the rules. The solver matches convergence points worked out by hand (including a √2 case within ε). |
-| **M7** | Microtonal and spectral counterpoint | Rule profiles running on the `ratio` and `roughness` models; spectral presets; undertone answers; partial-index inversion. | These presets analyze clean under their own models:<br>• **Tenney *Spectral CANON*-style**: voice *k* on partial *k*, tempo ∝ *k*, rhythm and frequency ratios matched<br>• a strict 31-EDO canon<br>• a Bohlen–Pierce canon<br>• a harmonic-series dux answered in the undertone series |
-| **M8** | Micropolyphony (Ligeti mode) | 8–48 voices share one pitch sequence (*color*), each with its own subdivision (3/4/5/6-tuplets) or "elastic talea". `micropoly` rules. Entries, exits and "holes". The band unfolds from a single pitch (*Lux aeterna*, *Lontano*). Density envelopes. MSP output. | A 16-voice texture rendered from one dux reports **zero simultaneous attacks** when that rule is on. Band width follows the envelope. It plays without dropouts in Max. |
+| **M7** | Microtonal and spectral counterpoint | Rule profiles running on the `ratio` and `roughness` models; spectral presets; undertone answers; partial-index inversion; interscalar answers and the scale-walk spiral. | These presets analyze clean under their own models:<br>• **Tenney *Spectral CANON*-style**: voice *k* on partial *k*, tempo ∝ *k*, rhythm and frequency ratios matched<br>• a strict 31-EDO canon<br>• a Bohlen–Pierce canon<br>• a harmonic-series dux answered in the undertone series |
+| **M8** | Micropolyphony (Ligeti mode) | 8–48 voices share one pitch sequence (*color*), each with its own subdivision (3/4/5/6-tuplets) or "elastic talea". `micropoly` rules. Entries, exits and "holes". The band unfolds from a single pitch (*Lux aeterna*, *Lontano*), driven by a **pitch-class circulation-rate envelope** (Tymoczko ch. 5) and a centricity release. Density envelopes. MSP output. | A 16-voice texture rendered from one dux reports **zero simultaneous attacks** when that rule is on. Band width follows the envelope. It plays without dropouts in Max. |
 | **M9** | Max for Live product | `cg.host.live`, clip writing, Live parameters, a shared panel, Live 12 tuning interplay. | A frozen `.amxd` writes a canon into clips and plays it, without the repo on the search path. |
 | **M10** | Export and notation | Per-voice MIDI files; MusicXML with microtonal accidentals; an optional `bach.roll` view (the `bach` package as an optional add-on, not a dependency). | Files open in a notation program and a DAW with pitch intact, or with cents written as text where the format can't carry them. |
 | **M11** | Ship | Package into a zip with a read-me; test on a clean machine (the cento M12 pattern). | A fresh user opens `canon.maxpat` and renders a preset with no setup. |
@@ -489,9 +500,12 @@ Each milestone gets a checklist in `docs/Mx-checklist.md` when work on it starts
 
 ## 7. Open questions
 
-1. **Tymoczko, *A Geometry of Music*.** This is the second PDF, and it would not load. Its
-   ideas are folded in from secondary sources (RESEARCH.md §3a). Chapters 2–5 should be read
-   in the book before M3 (metrics) and M7 (interscalar answers).
+1. **Tymoczko, *A Geometry of Music*. Closed: moving on without the book.** Three upload
+   attempts failed, so its ideas come from secondary sources (RESEARCH.md §3a). The plan
+   depends only on definitions confirmed in those sources (scalar and interscalar
+   transposition, the voice-leading-size principles, macroharmony, centricity). Every formula
+   built on them is labelled as ours. If the book ever becomes readable, checking chapters
+   2–5 is a nice-to-have, not a blocker.
 2. **Ligeti mode details.** The exact rhythmic rules (Levy 2013) and the per-voice subdivisions
    in *Lux aeterna* still need checking against primary sources before M8 (see RESEARCH.md).
 3. **Rest of Mann's *Study of Fugue*.** The canon chapter (Albrechtsberger, pp. 213–261) has

@@ -466,12 +466,117 @@ them on a normal connection.
      Douthett, below).
 - **Status.** `secondary`. The user's PDF of the book would not load. The structure and claims
   above come from library catalogue records, the MAA review listing, reviews, and Tymoczko's
-  papers below. **Chapters 2–4 should be read in the book before M3** (metrics) **and M7**
-  (interscalar answers).
+  papers below. Three uploads of the book failed, so **we are moving on without it.** The design
+  relies only on the confirmed definitions, and labels our own formulas. Chapter notes follow.
 - **Links:**
   - [Wikipedia summary](https://en.wikipedia.org/wiki/Dmitri_Tymoczko)
   - [MAA review / contents](https://old.maa.org/node/111660)
   - [Princeton Alumni Weekly feature](https://paw.princeton.edu/article/grand-unified-theory-music)
+  - [OUP page](https://global.oup.com/academic/product/a-geometry-of-music-9780195336672)
+  - [Hook's review, *MTO* 17/3 (2011)](https://www.mtosmt.org/issues/mto.11.17.3/mto.11.17.3.hook.pdf)
+  - [Gogins's review, *CMJ* 36/1](https://www.computermusicjournal.org/reviews/36-1/gogins-tymoczko-book.html)
+
+#### Chapter notes, chapters 2–5 (`secondary`: from the table of contents, reviews and Tymoczko's papers; the book text itself has not been read)
+
+The book's pages and these reviews could not be opened from the build environment. Section
+titles come from publisher and library listings. Definitions come from Tymoczko's papers and
+the reviews, as quoted in search results. Each note ends with **→ design**, the concrete
+consequence for the generator. Where we invent a formula, it is labelled as ours.
+
+**Chapter 2, Harmony and Voice Leading.** Linear vs. circular pitch space. Transposition and
+inversion as distance-preserving maps. Voice-leading size. "Near identity."
+- Tymoczko (2006) asks every voice-leading measure to respect two principles: small voice
+  leadings move each voice a short distance, and along paths that don't cross. Hall and
+  Tymoczko (Bridges 2007) show these principles amount to the *submajorization* order, and
+  say intuition alone cannot pick one exact metric. The common choices (taxicab, Euclidean,
+  Chebyshev) all respect the principles, and the book argues they agree with straight-line
+  distance in chord space.
+- → design:
+  - voice-leading size gets a selectable norm, `vlNorm: taxicab | euclidean | chebyshev`,
+    defaulting to taxicab in cents
+  - linear pitch space is our float pitch; circular pitch-class space is pitch modulo the
+    scale system's period
+  - non-periodic systems (harmonic series, inharmonic spectra) have no natural pitch
+    class, so pitch-class metrics fold at a configurable `pcPeriod` (default 1200 cents)
+    and the report says so
+
+**Chapter 3, A Geometry of Chords.** Ordered pitch space, two-note chord space,
+three-dimensional chord space, voice-leading lattices, and "two musical geometries".
+- N-note chords live in Tⁿ/Sₙ:
+  - two-note chord space is a Möbius strip
+  - three-note chord space is a triangular prism whose ends are glued with a twist
+  - the perfectly even chord (the augmented triad, in 12-TET) runs up the centre
+  - unisons lie on the edges, and chords with a doubled note on the sides
+  
+  Voice crossings and unisons are where a path touches the boundary. A *voice-leading
+  lattice* is the discrete grid that a particular tuning carves out of the continuous
+  space.
+- → design:
+  1. **An evenness metric for verticals** (our formulation): the distance from each slice to
+     the nearest perfectly even chord with the same number of notes (equal division of the
+     period). It runs from cluster (low evenness) to equal division (high). In Ligeti mode,
+     evenness rises as the band widens.
+  2. **Crossings and unisons are reported as boundary events.** Unison canons and
+     micropolyphony produce many of them by design. Fux-style profiles penalize them;
+     `micropoly` doesn't.
+  3. **A fact about rounds.** In a perpetual round at the unison with delay *d*, each voice at
+     time *t + d* plays what the previous voice played at *t*. So every vertical repeats, as a
+     set of pitches, every *d* beats: the canon is a closed loop in chord space, and its
+     harmonic rhythm cycles with period *d*. This is the geometric reason Albrechtsberger's
+     block method works.
+  4. An EDO is a finer lattice in the same space, so the stretch-goal chord-space view works
+     unchanged for microtonal canons.
+
+**Chapter 4, Scales.** 4.1 "A scale is a ruler"; scale degrees; scalar transposition;
+scalar inversion; evenness and scalar transposition; constructing the familiar scales;
+modulation as voice leading; voice leading between common scales; scalar and interscalar
+transposition.
+- A scale defines a metric: distance is counted in scale steps.
+  - *Scalar transposition* moves by scale steps; *chromatic transposition* moves by a fixed
+    pitch distance.
+  - *Interscalar transposition* sends degree *x* of collection A to degree *x + c* of
+    collection B (Tymoczko's 2004 abstract).
+  - Modulation is itself a voice leading between scales. Scales related by single small
+    moves form a network (Tymoczko, "Scale Networks in Debussy," *JMT* 48/2, 2004).
+- → design:
+  1. **Melodic rules are measured on the scale's ruler; consonance in cents.** "Step vs.
+     leap", leap compensation and conjunct motion count *scale steps of the active scale*.
+     Consonance and roughness use cents. This is how Fux's melodic rules carry over to
+     31-EDO or a harmonic-series segment.
+  2. **Answer distortion** (our metric): the cents gap between a follower's `degree` answer
+     and its `absolute` answer. In nearly even scales the gap is small, while in uneven ones
+     (harmonic series, whose steps shrink going up) the dux's shape bends more. The answer
+     finder reports this so you can pick the domain on purpose.
+  3. **Per-voice `scale`** is interscalar transposition exactly: degree *x* in the dux's scale
+     maps to degree *x + c* in the follower's scale.
+  4. **Scale-walk spiral**, a generalized *per tonos* canon: on each pass the scale itself
+     moves by a small voice leading (a walk through a scale network, in any tuning) instead
+     of being transposed. The dux is re-mapped by interscalar transposition each time.
+
+**Chapter 5, Macroharmony and Centricity.** Sections include macroharmony; 5.3 pitch-class
+circulation; 5.4 modulating the rate of pitch-class circulation; macroharmonic consistency;
+and where centricity comes from.
+- Macroharmony is *"the total collection of notes used over small stretches of time"*. Tonal
+  music typically uses about 5–7 pitch classes over moderate spans. Centricity is the sense
+  that one or more notes are more stable and important. Scale, macroharmony and centricity
+  are independent of one another.
+- → design (the formulas are ours, guided by the section titles):
+  1. **Macroharmony size**: distinct pitch classes in a sliding window. Pitch classes within
+     a tolerance (`pcTolerance`, in cents) count as one, so microtones don't inflate the count.
+  2. **Pitch-class circulation rate**: how many new pitch classes enter per beat, and how
+     quickly the window's contents turn over.
+  3. **Macroharmonic consistency**: how much successive windows overlap.
+  4. **Centricity**: how concentrated the duration-weighted pitch-class distribution is
+     (its maximum share, or its entropy), with extra weight for the bass and for phrase
+     starts and ends.
+  5. **Ligeti mode is "modulating the rate of pitch-class circulation."** The *Lux
+     aeterna*/*Lontano* unfolding becomes a **circulation-rate envelope** that controls how
+     fast new pitches enter the shared pitch sequence. Centricity starts at maximum on one
+     pitch and is released over time.
+  6. An optional alternative (Chiu, *MTO* 27/3, 2021): describe macroharmony by the DFT
+     magnitudes of the pitch-class distribution. The DFT is defined on the continuous pitch
+     circle, so it works in any tuning.
+     <https://www.mtosmt.org/issues/mto.21.27.3/mto.21.27.3.chiu.pdf>
 
 ### Tymoczko, "Geometrical Methods in Recent Music Theory," *Music Theory Online* 16/1 (2010)
 - **What it is.** *Correction to an earlier note in this file:* this is **not** an overview of
@@ -609,10 +714,9 @@ them on a normal connection.
 
 - [x] Mann, *The Study of Fugue*: the canon chapter (Albrechtsberger, pp. 213–261), read from
       the user's chapter PDF.
-- [ ] Tymoczko, *A Geometry of Music* (the user's second PDF, which would not load). Read
-      chapters 2–5 before M3 and M7. The 2010 *MTO* piece turned out to be a short response
-      (read; §3a), not an overview. The closest substitute is "Three Conceptions of Musical
-      Distance" (2009).
+- [x] Tymoczko, *A Geometry of Music*: closed. Three uploads failed, so we moved on with
+      secondary sources (§3a chapter notes) plus the 2010 *MTO* response (read). If the book
+      becomes available, checking chapters 2–5 is optional.
 - [ ] Transcribe Mann Ex. 201 (p. 228) and Ex. 239–240 (p. 261) as answer-finder golden tests
       for M3.
 - [ ] The Max documentation pages for M0. docs.cycling74.com is blocked by this cloud
