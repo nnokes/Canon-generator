@@ -347,13 +347,23 @@ This is a much smaller search than the chain, and M4 uses it for rounds.
 |---|---|---|
 | conjunct motion | mean absolute melodic step, in cents | melody smoothness |
 | acoustic consonance | the chosen consonance model | the dissonance curve |
-| harmonic consistency | distance between successive vertical chord types, ignoring octave, voice order and transposition (OPT in OPTIC terms) | texture uniformity |
+| harmonic consistency | distance between successive vertical chord types, ignoring octave, voice order and transposition (OPT in OPTIC terms). Compared **only between verticals with the same number of sounding voices**; otherwise left undefined | texture uniformity |
 | macroharmony | pitch-class spread over a sliding window | Ligeti band width; spectral density |
 | centricity | how concentrated the pitch-class weight is | a *Lontano*-style single-pitch start |
 
-Also **voice-leading size**: the summed motion of all voices between consecutive slices. In a
-canon this depends only on the dux's intervals at the different delays. The `spectral` and
-`micropoly` profiles can set targets or envelopes for any of these metrics.
+Also **voice-leading size**: the summed absolute motion, in cents, of the voices sounding in
+*both* of two consecutive slices. In a canon this depends only on the dux's intervals at the
+different delays. The `spectral` and `micropoly` profiles can set targets or envelopes for any
+of these metrics.
+
+**Measurement rules** (Tymoczko, *MTO* 16/1, 2010):
+- Distances are always measured directly in cents. They are never graph-step counts like
+  Tonnetz moves, which don't give real distances between chords that aren't adjacent and
+  only exist in 12-TET.
+- Canon voices are labelled, so the actual voice leading is known. There is no
+  minimal-voice-leading search over unordered chords.
+- Entries, exits and "holes" change the number of sounding voices, so they are reported as
+  separate counts and never folded into a distance.
 
 **Answer finder** (Albrechtsberger: hidden answers, p. 230; riddle canons, pp. 255–261).
 Given any dux, including one you wrote yourself, it searches every follower setting:

@@ -474,10 +474,55 @@ them on a normal connection.
   - [Princeton Alumni Weekly feature](https://paw.princeton.edu/article/grand-unified-theory-music)
 
 ### Tymoczko, "Geometrical Methods in Recent Music Theory," *Music Theory Online* 16/1 (2010)
-- An open-access overview of the same ideas by the author. **This is the best substitute while
-  the book's PDF won't load.**
-  <https://mtosmt.org/issues/mto.10.16.1/mto.10.16.1.tymoczko.html>
-- **Status.** `secondary` (not yet read; mtosmt.org is blocked from the build environment).
+- **What it is.** *Correction to an earlier note in this file:* this is **not** an overview of
+  the book. It is a short (four-page) response to Joti Rockwell's "Birdcage Flights"
+  (*MTO* 15.5, 2009). It makes one methodological point that bears directly on our analyzer:
+  1. **Graph steps are not distances.** A graph whose edges are "local moves" (the Tonnetz,
+     Rockwell's birdcage graphs) need not measure the distance between chords that are
+     *not* adjacent. On the Tonnetz, C major is two steps from F major and three from F minor.
+     Yet C major → F minor takes only **two** semitones of total motion, and C major →
+     F major takes **three** (¶3). Tonnetz distance just counts parsimonious moves.
+  2. **Some graphs are faithful.** Douthett and Steinbach's "Cube Dance" path lengths equal
+     the voice-leading size, meaning the **taxicab** total of semitone steps across all
+     voices (¶5).
+  3. **Changing the number of voices breaks distance.** Rockwell's two-edge paths can cancel
+     motion: A♭⁷ and C⁷ are both two edges from A♭ minor, but need 3 and 4 semitones of motion
+     (¶6). A graph linking clusters, dyads and single notes puts {F♯, G, A♭} and {C♯, D, E♭}
+     seven edges apart, though at least 15 semitones of motion separate them (¶7, n. 4).
+     Following Callender, Quinn and Tymoczko (2008), *"to obtain completeness without
+     sacrificing contrapuntal fidelity, we must restrict ourselves to multisets of a
+     particular size."*
+  4. **The moral (¶8).** Tell apart models that only list local moves (a subway map) from
+     models whose distances mean something between *any* two objects. Coherent geometries
+     exist for voice leading among chords with a fixed number of notes. Footnote 1 defines
+     **OPC space**: ignore octave, order and note multiplicity, so (C4, E4, G4) ≡
+     (E3, G4, G5, C2, E4).
+- **What we take from it** (PLAN §3.6):
+  - **Measure motion directly; never count graph steps.** Voice-leading size is the summed
+    absolute motion in cents, which works in any tuning. Discrete graphs like the Tonnetz are
+    12-TET-specific, and they are not reliable distances anyway.
+  - **Use voice identity, which canons give us for free.** In a canon each voice is labelled,
+    so the actual voice leading between slices is known, and there is no "minimal voice
+    leading" search over unordered chords.
+  - **Never fold entries and exits into a distance.** Voice-leading size is computed only over
+    the voices sounding in *both* slices. Entries, exits and Ligeti-style "holes" are
+    reported as separate counts.
+  - **Harmonic consistency** is compared only between verticals with the *same number of
+    sounding voices*. Comparisons across different numbers of voices are left undefined, not
+    approximated.
+- **Further reading from its works cited:**
+  - Tymoczko, "Three Conceptions of Musical Distance," in *Mathematics and Computation in
+    Music* (Springer, 2009): the fullest treatment of the distance question
+  - Tymoczko, "Scale Theory, Serial Theory, and Voice Leading," *Music Analysis* 27/1 (2008):
+    the row transforms P, I, R and RI are our canon transforms
+  - Douthett and Steinbach, "Parsimonious Graphs," *JMT* 42/2 (1998)
+  - Cohn, "Maximally Smooth Cycles," *Music Analysis* 15/1 (1996)
+  - Rockwell, "Birdcage Flights," *MTO* 15.5 (2009)
+- **Link.** <https://mtosmt.org/issues/mto.10.16.1/mto.10.16.1.tymoczko.html> (its figures are
+  online only)
+- **Milestone.** M3 (metric definitions), M8 (entries, exits, holes).
+- **Status.** `read`, from the PDF the user supplied (text only; the figures were not
+  included).
 
 ### Callender, Quinn and Tymoczko, "Generalized Voice-Leading Spaces," *Science* 320 (2008): 346–348
 - The **OPTIC** framework. Five equivalences, used in any combination: **O**ctave,
@@ -565,7 +610,9 @@ them on a normal connection.
 - [x] Mann, *The Study of Fugue*: the canon chapter (Albrechtsberger, pp. 213–261), read from
       the user's chapter PDF.
 - [ ] Tymoczko, *A Geometry of Music* (the user's second PDF, which would not load). Read
-      chapters 2–5 before M3 and M7. Until then, read Tymoczko's 2010 *MTO* article.
+      chapters 2–5 before M3 and M7. The 2010 *MTO* piece turned out to be a short response
+      (read; §3a), not an overview. The closest substitute is "Three Conceptions of Musical
+      Distance" (2009).
 - [ ] Transcribe Mann Ex. 201 (p. 228) and Ex. 239–240 (p. 261) as answer-finder golden tests
       for M3.
 - [ ] The Max documentation pages for M0. docs.cycling74.com is blocked by this cloud
