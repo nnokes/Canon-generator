@@ -1,5 +1,5 @@
 // [v8] wrapper for the M0 "hello" spike. Glue only: the logic is in code/lib.
-// Patches load the bundled copy, patchers/scripts/cg.hello.bundle.js (npm run build).
+// Patches load the bundled copy, patchers/cg.hello.bundle.js (npm run build).
 //
 // Messages:  bang  -> hello with seed 1
 //            int   -> hello with that seed
