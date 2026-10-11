@@ -27,6 +27,9 @@ just intonation, Scala files, and harmonic and inharmonic spectra.
 - [`docs/M0-checklist.md`](docs/M0-checklist.md): the first concrete steps and platform
   spikes.
 
+## License
+MIT. See [`LICENSE`](LICENSE).
+
 ## Lineage
 The architecture follows [`nnokes/cento`](https://github.com/nnokes/cento): a pure-JavaScript
 engine tested in Node, thin `[v8]` wrappers, and single-file script bundles. Everything Max

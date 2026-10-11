@@ -20,7 +20,8 @@ The research behind each design choice is in [`docs/RESEARCH.md`](docs/RESEARCH.
 | Patch authoring | **Hybrid.** UI panels and the main patch are built by hand in Max. Wiring-heavy abstractions are generated from code and checked in CI. The two sets live in separate folders, so the generator never touches a hand-built file (§4.3). |
 | Live performance (play the leader, followers answer in real time) | **Stretch goal or future addition.** The engine API keeps it possible (§3.4). |
 | Architecture | Taken from [`nnokes/cento`](https://github.com/nnokes/cento): a pure-JS engine, thin `[v8]` wrappers, and single-file bundles with no `require()` at runtime |
-| License | **Open:** MIT, like cento? |
+| License | **MIT**, the same as cento (see `LICENSE`) |
+| Max reference | The official Max documentation at <https://docs.cycling74.com/> is the authority for `[v8]`, search paths, projects and Max for Live behavior |
 
 ---
 
@@ -412,11 +413,11 @@ Each milestone gets a checklist in `docs/Mx-checklist.md` when work on it starts
 
 ## 7. Open questions
 
-1. **The second PDF.** The brief mentions two attached PDFs, but only Fux's *Study of
-   Counterpoint* arrived. Please re-attach the other one.
-2. **License.** MIT, like cento?
-3. **Ligeti mode details.** The exact rhythmic rules (Levy 2013) and the per-voice subdivisions
+1. **The second PDF and Mann.** The brief mentions two attached PDFs, and the user has since
+   sent the second PDF and Mann's book, but neither reached the build environment. Only Fux's
+   *Study of Counterpoint* is on file. Please re-attach them.
+2. **Ligeti mode details.** The exact rhythmic rules (Levy 2013) and the per-voice subdivisions
    in *Lux aeterna* still need checking against primary sources before M8 (see RESEARCH.md).
-4. **Mann's *Study of Fugue*.** The archive.org scan could not be reached from the build
-   environment. Its canon and fugue material (translations of Fux, Marpurg and Albrechtsberger)
+3. **Mann's *Study of Fugue*.** Neither the archive.org scan nor the upload has reached the
+   build environment yet. Its canon and fugue material (translations of Fux, Marpurg and Albrechtsberger)
    should be read before M5 and M6.

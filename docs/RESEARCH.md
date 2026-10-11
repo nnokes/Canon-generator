@@ -336,6 +336,8 @@ them on a normal connection.
 - `require()` in Max is CommonJS-like and resolves by name on the search path, not relative
   to the file. Forum reports show trouble with subdirectories. That is why we bundle.
 - **Links:**
+  - [Max documentation (home)](https://docs.cycling74.com/), the authority for anything
+    about Max behavior
   - [v8 reference](https://docs.cycling74.com/reference/v8)
   - [JS require (legacy)](https://docs.cycling74.com/legacy/max8/vignettes/jsrequire)
   - [forum: relative paths](https://cycling74.com/forums/how-to-use-relative-paths-in-jss-new-require/)
@@ -367,7 +369,10 @@ them on a normal connection.
 
 ## 5. Still to find or read
 
-- [ ] The **second PDF** the user mentioned (only Fux arrived).
+- [ ] The **second PDF** and **Mann's book**. The user sent both, but neither reached the
+      build environment. Re-attach them.
+- [ ] The Max documentation pages for M0. docs.cycling74.com is blocked by this cloud
+      environment's network policy, so read them locally, or allow the domain.
 - [ ] Mann, *The Study of Fugue*: the canon sections (needs a connection that can reach
       archive.org).
 - [ ] Levy (2013) and Jarvlepp (1982): the exact Ligeti rules and subdivisions, before M8.

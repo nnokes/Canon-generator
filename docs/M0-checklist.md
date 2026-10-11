@@ -16,7 +16,11 @@ section below, and `cg.hello` round-trips from Node tests to a sounding microton
     `patches:check`, `hooks`
   - `NODE_PATH=code/lib` for tests
 - [ ] `.gitignore`: `node_modules/`, `frozen/`, `.DS_Store`, and personal data paths.
-- [ ] `LICENSE`: **waiting on the user's choice** (MIT, like cento?).
+- [x] `LICENSE`: MIT (added).
+- [ ] Before each spike, read the relevant pages of the official Max documentation
+      (<https://docs.cycling74.com/>): the `v8` reference, File Preferences and the search
+      path, Projects, Packages, and freezing Max for Live devices. Note in the Results table
+      where Max's actual behavior differs from what the docs say.
 - [ ] `tools/build.js`: port cento's bundler.
   - one self-contained `patchers/scripts/<name>.bundle.js` per `code/*.v8.js`
   - module prefix `cg.`
