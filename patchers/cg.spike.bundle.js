@@ -177,7 +177,22 @@ function compareValues(expected, received) {
   return { expected: expected.length, received: received.length, exact, maxAbs };
 }
 
+// n, mean, min and max of a list of numbers (the cents readings in spike c).
+function summary(values) {
+  if (values.length === 0) return { n: 0, mean: 0, min: 0, max: 0 };
+  let sum = 0;
+  let min = Infinity;
+  let max = -Infinity;
+  for (const value of values) {
+    sum += value;
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+  }
+  return { n: values.length, mean: sum / values.length, min, max };
+}
+
 exports.tempoCanon = tempoCanon;
+exports.summary = summary;
 exports.queueRows = queueRows;
 exports.jitter = jitter;
 exports.centsError = centsError;
@@ -330,10 +345,14 @@ __cg_require.local = 1;
 // Messages                 Outlet 0
 //   tone                     tone <hz> <midi>              the 31-EDO test note
 //   measuredhz <hz>          cents <error>                 pitch tracker vs test note
+//                            status cents n <10> mean <x> min <y> max <z>  every 10 readings
 //   mpeconfig                midi <b1> <b2> <b3> ...       MPE lower zone, bend +/-48
 //   mpenote / mpeoff         midi <b1> <b2> <b3> ...       test note on channel 2
 //   playerload [notes]       coll clear, coll <i> <ms>     fills the player's queue
-//   fired <i> <cpuclock ms>  stats <n> <mean> <max> <last> after the last onset
+//                            status queue loaded: ...      with the run's length
+//   fired <i> <cpuclock ms>  status playing                at the first onset
+//                            status progress <k> of <n>    every 50 onsets
+//                            stats <n> <mean> <max> <last> after the last onset
 //   dictwrite [count]        dictready                     writes dict cg.events
 //   dictvalues <f> ...       dictcheck <n> <got> <exact> <maxAbs>
 // Every output starts with a selector; the patch routes on it.
@@ -349,18 +368,30 @@ const { testNote } = __cg_require("cg-hello");
 
 const NOTE = testNote();
 const MPE_CHANNEL = 2;
+const CENTS_BATCH = 10; // readings per console summary
+const PROGRESS_EVERY = 50; // onsets per progress line
 let intended = [];
 let actual = [];
+let readings = [];
 let expectedValues = [];
 
 function tone() {
+  readings = [];
   outlet(0, "tone", NOTE.hz, NOTE.midi);
 }
 
-// [fzero~]'s fundamental, in Hz.
+// [fzero~]'s fundamental, in Hz. Each reading goes to the number box; every
+// CENTS_BATCH readings a summary goes to the Max window.
 function measuredhz(hz) {
   if (!(hz > 0)) return; // no pitch detected (silence, or audio off)
-  outlet(0, "cents", spike.centsError(NOTE.midi, tuning.hzToMidi(hz)));
+  const cents = spike.centsError(NOTE.midi, tuning.hzToMidi(hz));
+  outlet(0, "cents", cents);
+  readings.push(cents);
+  if (readings.length === CENTS_BATCH) {
+    const s = spike.summary(readings);
+    outlet(0, "status", "cents", "n", s.n, "mean", s.mean, "min", s.min, "max", s.max);
+    readings = [];
+  }
 }
 
 function mpeconfig() {
@@ -382,11 +413,14 @@ function playerload(notes) {
   actual = [];
   outlet(0, "coll", "clear");
   for (const row of spike.queueRows(events)) outlet(0, "coll", row.index, row.delta);
-  outlet(0, "status", "queue", "loaded:", events.length, "events;", "click", "go");
+  const seconds = Math.round((intended[intended.length - 1] - intended[0]) / 1000);
+  outlet(0, "status", "queue", "loaded:", events.length, "events,", "stats", "in", "about", seconds, "s", "after", "go");
 }
 
 function fired(index, ms) {
   actual[index] = ms;
+  if (index === 0) outlet(0, "status", "playing");
+  else if (index % PROGRESS_EVERY === 0) outlet(0, "status", "progress", index, "of", intended.length);
   if (index === intended.length - 1) {
     const stats = spike.jitter(intended, actual);
     outlet(0, "stats", stats.count, stats.meanAbs, stats.maxAbs, stats.last);

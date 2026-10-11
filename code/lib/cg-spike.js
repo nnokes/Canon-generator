@@ -97,7 +97,22 @@ function compareValues(expected, received) {
   return { expected: expected.length, received: received.length, exact, maxAbs };
 }
 
+// n, mean, min and max of a list of numbers (the cents readings in spike c).
+function summary(values) {
+  if (values.length === 0) return { n: 0, mean: 0, min: 0, max: 0 };
+  let sum = 0;
+  let min = Infinity;
+  let max = -Infinity;
+  for (const value of values) {
+    sum += value;
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+  }
+  return { n: values.length, mean: sum / values.length, min, max };
+}
+
 exports.tempoCanon = tempoCanon;
+exports.summary = summary;
 exports.queueRows = queueRows;
 exports.jitter = jitter;
 exports.centsError = centsError;

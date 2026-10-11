@@ -193,9 +193,10 @@ def spike_player():
     p = Patch(rect=(60, 60, 900, 640))
     p.note(GENERATED_NOTE, 20, 10, 840, 1)
     p.note("SPIKE (b) PLAYER JITTER. Turn on Overdrive (Options menu). Click 'playerload 100' (200 onsets of "
-           "a sqrt(2):1 tempo canon, ~40 s), then 'go'. When the last onset fires, player-stats prints: "
-           "count, mean |error| ms, max |error| ms, last error ms. Run it three times; record the worst.",
-           20, 35, 840, 3)
+           "a sqrt(2):1 tempo canon, ~45 s), then 'go'. player-status shows 'playing', then progress every 50 "
+           "onsets; after the last onset player-stats prints: count, mean |error| ms, max |error| ms, last "
+           "error ms. Run it three times; record the worst.",
+           20, 35, 840, 4)
 
     load = p.msg("playerload 100", 20, 110)
     v8 = p.obj("v8 cg.spike.bundle.js", 20, 150, 1, 1)

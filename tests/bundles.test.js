@@ -50,6 +50,27 @@ test("cg.spike: tone, then the tracker's Hz comes back as a cents error", () => 
   assert.deepEqual(bundle.send("measuredhz", -1), []);
 });
 
+test("cg.spike: every 10 readings, a cents summary goes to the Max window", () => {
+  const bundle = loadBundle("cg.spike");
+  const [[, , hz]] = bundle.send("tone");
+  // 0.4 cents sharp, then 9 more readings from -0.5 to +0.3 cents.
+  const cents = [0.4, -0.5, -0.4, -0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3];
+  const summaries = [];
+  cents.forEach((c, i) => {
+    const out = bundle.send("measuredhz", hz * Math.pow(2, c / 1200));
+    assert.equal(select(out, "cents").length, 1, `reading ${i} reaches the number box`);
+    summaries.push(...select(out, "status"));
+  });
+  assert.equal(summaries.length, 1);
+  const [label, , n, , mean, , min, , max] = summaries[0];
+  assert.equal(label, "cents");
+  assert.equal(n, 10);
+  assert.ok(Math.abs(mean - cents.reduce((a, b) => a + b) / 10) < 1e-9);
+  assert.ok(Math.abs(min + 0.5) < 1e-9 && Math.abs(max - 0.4) < 1e-9);
+  // The next batch starts fresh; 'tone' also starts a fresh batch.
+  assert.deepEqual(select(bundle.send("measuredhz", hz), "status"), []);
+});
+
 test("cg.spike: MPE setup and the test note go out as raw bytes", () => {
   const bundle = loadBundle("cg.spike");
   const config = bundle.send("mpeconfig");
@@ -62,7 +83,7 @@ test("cg.spike: MPE setup and the test note go out as raw bytes", () => {
   assert.deepEqual(select(bundle.send("mpeoff"), "midi"), [[0x81, note[1][1], 0]]);
 });
 
-test("cg.spike: the player queue, then stats once the last onset is reported", () => {
+test("cg.spike: the player queue, progress while it plays, then stats", () => {
   const bundle = loadBundle("cg.spike");
   const out = bundle.send("playerload", 30);
   const coll = select(out, "coll");
@@ -72,12 +93,20 @@ test("cg.spike: the player queue, then stats once the last onset is reported", (
   assert.deepEqual(rows.map(([index]) => index), [...Array(60).keys()]);
   assert.equal(rows.at(-1)[1], -1);
 
-  // Replay the queue with a fake clock that is 0.25 ms late on every onset.
+  // The load line says how long until the stats appear.
   const intended = spike.tempoCanon({ notes: 30 }).map((e) => e.t);
+  const seconds = Math.round((intended.at(-1) - intended[0]) / 1000);
+  const [loaded] = select(out, "status");
+  assert.deepEqual(loaded, ["queue", "loaded:", 60, "events,", "stats", "in", "about", seconds, "s", "after", "go"]);
+
+  // Replay the queue with a fake clock that is 0.25 ms late on every onset.
+  const statuses = [];
   let reply = [];
   intended.forEach((t, i) => {
     reply = bundle.send("fired", i, 5000 + t + (i ? 0.25 : 0));
+    statuses.push(...select(reply, "status"));
   });
+  assert.deepEqual(statuses, [["playing"], ["progress", 50, "of", 60]]);
   const [[count, mean, max, last]] = select(reply, "stats");
   assert.equal(count, 60);
   assert.ok(Math.abs(max - 0.25) < 1e-9 && Math.abs(last - 0.25) < 1e-9 && mean > 0);

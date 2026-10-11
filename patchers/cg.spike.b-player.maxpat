@@ -48,15 +48,15 @@
 			{
 				"box": {
 					"maxclass": "comment",
-					"text": "SPIKE (b) PLAYER JITTER. Turn on Overdrive (Options menu). Click 'playerload 100' (200 onsets of a sqrt(2):1 tempo canon, ~40 s), then 'go'. When the last onset fires, player-stats prints: count, mean |error| ms, max |error| ms, last error ms. Run it three times; record the worst.",
+					"text": "SPIKE (b) PLAYER JITTER. Turn on Overdrive (Options menu). Click 'playerload 100' (200 onsets of a sqrt(2):1 tempo canon, ~45 s), then 'go'. player-status shows 'playing', then progress every 50 onsets; after the last onset player-stats prints: count, mean |error| ms, max |error| ms, last error ms. Run it three times; record the worst.",
 					"numinlets": 1,
 					"numoutlets": 0,
-					"linecount": 3,
+					"linecount": 4,
 					"patching_rect": [
 						20.0,
 						35.0,
 						840.0,
-						56.0
+						70.0
 					],
 					"id": "obj-2"
 				}

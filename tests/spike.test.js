@@ -39,6 +39,16 @@ test("jitter: ignores a constant start-up offset, reports the worst error", () =
   assert.deepEqual(spike.jitter([], []), { count: 0, meanAbs: 0, maxAbs: 0, last: 0 });
 });
 
+test("summary: n, mean, min, max", () => {
+  assert.deepEqual(spike.summary([]), { n: 0, mean: 0, min: 0, max: 0 });
+  assert.deepEqual(spike.summary([-0.3]), { n: 1, mean: -0.3, min: -0.3, max: -0.3 });
+  const s = spike.summary([0.5, -1, 2, 0.5]);
+  assert.equal(s.n, 4);
+  assert.ok(Math.abs(s.mean - 0.5) < 1e-12);
+  assert.equal(s.min, -1);
+  assert.equal(s.max, 2);
+});
+
 test("cents error and dict value comparison", () => {
   assert.ok(Math.abs(spike.centsError(60, 60.013) - 1.3) < 1e-9);
   const values = spike.dictValues(256);

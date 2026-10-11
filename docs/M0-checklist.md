@@ -12,8 +12,10 @@ five spikes that settle the risky platform questions before any music code is wr
 - First run in Max 9: Max found nothing in subfolders of `patchers/` and no relative paths,
   and `sigmund~` is missing from Max 9. Fixed by **flattening**: everything Max loads now
   sits directly in `patchers/` (PLAN §2.2). Spike (c) now uses `fzero~`.
-- **Pull, then re-run all five spikes.** Spike (a) is now a check that the flat layout
-  works.
+- Second run: **(a) and (d) pass** (Results below). (b) and (c) printed no numbers: the
+  player was silent until its last onset, and the cents error only went to a number box.
+  Both now report to the Max window.
+- **To do: pull, then re-run (b) and (c), and run (e).**
 
 ---
 
@@ -42,7 +44,7 @@ five spikes that settle the risky platform questions before any music code is wr
 - [x] `[v8]` wrappers:
   - `code/cg.hello.v8.js`
   - `code/cg.spike.v8.js` (for spikes b, c and d)
-- [x] 31 Node tests:
+- [x] 33 Node tests:
   - the engine maths
   - each bundle loaded in a simulated `[v8]`
   - a patch lint: cords, the `[v8]` one-inlet/one-outlet rule, scripts, bpatchers and
@@ -84,9 +86,13 @@ or "error loading patcher".
 2. Click `go`. A Max-native chain (`[i]` → `[t i i i b]` → `[coll]` → `[if]` → `[delay]`)
    walks the queue in the scheduler thread. Each onset sends `[cpuclock]`'s time to the
    script.
-3. After about 40 s, `player-stats` prints: count, mean |error| ms, max |error| ms, and the
-   last error in ms. Run it three times, and once more while dragging a window around, to
-   load the main thread.
+3. Watch the Max window:
+   - `player-status: playing` (if it never appears, the chain didn't start, so tell me)
+   - `player-status: progress 50 of 200`, then `100` and `150`
+   - after **about 45 s**: `player-stats: <count> <mean |error| ms> <max |error| ms> <last
+     error ms>`
+4. Run it three times, and once more while dragging a window around to load the main
+   thread. Send all four `player-stats` lines.
 
 **Pass** if max |error| ≤ 2 ms with Overdrive on. If not, try a fine `[metro]` pull (cento's
 approach), or sample-accurate MSP playback for the Hz path. PLAN §4.2 lists both options.
@@ -96,7 +102,9 @@ approach), or sample-accurate MSP playback for the Hz path. PLAN §4.2 lists bot
   1. Click `tone`, then the speaker (`ezdac~`) to turn audio on.
   2. `[cycle~]` plays 31-EDO step 5 above D4 (328.40 Hz), and `[fzero~]` measures it.
      `sigmund~` isn't in Max 9.
-  3. **Pass** if `cents-error` stays within ±1 cent.
+  3. Every ~5 s the Max window prints `output-status: cents n 10 mean … min … max …`.
+     Send two or three of these lines.
+  4. **Pass** if the mean is within ±1 cent.
   
   The Hz path is exact by construction (a float frequency into `[cycle~]`). The tracker is
   only a sanity check, so if `fzero~` itself wobbles by more on a pure sine, record its
@@ -104,9 +112,13 @@ approach), or sample-accurate MSP playback for the Hz path. PLAN §4.2 lists bot
 - **MPE path (second):**
   1. Double-click `[midiout]` to choose a port: an MPE synth, an IAC bus into one, or Live
      12 with tuning bypassed.
-  2. Click `mpeconfig`. This sends the lower-zone setup: 15 member channels, bend ±48.
-  3. Click `mpenote`, then `mpeoff`. The note is on channel 2.
-  4. **Pass** if a tuner reads 328.4 Hz (about 0.6-cent resolution).
+  2. Click `mpeconfig` **once**. This sends the lower-zone setup: 15 member channels,
+     bend ±48. It prints `output-status: mpe zone set …`.
+  3. Click `mpenote`, read a tuner on the synth's output, then click `mpeoff`. The note is on
+     channel 2.
+  4. **Pass** if the tuner reads 328.4 Hz, i.e. E4 −6.5 cents. Resolution is about
+     0.6 cents.
+  5. Note which synth and port you used.
   
   If your synth ignores the RPN setup, set its bend range to ±48 by hand and note that here.
 
@@ -134,10 +146,10 @@ approach), or sample-accurate MSP playback for the Hz path. PLAN §4.2 lists bot
 
 | Spike | Result | Decision |
 |---|---|---|
-| (a) search path | **First run:** nothing in subfolders or behind relative paths was found (v8 "can't find file", abstraction "No such object", bpatcher "error loading patcher"). Re-run after flattening: | **Flatten**: everything Max loads in `patchers/` (PLAN §2.2). |
-| (b) player jitter | | |
-| (c) Hz / MPE accuracy | **First run:** `sigmund~: No such object` (not in Max 9). | Use `fzero~`. |
-| (d) dict precision | | |
+| (a) search path | **First run:** nothing in subfolders or behind relative paths was found (v8 "can't find file", abstraction "No such object", bpatcher "error loading patcher"). **Re-run after flattening: PASS.** `a1-script`, `a2-abstraction` and `a3-bpatcher` all print `hello canon-generator 0.1.0 seed 1 check 627 2 527 981 note 63.935484 328.401454`, the same values the Node tests produce. | **Flatten**: everything Max loads in `patchers/` (PLAN §2.2). Done. |
+| (b) player jitter | Second run: only the load line printed (no stats yet). Now reports `playing`, progress and stats. | |
+| (c) Hz / MPE accuracy | **First run:** `sigmund~: No such object` (not in Max 9). **Second run:** MPE setup sent (`mpe zone set`); no cents or tuner reading reported. The cents summary now prints to the Max window. | Use `fzero~`. |
+| (d) dict precision | **PASS:** `dict-check: 256 256 1 0`. All 256 doubles came back bit-exact through `[dict]` → `[dict.unpack]` → Max atoms → `[v8]`. | Float event times are safe through dicts and messages; no rounding scheme needed. |
 | (e) hybrid workflow | | |
 
 ## 4. Notes and gotchas
