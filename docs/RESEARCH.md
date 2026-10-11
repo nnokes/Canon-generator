@@ -237,6 +237,102 @@ them on a normal connection.
 - **Status.** `secondary`. Levy's exact rhythmic rules and the per-voice subdivisions in
   *Lux aeterna* are **`verify` before M8**.
 
+### Benjamin R. Levy, *The Electronic Works of György Ligeti and Their Influence on His Later Style* (PhD diss., University of Maryland, 2006)
+- **What it is.** Analyses of *Glissandi* (1957) and *Artikulation* (1958), based on
+  spectrographs and Ligeti's sketches, and of what carried over into *Apparitions* and
+  *Atmosphères*. **Note:** it does *not* cover the *Lux aeterna* canon rules; those are in
+  Levy's 2013 article, still `verify`. But its rhythm and texture techniques are directly
+  usable for Ligeti mode (M8) and for electroacoustic output.
+- **What we take from it** (Levy's page numbers):
+  1. **Equal-share durations** (pp. 97–99, 205–211; Ligeti, "Metamorphosis of Musical Form",
+     *Die Reihe* 7). This is Ligeti's alternative to the serial duration row: *duration ×
+     number of occurrences = a constant*, so every duration value fills the same share of
+     time.
+     - *Apparitions* I uses inter-onset intervals of 2, 3, 4, 6, 10, 14, 20, 32, 48, 80, 112
+       and 160 thirty-second notes, occurring 80, 53, 40, 27, 16, 11, 8, 5, 3, 2, 1 and 1
+       times (product ≈ 160).
+     - In *Artikulation* the constant changes with the texture, so average density changes
+       too.
+     - The values are distributed statistically, not serially. Ligeti then nudges them to
+       avoid repetition or any hint of metre, adding to one value whatever he subtracts from
+       another so the section sums stay fixed (Table 4.4).
+     - The scheme defines **entry points, not note lengths** (p. 215). Sounds may overrun
+       the next entry or leave it partly empty.
+  2. **Geometric duration scales.** *Artikulation* starts from 10 mm of tape and multiplies
+     by **11/10** for 50 steps (about 14 s), rounding to whole millimetres (p. 96).
+     *Atmosphères*'s section lengths form a near-geometric scale (step ratios 1.06–1.33).
+     They are reordered so there is **no clear trajectory and no two neighbouring sections
+     share a proportion** (pp. 247–248).
+  3. **Additive and Fibonacci acceleration** (*Glissandi*, pp. 42, 48–49). Section lengths
+     shrink by differences grouped in near-Fibonacci counts. Events per second climb
+     1, 1, …, 2, 3, 4, 5, 7, 10, 15, with the increases themselves following 1, 1, 2, 3, 5:
+     an exponential build-up.
+  4. ***Bewegungsfarbe* ("moving colour")** (pp. 215–218). This comes from Koenig's
+     experiment: notes about **50 ms** apart (20 per second) sit at the blur threshold.
+     Ligeti found it most interesting when some elements are above the threshold and some
+     below, so rhythm turns into timbre and back. In *Apparitions* II m. 17, violins play 10
+     against 9 at ♩ = 80, about 24 attacks per second, and the parts coincide only on the
+     first attack. Ligeti also welcomed players' **mistakes**: the *Walküre* Magic Fire
+     string parts *"add up and create a floating, fluctuating pattern … Atmosphères is based
+     on the same principle"* (p. 218). Tempos are "approximate indications" (p. 249).
+  5. **Cross-fades as gestures** (pp. 226–232).
+     - *Apparitions* I m. 49: an upper chromatic cluster fades out while the adjacent lower
+       one fades in, so register appears to move through dynamics alone.
+     - *Atmosphères* letter B: the white-key and black-key subsets of one cluster are
+       cross-faded.
+     
+     Both come from studio cross-fading, which *Artikulation* also uses for reverb and for
+     moving sound between channels.
+  6. **The crawling cluster** (*Apparitions* mm. 62–63; *Pièce électronique no. 3*; pp.
+     232–235). The lowest note of a chromatic cluster leaps up to become its highest, again
+     and again. Each part moves once, by a big leap, while the whole cluster creeps upward.
+     **This is a canon**: the dux is a staircase of leaps of N steps every N·Δ beats, and
+     follower *k* answers one step higher and Δ·*k* beats later.
+  7. ***Pièce électronique no. 3*'s pitch field** (pp. 224–225). Sixteen sine tones per
+     octave:
+     - *harmonic* above 1000 Hz (partials 16–31 of 62.5 Hz, i.e. 1000–1937 Hz)
+     - *subharmonic* below it (16000/n for n = 16–31, i.e. 1000 down to about 517 Hz)
+     
+     That is exactly our log-axis inversion around 1000 Hz. Tones fade out toward 667,
+     1000 and 1500 Hz. The 1500 is the arithmetic mean of the upper octave and the 667 the
+     harmonic mean of the lower one, which is Fux's appendix again. Entries and exits follow
+     Stockhausen's *modus* orders: low to high, high to low, or toward a centre.
+  8. ***Glissandi*'s form** (pp. 37–41, 67–92). The second half plays the first half and its
+     retrograde *at the same time*, heavily filtered so only traces come through, with a few
+     "anomalies" transplanted from other sections. Palindromic "invariant gestures" make
+     prime and retrograde hard to tell apart. In canon terms it is a **masked crab canon**.
+     Its mirror-image glissandi come from ring modulation (c ± m), a mirror in *linear*
+     frequency. Variable-speed tape couples transposition and duration (an octave up means
+     half the length, pp. 36, 75).
+  9. **Form as layers** (Sabbe, quoted pp. 237–238). Each parameter changes at its own rate.
+     Boundaries feel strong where several parameters change together. Levy's
+     segmentation method counts how many of Cogan's sonic oppositions change at once
+     (pp. 19–24).
+- **→ design** (PLAN §3.1, §3.6, M8):
+  - an **equal-share inter-onset distribution** with a rebalancing step that keeps sums fixed
+  - geometric duration scales and reordering rules
+  - **pairwise-coprime per-voice subdivisions**: subdivisions *n* and *m* coincide inside a
+    beat only *gcd(n, m)* times, so pairwise-coprime choices (3, 4, 5, 7 …) can collide only
+    on beat boundaries (our derivation)
+  - an **aggregate attack-rate** metric drawn against the 50 ms (20/s) threshold
+  - seeded timing **jitter**
+  - **cross-fade groups** (per-voice amplitude envelopes)
+  - entry and exit *modus* orders
+  - a `tapeSpeed` follower option (interval *r*, time scale 1/*r*)
+  - a `linear` inversion axis (f ↦ 2c − f)
+  - a post-render **mask** (time-varying band and gating)
+  - a per-voice `space` (channel or pan)
+  - presets: crawling cluster, *Glissandi*-form masked crab canon, and the PE3
+    harmonic/subharmonic field
+- **Links:**
+  - [Monoskop PDF](https://monoskop.org/images/3/3e/Levy_Benjamin_Robert_The_Electronic_Works_of_Gyorgy_Ligeti_and_Their_Influence_on_His_Later_Style.pdf)
+  - [UMD DRUM record](https://drum.lib.umd.edu/handle/1903/3457)
+  - [Levy 2013, "Rules as Strict as Palestrina's" (abstract)](https://resolve.cambridge.org/core/journals/twentieth-century-music/article/abs/rules-as-strict-as-palestrinas-the-regulation-of-pitch-and-rhythm-in-ligetis-requiem-and-lux-aeterna/6F18D8E9E64B983A25F66B73F002ADED)
+    The abstract says the *Requiem*'s pitch rules survive in sketches, but *Lux aeterna*'s
+    rhythmic rules must be inferred from the score. The article is paywalled.
+- **Milestone.** M8, M2 (`tapeSpeed`, `linear` axis), stretch (spatial canons).
+- **Status.** `read`: the full text pasted by the user.
+
 ### Per Nørgård: the infinity series
 - **What it is.** A self-similar integer sequence (OEIS A004718): `a(0)=0`, `a(2n) = −a(n)`,
   `a(2n+1) = a(n)+1`, giving 0, 1, −1, 2, 1, 0, −2, 3, … Every 2nd term gives the series
