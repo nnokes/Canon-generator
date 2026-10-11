@@ -14,7 +14,7 @@ jobs:
           node-version: 22
       - name: Engine tests (code/lib and the bundled [v8] scripts)
         run: npm test
-      - name: Bundles in patchers/scripts match code/
+      - name: Bundles in patchers/ match code/
         run: npm run build:check
       - name: No personal paths in tracked files
         run: npm run check:paths
