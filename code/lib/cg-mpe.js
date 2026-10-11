@@ -27,6 +27,14 @@ function pitchOf(note, bend, range = DEFAULT_RANGE) {
   return note + ((bend - CENTER) / CENTER) * range;
 }
 
+// The bend range a synth actually used, from the pitch it sounded for a note
+// sent with `bend`: about 48 if it honoured our setup, 2 if it kept the MIDI
+// default. NaN when the bend is centred (nothing to infer from).
+function impliedRange(measuredPitch, note, bend) {
+  if (bend === CENTER) return NaN;
+  return (measuredPitch - note) / ((bend - CENTER) / CENTER);
+}
+
 // MIDI channels are 1-16 here, as Max and Live show them.
 function status(kind, channel) {
   if (!(channel >= 1 && channel <= 16)) throw new Error("MIDI channel must be 1-16, got " + channel);
@@ -74,6 +82,7 @@ function noteOff(pitch, channel, range = DEFAULT_RANGE) {
 exports.DEFAULT_RANGE = DEFAULT_RANGE;
 exports.bendFor = bendFor;
 exports.pitchOf = pitchOf;
+exports.impliedRange = impliedRange;
 exports.zoneConfig = zoneConfig;
 exports.noteOn = noteOn;
 exports.noteOff = noteOff;

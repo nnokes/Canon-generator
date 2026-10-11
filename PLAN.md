@@ -418,12 +418,23 @@ floats, so a fixed tick grid is not enough. There are three candidate designs:
 3. sample-accurate MSP sequencing for the Hz path, through per-voice control buffers or
    `mc.`/`[poly~]`
 
-Design 1 is kept if its worst error is ≤ 2 ms. Designs 2 and 3 are tried only if it isn't,
-and one design is picked per output path.
+**Decided by M0 spike (b): design 1.** Over 200 onsets of a √2:1 tempo canon (45 s, Max 9,
+Overdrive on), the spread from onset to onset was about ±0.1 ms, with no drift. The 2.3 ms
+the first metric showed was a constant start offset: onset 0 was fired by a mouse click, the
+rest by the scheduler. Players therefore start through a short `[delay]`, so every onset
+comes from the scheduler. Designs 2 and 3 aren't needed for timing. Design 3 may still come
+back for sample-accurate *audio* events in the voice bank.
 
 ### 4.3 Output adapters (build order)
-1. **`cg.voices~`: Hz to an MSP voice bank** (`mc.`). M0 proves the path with one `[cycle~]` checked by `[sigmund~]`; the full voice bank arrives with the M2 renderer. Each voice is a simple
-   additive synth. Its **partial list is a parameter, and the same list feeds the
+1. **`cg.voices~`: Hz to an MSP voice bank** (`mc.`).
+   - **M0 proved the path:** one `[cycle~]` at a float frequency, read by `[fzero~]` at
+     +0.17 cents (the tracker's own bias). `sigmund~` isn't in Max 9.
+   - The full voice bank arrives with the M2 renderer. Each voice is a simple additive
+     synth.
+   - **Every voice's gain ramps** (`[line~]` or `[curve~]`): never a DC step or a hard gate.
+     M0 found that a bare `[cycle~]` at 0 Hz outputs DC and clicks when audio turns on.
+   - **Candidate building blocks:** Max 9's ABL objects (Ableton's DSP). `abl.dsp.*`
+     oscillators and filters take frequencies directly, which suits this path. Its **partial list is a parameter, and the same list feeds the
    `roughness` consonance model**. There is no MIDI channel limit, which suits dense Ligeti
    textures.
 2. **`cg.mpe.out`: MPE MIDI.**
@@ -431,6 +442,9 @@ and one design is picked per output path.
    - pitch bend range ±48 semitones, which Live 12's tuning system expects; resolution is
      96/16384 ≈ 0.59 cents
    - at most 15 voices per port; denser textures route to MSP
+   - **Inside Max, without an external synth:** `abl.device.*` instruments such as
+     `abl.device.drift~` take raw MIDI bytes. M0 spike (c) measures whether Drift honours
+     per-channel bend and our ±48 RPN; the "implied bend range" line answers it.
 3. **MIDI file** export, one track per voice (M10).
 4. **MTS-ESP** (stretch).
 

@@ -15,7 +15,13 @@ five spikes that settle the risky platform questions before any music code is wr
 - Second run: **(a) and (d) pass** (Results below). (b) and (c) printed no numbers: the
   player was silent until its last onset, and the cents error only went to a number box.
   Both now report to the Max window.
-- **To do: pull, then re-run (b) and (c), and run (e).**
+- Third run: **(b) and the Hz half of (c) pass.**
+  - (b)'s 2.3 ms was a start offset, not jitter. The stats now separate offset from jitter,
+    and onset 0 is fired by the scheduler.
+  - (c) clicked when audio turned on. The sine's gain now ramps.
+  - MPE was untested: no synth was listening. It now plays Ableton's Drift
+    (`abl.device.drift~`) inside Max and measures it.
+- **To do: pull, then re-run (b) (a confirmation) and (c) MPE, and run (e).**
 
 ---
 
@@ -44,7 +50,7 @@ five spikes that settle the risky platform questions before any music code is wr
 - [x] `[v8]` wrappers:
   - `code/cg.hello.v8.js`
   - `code/cg.spike.v8.js` (for spikes b, c and d)
-- [x] 33 Node tests:
+- [x] 35 Node tests:
   - the engine maths
   - each bundle loaded in a simulated `[v8]`
   - a patch lint: cords, the `[v8]` one-inlet/one-outlet rule, scripts, bpatchers and
@@ -89,13 +95,13 @@ or "error loading patcher".
 3. Watch the Max window:
    - `player-status: playing` (if it never appears, the chain didn't start, so tell me)
    - `player-status: progress 50 of 200`, then `100` and `150`
-   - after **about 45 s**: `player-stats: <count> <mean |error| ms> <max |error| ms> <last
-     error ms>`
-4. Run it three times, and once more while dragging a window around to load the main
-   thread. Send all four `player-stats` lines.
+   - after **about 45 s**: `player-stats: <count> offset <ms> jitter <ms> sd <ms> drift <ms>`
+     - *offset* is a constant start latency (harmless)
+     - *jitter* is the largest deviation from it: the real timing spread
+     - *drift* is whether the clock walks away over the run
+4. Optional: one more run while dragging a window around, to load the main thread.
 
-**Pass** if max |error| ≤ 2 ms with Overdrive on. If not, try a fine `[metro]` pull (cento's
-approach), or sample-accurate MSP playback for the Hz path. PLAN §4.2 lists both options.
+**Pass** if jitter ≤ 2 ms with Overdrive on.
 
 ### (c) Microtonal output: `patchers/cg.spike.c-output.maxpat`
 - **Hz path (first):**
@@ -109,18 +115,30 @@ approach), or sample-accurate MSP playback for the Hz path. PLAN §4.2 lists bot
   The Hz path is exact by construction (a float frequency into `[cycle~]`). The tracker is
   only a sanity check, so if `fzero~` itself wobbles by more on a pure sine, record its
   spread instead.
-- **MPE path (second):**
-  1. Double-click `[midiout]` to choose a port: an MPE synth, an IAC bus into one, or Live
-     12 with tuning bypassed.
-  2. Click `mpeconfig` **once**. This sends the lower-zone setup: 15 member channels,
-     bend ±48. It prints `output-status: mpe zone set …`.
-  3. Click `mpenote`, read a tuner on the synth's output, then click `mpeoff`. The note is on
-     channel 2.
-  4. **Pass** if the tuner reads 328.4 Hz, i.e. E4 −6.5 cents. Resolution is about
-     0.6 cents.
-  5. Note which synth and port you used.
-  
-  If your synth ignores the RPN setup, set its bend range to ±48 by hand and note that here.
+- **MPE path (second), with Ableton's Drift inside Max:** our MPE bytes go one at a time
+  (`[iter]`) into `[abl.device.drift~ @drift 0]`. That's Drift from Live, as a Max 9 object
+  that takes raw MIDI bytes. `@drift 0` turns off its random per-voice detune. Drift's audio
+  goes to the speakers and to `[fzero~]`, so Max measures the pitch itself, with no tuner.
+  1. Audio on. Click `silence` (the sine fades), then `mpeconfig` **once** (the zone setup:
+     15 member channels, bend ±48).
+  2. Click `mpenote`. The Max window prints `output-status: mpe note ch 2: note 64 bend 8181
+     pitch 63.935… = note -6.45 cents`, then every ~5 s `cents n 10 mean … implied bend
+     range <st>`.
+  3. Click `mpenote 64.5` (a quarter-tone above E4: sent as F4 with a large downward bend).
+     This gives the clearest bend-range reading. Then click `mpeoff`.
+  4. Read `implied bend range`:
+
+     | Reading | What it means |
+     |---|---|
+     | ≈ 48 | Drift honoured our RPN setup. **Pass** if the cents mean is within ±1 cent. |
+     | ≈ 2 | Drift kept MIDI's default and ignored the RPN; the mean will be about −48 cents on `mpenote 64.5`. We then set Drift's bend range another way (a Drift attribute, or an `mpeformat` setting). |
+     | ≈ 0, or nonsense | Drift ignored per-channel bend (no MPE in this object). |
+
+  5. Paste the lines. If `[abl.device.drift~]` is a dashed box ("No such object"), tell me
+     your Max version (Max → About Max).
+- **External synth (optional):** the same bytes also go to `[midiout]`. Double-click it to
+  pick a port, and read a tuner on that synth. Expect 328.4 Hz (E4 −6.45 cents) for
+  `mpenote`.
 
 ### (d) Dict precision: `patchers/cg.spike.d-dict.maxpat`
 1. Click `dictwrite 256`. The script writes 256 full-precision floats into `dict cg.events`.
@@ -142,13 +160,13 @@ approach), or sample-accurate MSP playback for the Hz path. PLAN §4.2 lists bot
 
 ---
 
-## 3. Results (fill in on your machine)
+## 3. Results
 
 | Spike | Result | Decision |
 |---|---|---|
 | (a) search path | **First run:** nothing in subfolders or behind relative paths was found (v8 "can't find file", abstraction "No such object", bpatcher "error loading patcher"). **Re-run after flattening: PASS.** `a1-script`, `a2-abstraction` and `a3-bpatcher` all print `hello canon-generator 0.1.0 seed 1 check 627 2 527 981 note 63.935484 328.401454`, the same values the Node tests produce. | **Flatten**: everything Max loads in `patchers/` (PLAN §2.2). Done. |
-| (b) player jitter | Second run: only the load line printed (no stats yet). Now reports `playing`, progress and stats. | |
-| (c) Hz / MPE accuracy | **First run:** `sigmund~: No such object` (not in Max 9). **Second run:** MPE setup sent (`mpe zone set`); no cents or tuner reading reported. The cents summary now prints to the Max window. | Use `fzero~`. |
+| (b) player jitter | **Third run: PASS.** `player-stats: 200 2.298091 2.413542 2.311167` (old format: mean, max, last error), all ≈ 2.3 ms. That is a constant start offset: onset 0 was fired by the mouse click, every other onset by the scheduler. Onset to onset the spread is about ±0.1 ms, with no drift over 45 s. | **Keep design 1** (`[coll]` + `[delay]` in the scheduler thread, PLAN §4.2). Stats now report offset / jitter / sd / drift, and onset 0 goes through `[delay 100]`. |
+| (c) Hz / MPE accuracy | **First run:** `sigmund~: No such object` (not in Max 9). **Third run, Hz: PASS.** After the first batch (which caught the attack, min −9.2), every summary reads +0.13 to +0.24 cents, mean ≈ +0.17: `fzero~`'s own bias. **Click** when audio turned on before `tone` (DC from `[cycle~]` at 0 Hz). **MPE:** no synth was listening. | Use `fzero~`. The gain now ramps via `[line~]`; every M2 voice gets a ramp (PLAN §4.3). MPE is now measured with Drift inside Max. |
 | (d) dict precision | **PASS:** `dict-check: 256 256 1 0`. All 256 doubles came back bit-exact through `[dict]` → `[dict.unpack]` → Max atoms → `[v8]`. | Float event times are safe through dicts and messages; no rounding scheme needed. |
 | (e) hybrid workflow | | |
 

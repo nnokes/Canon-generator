@@ -194,8 +194,8 @@ def spike_player():
     p.note(GENERATED_NOTE, 20, 10, 840, 1)
     p.note("SPIKE (b) PLAYER JITTER. Turn on Overdrive (Options menu). Click 'playerload 100' (200 onsets of "
            "a sqrt(2):1 tempo canon, ~45 s), then 'go'. player-status shows 'playing', then progress every 50 "
-           "onsets; after the last onset player-stats prints: count, mean |error| ms, max |error| ms, last "
-           "error ms. Run it three times; record the worst.",
+           "onsets; after the last onset player-stats prints: count, offset (constant start latency), jitter "
+           "(largest deviation from it: pass if <= 2 ms), sd, drift (all ms).",
            20, 35, 840, 4)
 
     load = p.msg("playerload 100", 20, 110)
@@ -215,7 +215,7 @@ def spike_player():
     # The chain: go -> index 0 -> [t i i i b] -> clock, log, next index, lookup -> [delay] -> next.
     go = p.msg("go", 470, 110)
     t_go = p.obj("t b b", 470, 150, 1, 2, ["bang", "bang"])
-    zero = p.msg("0", 520, 190)
+    zero = p.msg("0", 560, 190)
     index = p.obj("i", 470, 230, 2, 1, ["int"])
     step = p.obj("t i i i b", 470, 270, 1, 4, ["int", "int", "int", "bang"])
     clock = p.obj("cpuclock", 680, 310, 1, 1, ["float"])
@@ -227,7 +227,11 @@ def spike_player():
     p.connect(go, 0, t_go, 0)
     p.connect(t_go, 1, zero, 0)
     p.connect(zero, 0, index, 1)
-    p.connect(t_go, 0, index, 0)
+    # Through [delay] so onset 0 is fired by the scheduler like every later one,
+    # not by the mouse click (that start offset showed up as 2.3 ms "jitter").
+    start = p.obj("delay 100", 470, 190, 2, 1, ["bang"])
+    p.connect(t_go, 0, start, 0)
+    p.connect(start, 0, index, 0)
     p.connect(index, 0, step, 0)
     p.connect(step, 3, clock, 0)
     p.connect(clock, 0, pack, 1)
@@ -246,50 +250,73 @@ def spike_player():
 
 
 def spike_output():
-    """M0 spike (c): the 31-EDO test note through MSP (checked by [fzero~], whose
-    left outlet is the fundamental in Hz)
-    and as MPE MIDI with pitch bend +/-48."""
-    p = Patch(rect=(60, 60, 900, 600))
-    p.note(GENERATED_NOTE, 20, 10, 840, 1)
-    p.note("SPIKE (c) MICROTONAL OUTPUT. Hz path: click 'tone', turn audio on with the speaker. cents-error "
-           "shows how far [fzero~] hears the tone from 31-EDO step 5 above D4 (328.40 Hz); pass if within "
-           "+/-1 cent (fzero~ is a tracker: if it wobbles more on a pure sine, note its spread). MPE path: pick a port in [midiout] (double-click), click mpeconfig, then mpenote / "
-           "mpeoff, and check the note on a tuner (expect ~0.6-cent resolution).", 20, 35, 840, 4)
+    """M0 spike (c): the 31-EDO test note two ways, both measured by [fzero~]
+    (left outlet: the fundamental in Hz):
+      Hz path   [cycle~] at the exact frequency; its gain ramps through [line~],
+                so turning audio on or off never clicks
+      MPE path  our MPE bytes into Ableton's Drift ([abl.device.drift~], raw MIDI
+                bytes in) and, optionally, out of [midiout] to an external synth.
+                The tracker reports the bend range Drift actually applied."""
+    p = Patch(rect=(60, 60, 980, 640))
+    p.note(GENERATED_NOTE, 20, 10, 920, 1)
+    p.note("SPIKE (c) MICROTONAL OUTPUT. Turn audio on with the speaker. HZ PATH: click 'tone'; every ~5 s "
+           "output-status prints a cents summary against 31-EDO step 5 above D4 (328.40 Hz); pass if the mean "
+           "is within +/-1 cent. MPE PATH (Drift inside Max): click 'silence', 'mpeconfig' once, then "
+           "'mpenote': the summaries add 'implied bend range' (about 48 = our setup worked, 2 = Drift kept "
+           "its default). Then 'mpenote 64.5' (a quarter-tone above E4) for a clear reading, then 'mpeoff'. "
+           "If [abl.device.drift~] is a dashed box, note your Max version.", 20, 35, 920, 5)
 
-    tone = p.msg("tone", 20, 120)
-    mpeconfig = p.msg("mpeconfig", 300, 120)
-    mpenote = p.msg("mpenote", 390, 120)
-    mpeoff = p.msg("mpeoff", 465, 120)
-    v8 = p.obj("v8 cg.spike.bundle.js", 20, 160, 1, 1)
-    route = p.obj("route tone cents midi status", 20, 200, 2, 5)
-    for m in (tone, mpeconfig, mpenote, mpeoff):
+    msgs = [p.msg(text, x, 125) for text, x in
+            [("tone", 20), ("silence", 75), ("mpeconfig", 160), ("mpenote", 250), ("mpenote 64.5", 325),
+             ("mpeoff", 430)]]
+    v8 = p.obj("v8 cg.spike.bundle.js", 20, 165, 1, 1)
+    route = p.obj("route tone cents midi status amp", 20, 205, 2, 6)
+    for m in msgs:
         p.connect(m, 0, v8, 0)
     p.connect(v8, 0, route, 0)
 
-    unpack = p.obj("unpack f f", 20, 240, 1, 2, ["float", "float"])
-    osc = p.obj("cycle~", 20, 280, 2, 1, ["signal"])
-    gain = p.obj("*~ 0.1", 20, 320, 2, 1, ["signal"])
-    dac = p.ui("ezdac~", 20, 360, 45, 45, 2, 0, [])
-    tracker = p.obj("fzero~", 160, 320, 1, 3, ["float", "float", "bang"])
-    limit = p.obj("speedlim 500", 160, 355, 2, 1)
-    measured = p.obj("prepend measuredhz", 160, 390, 2, 1)
+    # Hz path: exact frequency, ramped gain.
+    unpack = p.obj("unpack f f", 20, 250, 1, 2, ["float", "float"])
+    osc = p.obj("cycle~", 20, 290, 2, 1, ["signal"])
+    ramp = p.obj("line~", 120, 290, 2, 2, ["signal", "bang"])
+    gain = p.obj("*~", 20, 330, 2, 1, ["signal"])
     p.connect(route, 0, unpack, 0)
     p.connect(unpack, 0, osc, 0)
+    p.connect(route, 4, ramp, 0)
     p.connect(osc, 0, gain, 0)
-    p.connect(gain, 0, dac, 0)
-    p.connect(gain, 0, dac, 1)
-    p.connect(osc, 0, tracker, 0)
+    p.connect(ramp, 0, gain, 1)
+
+    # MPE path: bytes one at a time into Drift (and out to an external synth).
+    bytes_ = p.obj("iter", 520, 250, 1, 1, ["int"])
+    drift = p.obj("abl.device.drift~ @drift 0", 520, 290, 1, 2, ["signal", "signal"])
+    drift_gain = p.obj("*~ 0.3", 520, 330, 2, 1, ["signal"])
+    midiout = p.obj("midiout", 720, 290, 1, 0)
+    p.connect(route, 2, bytes_, 0)
+    p.connect(bytes_, 0, drift, 0)
+    p.connect(bytes_, 0, midiout, 0)
+    p.connect(drift, 0, drift_gain, 0)
+    p.comment("external synth (optional): double-click to pick a port", 720, 315, w=230, h=34, linecount=2)
+
+    # Both sources to the speakers and the tracker (only one sounds at a time).
+    dac = p.ui("ezdac~", 20, 420, 45, 45, 2, 0, [])
+    mix = p.obj("+~", 300, 380, 2, 1, ["signal"])
+    tracker = p.obj("fzero~", 300, 420, 1, 3, ["float", "float", "bang"])
+    limit = p.obj("speedlim 500", 300, 455, 2, 1)
+    measured = p.obj("prepend measuredhz", 300, 490, 2, 1)
+    for src in (gain, drift_gain):
+        p.connect(src, 0, dac, 0)
+        p.connect(src, 0, dac, 1)
+    p.connect(gain, 0, mix, 0)
+    p.connect(drift_gain, 0, mix, 1)
+    p.connect(mix, 0, tracker, 0)
     p.connect(tracker, 0, limit, 0)
     p.connect(limit, 0, measured, 0)
     p.connect(measured, 0, v8, 0)
 
-    p.comment("cents-error", 330, 240)
-    cents = p.ui("flonum", 330, 265, 80, 22, 1, 2, ["", "bang"], format=6)
+    p.comment("cents-error", 120, 380)
+    cents = p.ui("flonum", 120, 405, 80, 22, 1, 2, ["", "bang"], format=6)
     p.connect(route, 1, cents, 0)
-
-    midiout = p.obj("midiout", 470, 240, 1, 0)
-    status = p.obj("print output-status", 470, 280, 1, 0)
-    p.connect(route, 2, midiout, 0)
+    status = p.obj("print output-status", 520, 420, 1, 0)
     p.connect(route, 3, status, 0)
     return p
 

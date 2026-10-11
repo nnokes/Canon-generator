@@ -54,21 +54,34 @@ function queueRows(events) {
   }));
 }
 
-// Intended and measured onset times (ms), both measured from their own first
-// onset, so a constant start-up latency doesn't count as jitter.
+// Intended and measured onset times (ms). Each onset's error is measured from
+// onset 0, then split into:
+//   offset  the mean error: a constant start latency (e.g. onset 0 fired from
+//           a mouse click, the rest from the scheduler), harmless
+//   jitter  the largest deviation from that offset: the real timing spread
+//   sd      the standard deviation of the errors
+//   drift   last error minus first: whether the clock walks away over the run
+// All four use onsets 1..n-1 (onset 0's error is 0 by definition).
 function jitter(intended, actual) {
   const n = Math.min(intended.length, actual.length);
-  if (n === 0) return { count: 0, meanAbs: 0, maxAbs: 0, last: 0 };
-  let sum = 0;
-  let max = 0;
-  let last = 0;
-  for (let i = 0; i < n; i++) {
-    const error = actual[i] - actual[0] - (intended[i] - intended[0]);
-    sum += Math.abs(error);
-    max = Math.max(max, Math.abs(error));
-    last = error;
+  const none = { count: n, offset: 0, jitter: 0, sd: 0, drift: 0 };
+  if (n < 2) return none;
+  const errors = [];
+  for (let i = 1; i < n; i++) errors.push(actual[i] - actual[0] - (intended[i] - intended[0]));
+  const offset = errors.reduce((a, b) => a + b, 0) / errors.length;
+  let spread = 0;
+  let squares = 0;
+  for (const e of errors) {
+    spread = Math.max(spread, Math.abs(e - offset));
+    squares += (e - offset) * (e - offset);
   }
-  return { count: n, meanAbs: sum / n, maxAbs: max, last };
+  return {
+    count: n,
+    offset,
+    jitter: spread,
+    sd: Math.sqrt(squares / errors.length),
+    drift: errors[errors.length - 1] - errors[0],
+  };
 }
 
 // The pitch a tracker measured, against the pitch that was sent, in cents.

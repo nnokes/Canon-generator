@@ -29,14 +29,21 @@ test("queue: deltas rebuild the onset times; the last row stops the chain", () =
   }
 });
 
-test("jitter: ignores a constant start-up offset, reports the worst error", () => {
+test("jitter: a constant start offset is not jitter; a wobble is", () => {
+  const near = (a, b) => Math.abs(a - b) < 1e-9;
   const intended = [0, 100, 250, 400];
-  assert.deepEqual(spike.jitter(intended, intended.map((t) => t + 37)), { count: 4, meanAbs: 0, maxAbs: 0, last: 0 });
-  const stats = spike.jitter(intended, [1000, 1101, 1249, 1400.5]);
-  assert.equal(stats.count, 4);
-  assert.ok(Math.abs(stats.maxAbs - 1) < 1e-9);
-  assert.ok(Math.abs(stats.last - 0.5) < 1e-9);
-  assert.deepEqual(spike.jitter([], []), { count: 0, meanAbs: 0, maxAbs: 0, last: 0 });
+  // Every onset 37 ms late, including the first: nothing at all.
+  assert.deepEqual(spike.jitter(intended, intended.map((t) => t + 37)), { count: 4, offset: 0, jitter: 0, sd: 0, drift: 0 });
+  // Onset 0 from a mouse click, the rest 2.3 ms later from the scheduler: offset only.
+  const late = spike.jitter(intended, [1000, 1102.3, 1252.3, 1402.3]);
+  assert.ok(near(late.offset, 2.3) && near(late.jitter, 0) && near(late.sd, 0) && near(late.drift, 0));
+  // A real wobble: errors 2, 2.5, 1.5 around 2.
+  const wobble = spike.jitter(intended, [0, 102, 252.5, 401.5]);
+  assert.ok(near(wobble.offset, 2) && near(wobble.jitter, 0.5) && near(wobble.drift, -0.5));
+  assert.ok(near(wobble.sd, Math.sqrt((0 + 0.25 + 0.25) / 3)));
+  // Too few onsets to say anything.
+  assert.deepEqual(spike.jitter([], []), { count: 0, offset: 0, jitter: 0, sd: 0, drift: 0 });
+  assert.deepEqual(spike.jitter([5], [9]), { count: 1, offset: 0, jitter: 0, sd: 0, drift: 0 });
 });
 
 test("summary: n, mean, min, max", () => {

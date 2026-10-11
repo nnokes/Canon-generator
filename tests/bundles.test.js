@@ -18,7 +18,7 @@ test("bundles in patchers/ are up to date with code/", () => {
 test("each bundle exposes exactly its documented messages", () => {
   assert.deepEqual(loadBundle("cg.hello").handlers(), ["bang", "msg_int"]);
   assert.deepEqual(loadBundle("cg.spike").handlers(), [
-    "dictvalues", "dictwrite", "fired", "measuredhz", "mpeconfig", "mpenote", "mpeoff", "playerload", "tone",
+    "dictvalues", "dictwrite", "fired", "measuredhz", "mpeconfig", "mpenote", "mpeoff", "playerload", "silence", "tone",
   ]);
 });
 
@@ -38,9 +38,14 @@ test("cg.hello answers like the library, in Max's atom order", () => {
   assert.deepEqual(atoms, ["hello", h.name, h.version, "seed", 5, "check", ...h.check, "note", h.note.midi, h.note.hz]);
 });
 
-test("cg.spike: tone, then the tracker's Hz comes back as a cents error", () => {
+test("cg.spike: tone fades in, then the tracker's Hz comes back as a cents error", () => {
   const bundle = loadBundle("cg.spike");
-  const [[, , hz]] = bundle.send("tone");
+  const out = bundle.send("tone");
+  // The gain ramps up before the frequency arrives (no click), and 'silence' ramps it down.
+  assert.deepEqual(out.map(([, selector]) => selector), ["amp", "tone"]);
+  assert.deepEqual(select(out, "amp"), [[0.1, 20]]);
+  assert.deepEqual(bundle.send("silence"), [[0, "amp", 0, 50]]);
+  const [[hz]] = select(out, "tone");
   assert.ok(Math.abs(hz - 328.40145361845435) < 1e-9);
   const [[, selector, cents]] = bundle.send("measuredhz", hz * Math.pow(2, 0.4 / 1200));
   assert.equal(selector, "cents");
@@ -52,7 +57,7 @@ test("cg.spike: tone, then the tracker's Hz comes back as a cents error", () => 
 
 test("cg.spike: every 10 readings, a cents summary goes to the Max window", () => {
   const bundle = loadBundle("cg.spike");
-  const [[, , hz]] = bundle.send("tone");
+  const [[hz]] = select(bundle.send("tone"), "tone");
   // 0.4 cents sharp, then 9 more readings from -0.5 to +0.3 cents.
   const cents = [0.4, -0.5, -0.4, -0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3];
   const summaries = [];
@@ -62,6 +67,7 @@ test("cg.spike: every 10 readings, a cents summary goes to the Max window", () =
     summaries.push(...select(out, "status"));
   });
   assert.equal(summaries.length, 1);
+  assert.equal(summaries[0].length, 9, "no bend-range field for the sine");
   const [label, , n, , mean, , min, , max] = summaries[0];
   assert.equal(label, "cents");
   assert.equal(n, 10);
@@ -71,16 +77,47 @@ test("cg.spike: every 10 readings, a cents summary goes to the Max window", () =
   assert.deepEqual(select(bundle.send("measuredhz", hz), "status"), []);
 });
 
-test("cg.spike: MPE setup and the test note go out as raw bytes", () => {
+test("cg.spike: MPE setup, then notes as raw bytes with a status line", () => {
   const bundle = loadBundle("cg.spike");
   const config = bundle.send("mpeconfig");
   assert.deepEqual(select(config, "midi"), mpe.zoneConfig());
   assert.equal(select(config, "status").length, 1);
-  const note = select(bundle.send("mpenote"), "midi");
-  assert.equal(note.length, 2);
-  assert.equal(note[0][0], 0xe1); // bend on channel 2 first
-  assert.equal(note[1][0], 0x91);
-  assert.deepEqual(select(bundle.send("mpeoff"), "midi"), [[0x81, note[1][1], 0]]);
+
+  for (const pitch of [undefined, 64.5]) {
+    const out = pitch === undefined ? bundle.send("mpenote") : bundle.send("mpenote", pitch);
+    const p = pitch === undefined ? hello(1).note.midi : pitch;
+    // The sine fades first, so the tracker hears the synth; then bend, note-on, status.
+    assert.deepEqual(out.map(([, selector]) => selector), ["amp", "midi", "midi", "status"]);
+    assert.deepEqual(select(out, "amp"), [[0, 50]]);
+    assert.deepEqual(select(out, "midi"), mpe.noteOn(p, 100, 2));
+    const { note, bend } = mpe.bendFor(p);
+    const [status] = select(out, "status");
+    assert.deepEqual(status.slice(0, 9), ["mpe", "note", "ch", 2, "note", note, "bend", bend, "pitch"]);
+    assert.equal(status[9], p);
+    // Note-off matches the note that's sounding.
+    const off = bundle.send("mpeoff");
+    assert.deepEqual(select(off, "midi"), mpe.noteOff(p, 2));
+    assert.deepEqual(select(off, "status"), [["mpe", "note", "off"]]);
+  }
+});
+
+test("cg.spike: the MPE summary reports the bend range the synth actually applied", () => {
+  const { midiToHz } = require("cg-tuning");
+  const readRange = (soundedPitch) => {
+    const bundle = loadBundle("cg.spike");
+    bundle.send("mpenote", 64.5);
+    let summary = null;
+    for (let i = 0; i < 10; i++) {
+      const [line] = select(bundle.send("measuredhz", midiToHz(soundedPitch)), "status");
+      if (line) summary = line;
+    }
+    assert.deepEqual(summary.slice(9, 12), ["implied", "bend", "range"]);
+    return summary[12];
+  };
+  const { note, bend } = mpe.bendFor(64.5);
+  // A synth honouring our +/-48 sounds 64.5; one stuck at +/-2 sounds about F4 -2 cents.
+  assert.ok(Math.abs(readRange(64.5) - 48) < 0.5);
+  assert.ok(Math.abs(readRange(mpe.pitchOf(note, bend, 2)) - 2) < 1e-6);
 });
 
 test("cg.spike: the player queue, progress while it plays, then stats", () => {
@@ -107,9 +144,12 @@ test("cg.spike: the player queue, progress while it plays, then stats", () => {
     statuses.push(...select(reply, "status"));
   });
   assert.deepEqual(statuses, [["playing"], ["progress", 50, "of", 60]]);
-  const [[count, mean, max, last]] = select(reply, "stats");
+  // Onset 0 on time, every later one 0.25 ms late: an offset, no jitter, no drift.
+  const [[count, , offset, , jitter, , sd, , drift]] = select(reply, "stats");
   assert.equal(count, 60);
-  assert.ok(Math.abs(max - 0.25) < 1e-9 && Math.abs(last - 0.25) < 1e-9 && mean > 0);
+  assert.deepEqual(select(reply, "stats")[0].filter((a) => typeof a === "string"), ["offset", "jitter", "sd", "drift"]);
+  assert.ok(Math.abs(offset - 0.25) < 1e-9);
+  assert.ok(jitter < 1e-9 && sd < 1e-9 && Math.abs(drift) < 1e-9);
 });
 
 test("cg.spike: dict values written, read back through Max atoms, compared exactly", () => {

@@ -48,7 +48,7 @@
 			{
 				"box": {
 					"maxclass": "comment",
-					"text": "SPIKE (b) PLAYER JITTER. Turn on Overdrive (Options menu). Click 'playerload 100' (200 onsets of a sqrt(2):1 tempo canon, ~45 s), then 'go'. player-status shows 'playing', then progress every 50 onsets; after the last onset player-stats prints: count, mean |error| ms, max |error| ms, last error ms. Run it three times; record the worst.",
+					"text": "SPIKE (b) PLAYER JITTER. Turn on Overdrive (Options menu). Click 'playerload 100' (200 onsets of a sqrt(2):1 tempo canon, ~45 s), then 'go'. player-status shows 'playing', then progress every 50 onsets; after the last onset player-stats prints: count, offset (constant start latency), jitter (largest deviation from it: pass if <= 2 ms), sd, drift (all ms).",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"linecount": 4,
@@ -224,7 +224,7 @@
 						""
 					],
 					"patching_rect": [
-						520.0,
+						560.0,
 						190.0,
 						30.0,
 						22.0
@@ -381,6 +381,24 @@
 			},
 			{
 				"box": {
+					"maxclass": "newobj",
+					"text": "delay 100",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"outlettype": [
+						"bang"
+					],
+					"patching_rect": [
+						470.0,
+						190.0,
+						77.0,
+						22.0
+					],
+					"id": "obj-20"
+				}
+			},
+			{
+				"box": {
 					"maxclass": "comment",
 					"text": "A number into [delay]'s left inlet sets the time and starts it. Logical time in the scheduler keeps the chain from drifting; [cpuclock] shows what actually happened.",
 					"numinlets": 1,
@@ -392,7 +410,7 @@
 						420.0,
 						42.0
 					],
-					"id": "obj-20"
+					"id": "obj-21"
 				}
 			}
 		],
@@ -497,6 +515,18 @@
 				"patchline": {
 					"source": [
 						"obj-10",
+						0
+					],
+					"destination": [
+						"obj-20",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-20",
 						0
 					],
 					"destination": [

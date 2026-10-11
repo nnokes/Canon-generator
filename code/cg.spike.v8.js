@@ -4,16 +4,19 @@
 // what Max did.
 //
 // Messages                 Outlet 0
-//   tone                     tone <hz> <midi>              the 31-EDO test note
-//   measuredhz <hz>          cents <error>                 pitch tracker vs test note
-//                            status cents n <10> mean <x> min <y> max <z>  every 10 readings
+//   tone                     amp 0.1 20, tone <hz> <midi>  the 31-EDO test note, faded in
+//   silence                  amp 0 50                      fade the sine out
+//   measuredhz <hz>          cents <error>                 pitch tracker vs what's playing
+//                            status cents n <10> mean <x> min <y> max <z>
+//                              [implied bend range <st>]   every 10 readings (range: MPE only)
 //   mpeconfig                midi <b1> <b2> <b3> ...       MPE lower zone, bend +/-48
-//   mpenote / mpeoff         midi <b1> <b2> <b3> ...       test note on channel 2
+//   mpenote [pitch]          amp 0 50, midi ..., status    note on channel 2 (default: test note)
+//   mpeoff                   midi ..., status              its note-off
 //   playerload [notes]       coll clear, coll <i> <ms>     fills the player's queue
 //                            status queue loaded: ...      with the run's length
 //   fired <i> <cpuclock ms>  status playing                at the first onset
 //                            status progress <k> of <n>    every 50 onsets
-//                            stats <n> <mean> <max> <last> after the last onset
+//                            stats <n> offset <ms> jitter <ms> sd <ms> drift <ms>  after the last onset
 //   dictwrite [count]        dictready                     writes dict cg.events
 //   dictvalues <f> ...       dictcheck <n> <got> <exact> <maxAbs>
 // Every output starts with a selector; the patch routes on it.
@@ -35,22 +38,37 @@ let intended = [];
 let actual = [];
 let readings = [];
 let expectedValues = [];
+let expected = NOTE.midi; // the pitch that should be sounding now
+let mpeNote = null; // { pitch, note, bend } while an MPE note is the source
 
+// The sine's gain goes through [line~], so it always ramps: no clicks.
 function tone() {
   readings = [];
+  expected = NOTE.midi;
+  mpeNote = null;
+  outlet(0, "amp", 0.1, 20);
   outlet(0, "tone", NOTE.hz, NOTE.midi);
 }
 
+function silence() {
+  outlet(0, "amp", 0, 50);
+}
+
 // [fzero~]'s fundamental, in Hz. Each reading goes to the number box; every
-// CENTS_BATCH readings a summary goes to the Max window.
+// CENTS_BATCH readings a summary goes to the Max window. While an MPE note
+// plays, the summary also says which bend range the synth actually applied.
 function measuredhz(hz) {
   if (!(hz > 0)) return; // no pitch detected (silence, or audio off)
-  const cents = spike.centsError(NOTE.midi, tuning.hzToMidi(hz));
+  const cents = spike.centsError(expected, tuning.hzToMidi(hz));
   outlet(0, "cents", cents);
   readings.push(cents);
   if (readings.length === CENTS_BATCH) {
     const s = spike.summary(readings);
-    outlet(0, "status", "cents", "n", s.n, "mean", s.mean, "min", s.min, "max", s.max);
+    const line = ["status", "cents", "n", s.n, "mean", s.mean, "min", s.min, "max", s.max];
+    if (mpeNote) {
+      line.push("implied", "bend", "range", mpe.impliedRange(expected + s.mean / 100, mpeNote.note, mpeNote.bend));
+    }
+    outlet(0, ...line);
     readings = [];
   }
 }
@@ -60,12 +78,23 @@ function mpeconfig() {
   outlet(0, "status", "mpe", "zone", "set:", "15", "channels,", "bend", mpe.DEFAULT_RANGE);
 }
 
-function mpenote() {
-  for (const bytes of mpe.noteOn(NOTE.midi, 100, MPE_CHANNEL)) outlet(0, "midi", ...bytes);
+// MPE note on channel 2: the test note, or any float MIDI pitch ("mpenote 64.5").
+function mpenote(pitch) {
+  const p = typeof pitch === "number" ? pitch : NOTE.midi;
+  const { note, bend } = mpe.bendFor(p);
+  readings = [];
+  expected = p;
+  mpeNote = { pitch: p, note, bend };
+  outlet(0, "amp", 0, 50); // the sine steps aside, so the tracker hears the synth
+  for (const bytes of mpe.noteOn(p, 100, MPE_CHANNEL)) outlet(0, "midi", ...bytes);
+  outlet(0, "status", "mpe", "note", "ch", MPE_CHANNEL, "note", note, "bend", bend, "pitch", p, "=", "note", (p - note) * 100, "cents");
 }
 
 function mpeoff() {
-  for (const bytes of mpe.noteOff(NOTE.midi, MPE_CHANNEL)) outlet(0, "midi", ...bytes);
+  const p = mpeNote ? mpeNote.pitch : NOTE.midi;
+  readings = [];
+  for (const bytes of mpe.noteOff(p, MPE_CHANNEL)) outlet(0, "midi", ...bytes);
+  outlet(0, "status", "mpe", "note", "off");
 }
 
 function playerload(notes) {
@@ -84,7 +113,7 @@ function fired(index, ms) {
   else if (index % PROGRESS_EVERY === 0) outlet(0, "status", "progress", index, "of", intended.length);
   if (index === intended.length - 1) {
     const stats = spike.jitter(intended, actual);
-    outlet(0, "stats", stats.count, stats.meanAbs, stats.maxAbs, stats.last);
+    outlet(0, "stats", stats.count, "offset", stats.offset, "jitter", stats.jitter, "sd", stats.sd, "drift", stats.drift);
   }
 }
 

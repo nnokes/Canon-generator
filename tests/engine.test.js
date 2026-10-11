@@ -64,6 +64,14 @@ test("mpe: bend reaches every pitch within 0.6 cents at +/-48", () => {
   assert.deepEqual(mpe.bendFor(60), { note: 60, bend: 8192 });
 });
 
+test("mpe: the bend range a synth used can be read back from the pitch it sounded", () => {
+  const { note, bend } = mpe.bendFor(64.5);
+  // Bend steps are whole numbers, so the read-back is within half a semitone of 48.
+  near(mpe.impliedRange(64.5, note, bend), 48, 0.5, "synth honoured +/-48");
+  near(mpe.impliedRange(mpe.pitchOf(note, bend, 2), note, bend), 2, 1e-9, "synth kept +/-2");
+  assert.ok(Number.isNaN(mpe.impliedRange(60, 60, 8192)));
+});
+
 test("mpe: zone setup is RPN 6 on channel 1, then RPN 0 = 48 on channels 2-16", () => {
   const messages = mpe.zoneConfig();
   assert.equal(messages.length, 6 * 16);

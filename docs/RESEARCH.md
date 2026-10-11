@@ -795,6 +795,30 @@ and where centricity comes from.
   - [Microtuner](https://www.ableton.com/en/packs/microtuner/)
 - **Milestone.** M0, M2, M9.
 
+### Max 9 ABL objects (Ableton's DSP library in Max)
+- **What it is.** Max 9 ships Ableton's DSP code as black-box objects in two families:
+  - `abl.dsp.*`: low-level oscillators, filters, effects and envelopes (about 55 in Max 9.0,
+    more in 9.1)
+  - `abl.device.*`: whole instruments and effects, such as `abl.device.drift~` (Live's Drift
+    synth) and Roar; 10–12 devices by 9.1
+  
+  They have no built-in UI. `abl.device.drift~`'s reference lists `int`, raw MIDI bytes,
+  as its input. Drift is MPE-capable in Live.
+- **What we take from it:**
+  - `abl.dsp.*` oscillators and filters as voice-bank building blocks for the Hz path
+  - `abl.device.drift~` as an MPE target *inside* Max, so the MPE path can be tested and
+    used without an external synth
+- **Open question, answered by M0 spike (c):** does the Max object honour per-channel bend
+  and our ±48 RPN?
+- **Links:**
+  - [abl.device.drift~ reference](https://docs.cycling74.com/reference/abl.device.drift~)
+  - [Max 9.0.0 release notes](https://cycling74.com/releases/max/9.0.0)
+  - [Max 9.1.0 release notes](https://cycling74.com/releases/max/9.1.0)
+  - [mpeformat reference](https://docs.cycling74.com/reference/mpeformat/)
+- **Milestone.** M0, M2, M9.
+- **Status.** `secondary`. The docs site is blocked from the build environment; the details
+  come from search results.
+
 ### ODDSound MTS-ESP
 - A global tuning table that client plug-ins read, with free Max modules. The suite is paid
   software. **Stretch.**
