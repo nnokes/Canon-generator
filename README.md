@@ -5,7 +5,8 @@ electroacoustic music. It ranges from strict Fux-style canons through process ca
 (mensuration, tempo, spiral) to Ligeti-style micropolyphony, in any tuning: equal divisions,
 just intonation, Scala files, and harmonic and inharmonic spectra.
 
-> **Status:** planning. No code yet. Start with [`PLAN.md`](PLAN.md).
+> **Status:** M0 (scaffold and platform spikes). The build, tests and CI work in Node; the spikes
+> run in Max 9. See [`docs/M0-checklist.md`](docs/M0-checklist.md).
 
 ## What it will do
 - **Render** canons with **N voices**. Each voice has its own **delay**, **interval of
@@ -26,6 +27,19 @@ just intonation, Scala files, and harmonic and inharmonic spectra.
   counterpoint, tuning and spectral music, each entry mapped to a milestone.
 - [`docs/M0-checklist.md`](docs/M0-checklist.md): the first concrete steps and platform
   spikes.
+
+## Development
+```sh
+npm test              # engine, bundles in a simulated [v8], and a lint of every patch
+npm run build         # code/ -> patchers/scripts/*.bundle.js (or build:watch while working)
+npm run patches       # rewrite the generated patches from tools/patchgen.py
+npm run patches:init  # create missing hand-built patches (never overwrites)
+npm run hooks         # pre-commit: personal paths, stale bundles, stale generated patches
+```
+- **Engine:** `code/lib/cg-*.js`, plain JavaScript with no Max APIs, tested in Node.
+- **`[v8]` wrappers:** `code/*.v8.js`, glue only. Never hand-edit the bundles.
+- **Patches:** generated ones say so in their first comment. Hand-built ones (`canon.maxpat`,
+  the panels) are yours to edit in Max (PLAN.md 4.4).
 
 ## License
 MIT. See [`LICENSE`](LICENSE).

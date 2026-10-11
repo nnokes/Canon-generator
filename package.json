@@ -1,0 +1,22 @@
+{
+  "name": "canon-generator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A canon generator for Max/MSP and Max for Live: strict, process, spectral and micropolyphonic canons in any tuning",
+  "license": "MIT",
+  "repository": "github:nnokes/Canon-generator",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "NODE_PATH=code/lib:code/max node --test tests/*.test.js",
+    "build": "node tools/build.js",
+    "build:watch": "node tools/build.js --watch",
+    "build:check": "node tools/build.js --check",
+    "check:paths": "node tools/check-paths.js",
+    "patches": "python3 tools/patchgen.py",
+    "patches:check": "python3 tools/patchgen.py --check",
+    "patches:init": "python3 tools/patchgen.py --init",
+    "hooks": "git config core.hooksPath tools/hooks"
+  }
+}

@@ -3,90 +3,132 @@
 **Goal:** a repo you can clone and open in Max 9, with the build, tests and CI working, and
 five spikes that settle the risky platform questions before any music code is written.
 
-**Exit criteria (from PLAN.md §5):** all five spikes have a recorded result in the Results
-section below, and `cg.hello` round-trips from Node tests to a sounding microtonal note in Max.
+**Exit criteria (from PLAN.md §5):**
+- all five spikes have a recorded result in the Results table below
+- `cg.hello` round-trips from the Node tests to a sounding microtonal note in Max
+
+**Status:** the scaffold is done and tested in Node (part 1). The spikes (part 2) need Max 9
+on your machine. Their patches are ready but have **not yet been opened in Max**: they were
+generated and lint-checked, not run. Expect small fixes on the first try. Spike (a) comes
+first, because the others depend on Max finding the scripts.
 
 ---
 
-## 1. Scaffold (port from cento)
+## 1. Scaffold (ported from cento): done
 
-- [ ] `package.json`:
-  - Node ≥ 20
-  - scripts: `test`, `build`, `build:watch`, `build:check`, `check:paths`, `patches`,
-    `patches:check`, `hooks`
-  - `NODE_PATH=code/lib` for tests
-- [ ] `.gitignore`: `node_modules/`, `frozen/`, `.DS_Store`, and personal data paths.
-- [x] `LICENSE`: MIT (added).
-- [ ] Before each spike, read the relevant pages of the official Max documentation
-      (<https://docs.cycling74.com/>): the `v8` reference, File Preferences and the search
-      path, Projects, Packages, and freezing Max for Live devices. Note in the Results table
-      where Max's actual behavior differs from what the docs say.
-- [ ] `tools/build.js`: port cento's bundler.
-  - one self-contained `patchers/scripts/<name>.bundle.js` per `code/*.v8.js`
-  - module prefix `cg.`
-  - `--watch` and `--check` modes
-- [ ] `tools/check-paths.js` and `tools/hooks/pre-commit`: block personal absolute paths in
-      committed files.
-- [ ] `tests/helpers/v8-sim.js`: port cento's simulated `[v8]` context (`post`, `outlet`,
-      `Dict`, `Task`, `inlets`/`outlets`).
-- [ ] `.github/workflows/ci.yml`: `npm test`, `npm run build:check`, `npm run check:paths`
-      (and `patches:check` once `tools/patchgen` exists).
-- [ ] `code/lib/cg.rng.js` (mulberry32) with tests.
-- [ ] `code/lib/cg.hello.js` and `code/cg.hello.v8.js`.
-  - Input: `edo 31 step 5`. Output: `note <midi-float> <hz>`.
-  - Unit test, plus a bundle test in the simulated `[v8]` context.
-- [ ] `patchers/canon.maxpat`: a minimal hand-built shell with one `[v8]` box (with a
-      `textfile` entry) loading `cg.hello.bundle.js`.
+- [x] `package.json`: Node ≥ 20. Scripts: `test`, `build`, `build:watch`, `build:check`,
+      `check:paths`, `patches`, `patches:check`, `patches:init`, `hooks`.
+- [x] `.gitignore`
+- [x] `LICENSE` (MIT)
+- [x] `tools/build.js`: cento's bundler. Builds one self-contained
+      `patchers/scripts/<name>.bundle.js` per `code/*.v8.js`, with `--watch` and `--check`.
+- [x] `tools/check-paths.js` and `tools/hooks/pre-commit`: block personal absolute paths,
+      stale bundles and stale generated patches.
+- [x] `tests/max-sim.js`: cento's simulated `[v8]` context, plus a `Dict` stand-in.
+- [x] `.github/workflows/ci.yml`: tests, `build:check`, `check:paths`, `patches:check`.
+- [x] `tools/patchgen.py`: the hybrid patch generator (PLAN §4.4):
+  - writes the *generated* patches, and `--check`s them in CI
+  - creates the *hand-built* ones once with `--init`, then never touches them again
+- [x] Engine modules (`code/lib/`, named `cg-<name>.js`, required as `"cg-<name>"`):
+  - `cg-rng`: mulberry32
+  - `cg-version`
+  - `cg-tuning`: MIDI ↔ Hz, cents, EDO steps (M1 grows this)
+  - `cg-mpe`: bend for a float pitch at ±48, zone setup, note-on/off bytes
+  - `cg-hello`
+  - `cg-spike`: helpers for the spikes only; delete after M0
+- [x] `[v8]` wrappers:
+  - `code/cg.hello.v8.js`
+  - `code/cg.spike.v8.js` (for spikes b, c and d)
+- [x] 30 Node tests:
+  - the engine maths
+  - each bundle loaded in a simulated `[v8]`
+  - a patch lint: cords, the `[v8]` one-inlet/one-outlet rule, scripts, bpatchers and
+    abstractions exist, and generated vs. hand-built ownership
 
-## 2. Spikes
+### First-time setup on your Mac
+```sh
+git clone https://github.com/nnokes/Canon-generator.git
+cd Canon-generator
+npm test            # Node 20+; no npm install needed (no dependencies)
+npm run hooks       # optional: the pre-commit check
+npm run build:watch # while you work on code/: bundles rebuild, and [v8] reloads them
+```
 
-### (a) Search path: does a fresh clone load its bundles with no preference changes?
-On a fresh clone, with Max's File Preferences untouched, try three layouts and record which
-ones work. Then pick one for the whole project and update PLAN.md §2.2–2.3.
-1. Relative path in the `[v8]` `textfile` entry or argument, e.g. `scripts/cg.hello.bundle.js`.
-2. A Max Project (`canon.maxproj`) that lists `patchers/`, `parts/`, `parts/gen/` and
-   `scripts/`.
-3. Flat fallback: the bundles sit beside `canon.maxpat`.
+## 2. Spikes (run in Max 9)
 
-Also check that an abstraction in `patchers/parts/gen/` is found by name from `canon.maxpat`.
-Use the same three conditions.
+Every spike patch is in `patchers/`, next to the main patch, and prints to the Max window.
+Turn on **Options → Overdrive** for spike (b).
 
-### (b) Player: float-time accuracy
-Render 200 events of a √2:1 tempo canon, whose times are irrational and never land on a
-grid. Log the actual onset times with `[cpuclock]` and compare them with the intended ones,
-using the same three player designs:
-1. `[delay]`-chained ms scheduling (scheduler thread, Overdrive on).
-2. A fine-grid `[metro @quantize]` pull, as in cento.
-3. Sample-accurate MSP sequencing for the Hz path (control buffers, or `mc.` / `[poly~]`).
+### (a) Search path: `patchers/cg.spike.a-paths.maxpat`
+Keep **Max's File Preferences untouched** on a fresh clone. Open the patch and click each
+message box:
 
-Record the mean and maximum jitter in ms, and the CPU cost. Choose one design per output path.
+| Row | What it tests | Works if the Max window shows |
+|---|---|---|
+| 1 | `[v8 cg.hello.bundle.js]`: a bare name, with the script in `patchers/scripts/` | `a1-bare-name: hello canon-generator 0.1.0 …` |
+| 2 | `[v8 scripts/cg.hello.bundle.js]`: a path relative to the patch | `a2-relative-path: hello …` |
+| 3 | `[cg.engine]`: an abstraction by bare name, living in `patchers/parts/gen/` | `a3-abstraction: hello …`; a dashed box means "not found" |
+| 4 | `[bpatcher parts/gen/cg.engine.maxpat]`: a relative bpatcher | the box shows its contents, and `a4-bpatcher: hello …` prints |
 
-### (c) Microtonal output (Hz path first, then MPE)
-1. **Hz to MSP:** `cg.hello` emits 31-EDO step 5 above D4. A minimal `cg.voices~` (`mc.cycle~`
-   or a small additive synth) plays it. Measure the pitch with `[sigmund~]` or `[fzero~]`.
-   **Pass if within ±1 cent.**
-2. **MPE:** send the same note on channel 2 with pitch bend range ±48 (send the MPE
-   configuration and RPN 0 first) into an MPE synth, or into Live 12 with tuning bypassed.
-   Check it on a tuner. Expected resolution: 96/16384 ≈ 0.59 cents.
+**Decide** what follows from the result:
 
-### (d) Dict round trip
-The `[v8]` writes a 500-event list (float times and float pitches) into the named dict
-`cg.events`. The Max player reads it back. **Pass if values survive bit-exact**, or record the
-precision Max keeps.
+| Result | Decision |
+|---|---|
+| Rows 1 and 3 work | Bare names are fine. Keep the current layout. |
+| Only 2 and 4 work | Patches name scripts and parts by relative path. Change `patchgen.py` and `build.js` docs. |
+| Nothing works | Make a **Max Project**: *File → New Project*, save it as `canon.maxproj` in the repo root, and add the `patchers` folder. Then retest rows 1 and 3. |
+| A project doesn't help either | Flatten: bundles go next to `canon.maxpat`. |
 
-### (e) Hybrid patch workflow
-`tools/patchgen` writes a trivial `patchers/parts/gen/cg.engine.maxpat`. The hand-built
-`patchers/parts/cg.panel.main.maxpat` hosts it in a `[bpatcher]`. Edit the panel by hand,
-regenerate `cg.engine`, and confirm two things:
-1. The panel is untouched.
-2. `patches:check` catches a stale generated file.
+Record the outcome in PLAN §2.2.
 
-Also run `tests/patches.test.js` (a lint that every `[v8]` has a `textfile` entry naming an
-existing bundle) on both files.
+### (b) Player jitter: `patchers/cg.spike.b-player.maxpat`
+1. Click `playerload 100`. The script fills `[coll cg.queue]` with 200 onsets of a √2:1 tempo
+   canon. Their times never land on a grid.
+2. Click `go`. A Max-native chain (`[i]` → `[t i i i b]` → `[coll]` → `[if]` → `[delay]`)
+   walks the queue in the scheduler thread. Each onset sends `[cpuclock]`'s time to the
+   script.
+3. After about 40 s, `player-stats` prints: count, mean |error| ms, max |error| ms, and the
+   last error in ms. Run it three times, and once more while dragging a window around, to
+   load the main thread.
+
+**Pass** if max |error| ≤ 2 ms with Overdrive on. If not, try a fine `[metro]` pull (cento's
+approach), or sample-accurate MSP playback for the Hz path. PLAN §4.2 lists both options.
+
+### (c) Microtonal output: `patchers/cg.spike.c-output.maxpat`
+- **Hz path (first):**
+  1. Click `tone`, then the speaker (`ezdac~`) to turn audio on.
+  2. `[cycle~]` plays 31-EDO step 5 above D4 (328.40 Hz), and `[sigmund~]` measures it.
+  3. **Pass** if `cents-error` stays within ±1 cent.
+- **MPE path (second):**
+  1. Double-click `[midiout]` to choose a port: an MPE synth, an IAC bus into one, or Live
+     12 with tuning bypassed.
+  2. Click `mpeconfig`. This sends the lower-zone setup: 15 member channels, bend ±48.
+  3. Click `mpenote`, then `mpeoff`. The note is on channel 2.
+  4. **Pass** if a tuner reads 328.4 Hz (about 0.6-cent resolution).
+  
+  If your synth ignores the RPN setup, set its bend range to ±48 by hand and note that here.
+
+### (d) Dict precision: `patchers/cg.spike.d-dict.maxpat`
+1. Click `dictwrite 256`. The script writes 256 full-precision floats into `dict cg.events`.
+2. Max reads them back through `[dict]` → `[dict.unpack values:]` and returns them as atoms.
+3. `dict-check` prints: expected, received, exact (1/0), max |difference|.
+4. **Pass** if exact = 1. If not, record the precision Max keeps: about 1e-7 relative means
+   32-bit floats, and event times then need care.
+
+### (e) Hybrid workflow: `patchers/canon.maxpat` → `patchers/parts/cg.panel.main.maxpat`
+`canon.maxpat` and the panel are **hand-built**: they were created once by
+`npm run patches:init`, and they're yours now. The panel shows the *generated*
+`cg.engine.maxpat` in a bpatcher.
+1. Open `canon.maxpat`. Click `hello`. `panel: hello …` should print.
+2. Open the panel and move or add something. Save it in Max.
+3. Run `npm run patches`. The panel must be unchanged (`git diff` shows only your edit).
+4. Edit `patchers/parts/gen/cg.engine.maxpat` in Max, save it, then run
+   `npm run patches:check`. It must report the generated patch as stale. CI checks this
+   too.
 
 ---
 
-## 3. Results (fill in during M0)
+## 3. Results (fill in on your machine)
 
 | Spike | Result | Decision |
 |---|---|---|
@@ -96,8 +138,12 @@ existing bundle) on both files.
 | (d) dict precision | | |
 | (e) hybrid workflow | | |
 
-## 4. Notes and gotchas found
-- Check that Max 9 itself (or Live 12.2.1 or later, which bundles it) is in use. `[v8]` needs
-  it.
-- Max ignores symbolic links (cento M0). Do not symlink `patchers/` into the Max Packages
+## 4. Notes and gotchas
+- `[v8]` needs Max 9 itself (or Live 12.2.1 or later, which bundles it).
+- Max ignores symbolic links (cento M0). Don't symlink `patchers/` into the Max Packages
   folder.
+- `[v8]` defers incoming messages to the main thread. That's why the player captures
+  `[cpuclock]` *before* the onset message reaches the script: deferral can't distort the
+  measurement.
+- The spike patches and `code/lib/cg-spike.js` are temporary. Remove them, or move them to
+  `docs/spikes/`, when M0 closes.

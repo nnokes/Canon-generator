@@ -209,7 +209,9 @@ Whole-canon fields:
 - `free`: voices that are not canonic, such as a cantus firmus or a free bass under the canon.
 - `mask`: a post-render filter that thins the canon so only traces sound: a time-varying register band (pass or stop) plus gating segments. This is how *Glissandi*'s second half works (Levy 2006, pp. 67–92).
 
-### 3.2 Modules (`code/lib/`, prefix `cg.`)
+### 3.2 Modules (`code/lib/cg-<name>.js`, required as `"cg-<name>"`)
+
+Wrappers are named `code/cg.<name>.v8.js` and bundle to `patchers/scripts/cg.<name>.bundle.js`. That's cento's convention: hyphens for library modules, dots for things Max loads.
 
 | Module | Job | First needed |
 |---|---|---|
@@ -404,16 +406,19 @@ lower 10th), and how his canon for Haydn has two solutions.
 
 ### 4.2 Player
 The player is Max-native and locked to the transport, and it reads `cg.events`. Times are
-floats, so a fixed tick grid is not enough. M0 spike (b) compares three designs:
-1. `[delay]`-chained ms scheduling in the scheduler thread, with Overdrive on
+floats, so a fixed tick grid is not enough. There are three candidate designs:
+1. `[delay]`-chained ms scheduling in the scheduler thread, with Overdrive on. The JS fills
+   a `[coll]` with the delay to each next onset, and an `[i]` → `[coll]` → `[delay]` loop
+   walks it. M0 spike (b) builds and measures this one first.
 2. a fine-grid `[metro @quantize]` pull, as cento does
 3. sample-accurate MSP sequencing for the Hz path, through per-voice control buffers or
    `mc.`/`[poly~]`
 
-It picks one design per output path based on measured jitter.
+Design 1 is kept if its worst error is ≤ 2 ms. Designs 2 and 3 are tried only if it isn't,
+and one design is picked per output path.
 
 ### 4.3 Output adapters (build order)
-1. **`cg.voices~`: Hz to an MSP voice bank** (`mc.`, built in M0). Each voice is a simple
+1. **`cg.voices~`: Hz to an MSP voice bank** (`mc.`). M0 proves the path with one `[cycle~]` checked by `[sigmund~]`; the full voice bank arrives with the M2 renderer. Each voice is a simple
    additive synth. Its **partial list is a parameter, and the same list feeds the
    `roughness` consonance model**. There is no MIDI channel limit, which suits dense Ligeti
    textures.
@@ -427,7 +432,7 @@ It picks one design per output path based on measured jitter.
 
 ### 4.4 Hybrid patch authoring
 - **Hand-built:** `patchers/canon.maxpat` and `patchers/parts/cg.panel.*`.
-- **Generated:** `patchers/parts/gen/*.maxpat`, written by `tools/patchgen`. This is a
+- **Generated:** `patchers/parts/gen/*.maxpat` (and, during M0, the `patchers/cg.spike.*` patches), written by `tools/patchgen.py`, Python standard library only. This is a
   slimmed-down port of cento's `maxgen.py` idea. CI regenerates these files and fails if they
   differ.
 - **Checked:** `tests/patches.test.js` lints *all* patches:

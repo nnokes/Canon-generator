@@ -1,0 +1,5 @@
+#!/bin/sh
+# Installed with "npm run hooks". Blocks a commit that contains personal paths,
+# bundles in patchers/scripts that don't match code/, or generated patches that
+# don't match tools/patchgen.py.
+npm run --silent check:paths && npm run --silent build:check && npm run --silent patches:check

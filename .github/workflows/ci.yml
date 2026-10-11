@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Engine tests (code/lib and the bundled [v8] scripts)
+        run: npm test
+      - name: Bundles in patchers/scripts match code/
+        run: npm run build:check
+      - name: No personal paths in tracked files
+        run: npm run check:paths
+      - name: Generated patches match tools/patchgen.py
+        run: npm run patches:check

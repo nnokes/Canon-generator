@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+
+# Node (dev tooling only; there are no runtime dependencies)
+node_modules/
+
+# Python (tools/patchgen.py)
+__pycache__/
+.venv/
+
+# Frozen devices and built apps go to GitHub Releases, not the repo.
+# Save frozen copies into frozen/ (outside patchers/, so Max never confuses
+# them with the unfrozen devices).
+frozen/
+*.app/
+build/
+dist/
+
+# Working data (exports, presets, personal scale files) lives in
+# ~/Documents/canon-generator, outside the repo. These catch files copied in
+# here by accident.
+*.mid
+*.midi
+!tests/fixtures/**/*.mid
+
+# Settings the patches remember between sessions: personal, and they can
+# hold absolute paths.
+patchers/canon.settings.json
