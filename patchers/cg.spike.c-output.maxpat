@@ -48,7 +48,7 @@
 			{
 				"box": {
 					"maxclass": "comment",
-					"text": "SPIKE (c) MICROTONAL OUTPUT. Hz path: click 'tone', turn audio on with the speaker. cents-error shows how far [sigmund~] hears the tone from 31-EDO step 5 above D4 (328.40 Hz); pass if within +/-1 cent. MPE path: pick a port in [midiout] (double-click), click mpeconfig, then mpenote / mpeoff, and check the note on a tuner (expect ~0.6-cent resolution).",
+					"text": "SPIKE (c) MICROTONAL OUTPUT. Hz path: click 'tone', turn audio on with the speaker. cents-error shows how far [fzero~] hears the tone from 31-EDO step 5 above D4 (328.40 Hz); pass if within +/-1 cent (fzero~ is a tracker: if it wobbles more on a pure sine, note its spread). MPE path: pick a port in [midiout] (double-click), click mpeconfig, then mpenote / mpeoff, and check the note on a tuner (expect ~0.6-cent resolution).",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"linecount": 4,
@@ -252,16 +252,18 @@
 			{
 				"box": {
 					"maxclass": "newobj",
-					"text": "sigmund~ pitch",
+					"text": "fzero~",
 					"numinlets": 1,
-					"numoutlets": 1,
+					"numoutlets": 3,
 					"outlettype": [
-						""
+						"float",
+						"float",
+						"bang"
 					],
 					"patching_rect": [
 						160.0,
 						320.0,
-						112.0,
+						56.0,
 						22.0
 					],
 					"id": "obj-13"
@@ -288,7 +290,7 @@
 			{
 				"box": {
 					"maxclass": "newobj",
-					"text": "prepend measured",
+					"text": "prepend measuredhz",
 					"numinlets": 2,
 					"numoutlets": 1,
 					"outlettype": [
@@ -297,7 +299,7 @@
 					"patching_rect": [
 						160.0,
 						390.0,
-						126.0,
+						140.0,
 						22.0
 					],
 					"id": "obj-15"

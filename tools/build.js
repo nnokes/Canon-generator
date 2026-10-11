@@ -2,13 +2,14 @@
 "use strict";
 // Bundles each [v8] / [v8ui] wrapper (code/*.v8.js, code/*.v8ui.js) together with
 // the modules it requires (code/lib: the engine, no Max APIs; code/max: Max-only
-// helpers) into one self-contained file: patchers/scripts/<name>.bundle.js.
+// helpers) into one self-contained file: patchers/<name>.bundle.js.
 //
-// Why bundle: Max finds files next to or below the patch it opens, but not
-// above it, and frozen Max for Live devices don't reliably find files that a
-// script loads with require(). A bundle has no runtime requires and lives
-// under patchers/, so what runs while you develop in Max is exactly what gets
-// frozen. Patches always load the bundles; Node tests load code/lib directly.
+// Why bundle, and why there: on a fresh clone Max finds files only in the
+// folder of the patch you open, not in its subfolders or by relative path
+// (M0 spike a), and frozen Max for Live devices don't reliably find files that
+// a script loads with require(). A bundle has no runtime requires and sits in
+// patchers/, next to canon.maxpat, so what runs while you develop in Max is
+// exactly what gets frozen. Patches always load the bundles; Node tests load code/lib directly.
 // (Ported from nnokes/cento, MIT.)
 //
 //   node tools/build.js           build once
@@ -22,7 +23,7 @@ const ROOT = path.resolve(__dirname, "..");
 const CODE = path.join(ROOT, "code");
 const LIB = path.join(CODE, "lib");
 const MAX = path.join(CODE, "max");
-const OUT = path.join(ROOT, "patchers", "scripts");
+const OUT = path.join(ROOT, "patchers");
 const REQUIRE = /\brequire\(\s*(["'])([^"']+)\1\s*\)/g;
 
 const relative = (file) => path.relative(ROOT, file).split(path.sep).join("/");
@@ -84,7 +85,7 @@ function bundle(wrapperFile) {
   return out.join("\n");
 }
 
-// Returns { "patchers/scripts/<name>.bundle.js": contents } for every wrapper.
+// Returns { "patchers/<name>.bundle.js": contents } for every wrapper.
 function buildAll() {
   const outputs = {};
   const wrappers = fs

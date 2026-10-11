@@ -1,5 +1,5 @@
 "use strict";
-// The bundled scripts in patchers/scripts, loaded the way [v8] loads them.
+// The bundled scripts in patchers/, loaded the way [v8] loads them.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
@@ -11,14 +11,14 @@ const mpe = require("cg-mpe");
 
 const select = (out, selector) => out.filter(([, s]) => s === selector).map(([, , ...rest]) => rest);
 
-test("bundles in patchers/scripts are up to date with code/", () => {
+test("bundles in patchers/ are up to date with code/", () => {
   assert.deepEqual(build.check(), []);
 });
 
 test("each bundle exposes exactly its documented messages", () => {
   assert.deepEqual(loadBundle("cg.hello").handlers(), ["bang", "msg_int"]);
   assert.deepEqual(loadBundle("cg.spike").handlers(), [
-    "dictvalues", "dictwrite", "fired", "measured", "mpeconfig", "mpenote", "mpeoff", "playerload", "tone",
+    "dictvalues", "dictwrite", "fired", "measuredhz", "mpeconfig", "mpenote", "mpeoff", "playerload", "tone",
   ]);
 });
 
@@ -38,13 +38,16 @@ test("cg.hello answers like the library, in Max's atom order", () => {
   assert.deepEqual(atoms, ["hello", h.name, h.version, "seed", 5, "check", ...h.check, "note", h.note.midi, h.note.hz]);
 });
 
-test("cg.spike: tone, then the tracker's pitch comes back as a cents error", () => {
+test("cg.spike: tone, then the tracker's Hz comes back as a cents error", () => {
   const bundle = loadBundle("cg.spike");
-  const [[, , hz, midi]] = bundle.send("tone");
+  const [[, , hz]] = bundle.send("tone");
   assert.ok(Math.abs(hz - 328.40145361845435) < 1e-9);
-  const [[, selector, cents]] = bundle.send("measured", midi + 0.004);
+  const [[, selector, cents]] = bundle.send("measuredhz", hz * Math.pow(2, 0.4 / 1200));
   assert.equal(selector, "cents");
   assert.ok(Math.abs(cents - 0.4) < 1e-9);
+  // No pitch detected (silence, audio off): no reply.
+  assert.deepEqual(bundle.send("measuredhz", 0), []);
+  assert.deepEqual(bundle.send("measuredhz", -1), []);
 });
 
 test("cg.spike: MPE setup and the test note go out as raw bytes", () => {

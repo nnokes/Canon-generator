@@ -39,7 +39,7 @@ class SimDict {
 }
 
 function loadBundle(name) {
-  const file = path.join(ROOT, "patchers", "scripts", name + ".bundle.js");
+  const file = path.join(ROOT, "patchers", name + ".bundle.js");
   const sent = [];
   const posted = []; // what the script printed in the Max window
   const context = {

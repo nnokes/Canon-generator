@@ -31,7 +31,7 @@ just intonation, Scala files, and harmonic and inharmonic spectra.
 ## Development
 ```sh
 npm test              # engine, bundles in a simulated [v8], and a lint of every patch
-npm run build         # code/ -> patchers/scripts/*.bundle.js (or build:watch while working)
+npm run build         # code/ -> patchers/*.bundle.js (or build:watch while working)
 npm run patches       # rewrite the generated patches from tools/patchgen.py
 npm run patches:init  # create missing hand-built patches (never overwrites)
 npm run hooks         # pre-commit: personal paths, stale bundles, stale generated patches
@@ -47,7 +47,8 @@ MIT. See [`LICENSE`](LICENSE).
 ## Lineage
 The architecture follows [`nnokes/cento`](https://github.com/nnokes/cento): a pure-JavaScript
 engine tested in Node, thin `[v8]` wrappers, and single-file script bundles. Everything Max
-loads sits below the main patch, so Max never has to look in folders above it.
+loads sits directly in `patchers/`, next to the main patch, so it opens on any clone with no
+Max setup.
 
 ## Requirements (planned)
 - Max 9 (for `[v8]`)

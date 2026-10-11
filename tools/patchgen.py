@@ -1,5 +1,9 @@
 """Writes the generated Max patches, and creates the hand-built ones once.
 
+Everything Max loads lives directly in patchers/, next to canon.maxpat: on a
+fresh clone Max doesn't look in subfolders or follow relative paths (M0 spike
+a, PLAN.md 2.2). So every patch, abstraction and bundle has a bare name.
+
 Patch authoring is hybrid (PLAN.md 4.4):
 
   GENERATED  wiring-heavy abstractions and the M0 spike patches. This script is
@@ -147,42 +151,38 @@ def engine():
 
 
 def spike_paths():
-    """M0 spike (a): which ways of naming a script or abstraction Max can find
-    from a fresh clone, with File Preferences untouched."""
-    p = Patch(rect=(60, 60, 900, 560))
+    """M0 spike (a), now a check of the flat layout. The first run showed that on
+    a fresh clone Max finds files only in the folder of the patch you open: not
+    in subfolders, not by relative path. So everything Max loads lives in
+    patchers/, and every row here names a file in this same folder."""
+    p = Patch(rect=(60, 60, 900, 520))
     p.note(GENERATED_NOTE, 20, 10, 840, 1)
-    p.note("SPIKE (a) SEARCH PATH. Open this patch from a fresh clone with Max's File Preferences untouched. "
-           "Click each message box. A working row prints to the Max window; a broken one shows a red error "
-           "or a dashed box. Record which rows work in docs/M0-checklist.md.", 20, 35, 840, 3)
+    p.note("SPIKE (a) FLAT LAYOUT. Open this patch from a fresh clone with Max's File Preferences untouched. "
+           "Click each message box: each row should print to the Max window. Finding from the first run: "
+           "Max did not find scripts or patches in subfolders of patchers/, nor by relative path, so "
+           "everything Max loads sits in patchers/ itself (PLAN.md 2.2).", 20, 35, 840, 3)
 
-    rows = [
-        ("1  bare name (needs the search path, or a Max Project)", "v8 cg.hello.bundle.js", "a1-bare-name"),
-        ("2  path relative to this patch", "v8 scripts/cg.hello.bundle.js", "a2-relative-path"),
-    ]
-    y = 110
-    for label, text, tag in rows:
-        p.comment(label, 20, y, w=420)
-        bang = p.msg("bang", 20, y + 25)
-        v8 = p.obj(text, 20, y + 55, 1, 1)
-        prt = p.obj(f"print {tag}", 20, y + 90, 1, 0)
-        p.connect(bang, 0, v8, 0)
-        p.connect(v8, 0, prt, 0)
-        y += 130
+    p.comment("1  [v8] script by bare name", 20, 110, w=400)
+    bang = p.msg("bang", 20, 135)
+    v8 = p.obj("v8 cg.hello.bundle.js", 20, 165, 1, 1)
+    prt1 = p.obj("print a1-script", 20, 200, 1, 0)
+    p.connect(bang, 0, v8, 0)
+    p.connect(v8, 0, prt1, 0)
+
+    p.comment("2  abstraction by bare name", 20, 250, w=400)
+    msg2 = p.msg("hello", 20, 275)
+    abst = p.obj("cg.engine", 20, 305, 1, 1)
+    prt2 = p.obj("print a2-abstraction", 20, 340, 1, 0)
+    p.connect(msg2, 0, abst, 0)
+    p.connect(abst, 0, prt2, 0)
 
     x = 470
-    p.comment("3  abstraction by bare name (from parts/gen/)", x, 110, w=400)
+    p.comment("3  bpatcher by bare name", x, 110, w=400)
     msg3 = p.msg("hello", x, 135)
-    abst = p.obj("cg.engine", x, 165, 1, 1)
-    prt3 = p.obj("print a3-abstraction", x, 200, 1, 0)
-    p.connect(msg3, 0, abst, 0)
-    p.connect(abst, 0, prt3, 0)
-
-    p.comment("4  bpatcher with a relative path", x, 240, w=400)
-    msg4 = p.msg("hello", x, 265)
-    bp = p.bpatcher("parts/gen/cg.engine.maxpat", x, 295, 380, 140, 1, 1)
-    prt4 = p.obj("print a4-bpatcher", x, 445, 1, 0)
-    p.connect(msg4, 0, bp, 0)
-    p.connect(bp, 0, prt4, 0)
+    bp = p.bpatcher("cg.engine.maxpat", x, 165, 380, 140, 1, 1)
+    prt3 = p.obj("print a3-bpatcher", x, 315, 1, 0)
+    p.connect(msg3, 0, bp, 0)
+    p.connect(bp, 0, prt3, 0)
     return p
 
 
@@ -245,13 +245,14 @@ def spike_player():
 
 
 def spike_output():
-    """M0 spike (c): the 31-EDO test note through MSP (checked by [sigmund~])
+    """M0 spike (c): the 31-EDO test note through MSP (checked by [fzero~], whose
+    left outlet is the fundamental in Hz)
     and as MPE MIDI with pitch bend +/-48."""
     p = Patch(rect=(60, 60, 900, 600))
     p.note(GENERATED_NOTE, 20, 10, 840, 1)
     p.note("SPIKE (c) MICROTONAL OUTPUT. Hz path: click 'tone', turn audio on with the speaker. cents-error "
-           "shows how far [sigmund~] hears the tone from 31-EDO step 5 above D4 (328.40 Hz); pass if within "
-           "+/-1 cent. MPE path: pick a port in [midiout] (double-click), click mpeconfig, then mpenote / "
+           "shows how far [fzero~] hears the tone from 31-EDO step 5 above D4 (328.40 Hz); pass if within "
+           "+/-1 cent (fzero~ is a tracker: if it wobbles more on a pure sine, note its spread). MPE path: pick a port in [midiout] (double-click), click mpeconfig, then mpenote / "
            "mpeoff, and check the note on a tuner (expect ~0.6-cent resolution).", 20, 35, 840, 4)
 
     tone = p.msg("tone", 20, 120)
@@ -268,9 +269,9 @@ def spike_output():
     osc = p.obj("cycle~", 20, 280, 2, 1, ["signal"])
     gain = p.obj("*~ 0.1", 20, 320, 2, 1, ["signal"])
     dac = p.ui("ezdac~", 20, 360, 45, 45, 2, 0, [])
-    tracker = p.obj("sigmund~ pitch", 160, 320, 1, 1)
+    tracker = p.obj("fzero~", 160, 320, 1, 3, ["float", "float", "bang"])
     limit = p.obj("speedlim 500", 160, 355, 2, 1)
-    measured = p.obj("prepend measured", 160, 390, 2, 1)
+    measured = p.obj("prepend measuredhz", 160, 390, 2, 1)
     p.connect(route, 0, unpack, 0)
     p.connect(unpack, 0, osc, 0)
     p.connect(osc, 0, gain, 0)
@@ -318,7 +319,7 @@ def spike_dict():
 
 
 GENERATED = {
-    "patchers/parts/gen/cg.engine.maxpat": engine,
+    "patchers/cg.engine.maxpat": engine,
     "patchers/cg.spike.a-paths.maxpat": spike_paths,
     "patchers/cg.spike.b-player.maxpat": spike_player,
     "patchers/cg.spike.c-output.maxpat": spike_output,
@@ -359,7 +360,7 @@ def panel_main():
 
 HAND = {
     "patchers/canon.maxpat": main_patch,
-    "patchers/parts/cg.panel.main.maxpat": panel_main,
+    "patchers/cg.panel.main.maxpat": panel_main,
 }
 
 

@@ -64,43 +64,47 @@ table (§3.3).
 The reasons are the same as cento's: tests that are easy to run, offline batch runs in Node,
 diffs that are easy to read, and control over how long the main thread is blocked.
 
-### 2.2 The search-path problem, solved by layout
-Max finds files next to, or below, the patch it opens, but has trouble with folders above it. So:
+### 2.2 The search-path problem, solved by a flat layout
+**Settled by M0 spike (a).** On a fresh clone, with File Preferences untouched, Max 9 found
+files **only in the folder of the patch you open**. It failed in every other case:
+- a script in `patchers/scripts/` by bare name: "can't find file"
+- the same script by relative path (`scripts/cg.hello.bundle.js`): "can't find file"
+- an abstraction in a subfolder: "No such object"
+- bpatchers in subfolders, by bare name or relative path: "error loading patcher"
 
-- **Everything Max loads lives in `patchers/`**: the main patch, the abstractions, and the
-  script bundles.
+So:
+- **Everything Max loads lives directly in `patchers/`**, next to `canon.maxpat`: the
+  patches, the abstractions and the script bundles. Every reference is a bare name. The
+  patch lint fails on any path in a name, and on any loadable file in a subfolder of
+  `patchers/`.
 - **Bundles are self-contained.** `tools/build.js` inlines every module into one
-  `patchers/scripts/<name>.bundle.js` per wrapper. **Nothing calls `require()` at runtime.**
+  `patchers/<name>.bundle.js` per wrapper. **Nothing calls `require()` at runtime.**
   cento's M0 found that frozen Max for Live devices miss scripts loaded with `require()`.
+- **Source stays organized in `code/`**, which Max never loads.
 - **CI fails if a committed bundle is out of date** relative to `code/`.
 - **Working data stays out of the repo.** Exports, presets and personal scale files go in
   `~/Documents/canon-generator/`.
+- **For M9 (Max for Live):** a device doesn't search its own folder (cento M0). During
+  development Live needs `patchers/` in its File Preferences. Frozen devices embed their
+  files and need nothing.
 
-**Still to confirm in M0, spike (a).** cento's notes say standalone Max searches the folder of
-the patch it opens, but its README also tells users to add `patchers/` to the search path with
-*Subfolders* enabled. The spike tests three ways to load from subfolders on a fresh clone with
-no preference changes:
-1. a relative path in the `[v8]` `textfile` entry
-2. a Max Project (`.maxproj`), which covers all its folders
-3. a flat fallback, with bundles beside the main patch
-
-### 2.3 Repository layout (target)
+### 2.3 Repository layout
 ```
-README.md  PLAN.md  package.json  .gitignore
+README.md  PLAN.md  package.json  .gitignore  LICENSE
 code/
-  lib/            engine: cg.tuning, cg.transform, cg.canon, cg.consonance,
-                  cg.rules, cg.analyze, cg.generate, cg.io, cg.rng   (plain JS, Node-tested)
+  lib/            engine: cg-tuning, cg-transform, cg-canon, cg-consonance,
+                  cg-rules, cg-analyze, cg-generate, cg-io, cg-rng   (plain JS, Node-tested)
   *.v8.js         [v8] wrappers (glue only)
-patchers/
-  canon.maxpat    main patch (hand-built)
-  parts/          hand-built UI panels (cg.panel.*)
-  parts/gen/      generated abstractions (cg.engine, cg.player, cg.voices~, cg.mpe.out)
-  scripts/        generated *.bundle.js (committed)
+patchers/         everything Max loads, flat (2.2):
+  canon.maxpat          main patch (hand-built)
+  cg.panel.*.maxpat     UI panels (hand-built)
+  cg.engine.maxpat …    abstractions (generated: cg.engine, cg.player, cg.voices~, cg.mpe.out)
+  cg.*.bundle.js        bundled [v8] scripts (generated, committed)
 data/
   scales/         starter .scl files and scale-system JSON
   presets/        canon specs (round, Pärt prolation, Tenney spectral, Ligeti cloud …)
 tests/            node tests, golden tests from Fux, simulated [v8] context
-tools/            build.js, check-paths.js, patchgen, hooks/
+tools/            build.js, check-paths.js, patchgen.py, hooks/
 docs/             RESEARCH.md, Mx-checklist.md, controls.md
 .github/workflows/ CI
 ```
@@ -211,7 +215,7 @@ Whole-canon fields:
 
 ### 3.2 Modules (`code/lib/cg-<name>.js`, required as `"cg-<name>"`)
 
-Wrappers are named `code/cg.<name>.v8.js` and bundle to `patchers/scripts/cg.<name>.bundle.js`. That's cento's convention: hyphens for library modules, dots for things Max loads.
+Wrappers are named `code/cg.<name>.v8.js` and bundle to `patchers/cg.<name>.bundle.js`. That's cento's convention: hyphens for library modules, dots for things Max loads.
 
 | Module | Job | First needed |
 |---|---|---|
@@ -431,8 +435,8 @@ and one design is picked per output path.
 4. **MTS-ESP** (stretch).
 
 ### 4.4 Hybrid patch authoring
-- **Hand-built:** `patchers/canon.maxpat` and `patchers/parts/cg.panel.*`.
-- **Generated:** `patchers/parts/gen/*.maxpat` (and, during M0, the `patchers/cg.spike.*` patches), written by `tools/patchgen.py`, Python standard library only. This is a
+- **Hand-built:** `patchers/canon.maxpat` and `patchers/cg.panel.*.maxpat`.
+- **Generated:** the abstractions (`patchers/cg.engine.maxpat`, later the player and voice bank) and, during M0, the `patchers/cg.spike.*` patches. They're written by `tools/patchgen.py`, Python standard library only. All patches share one folder (2.2), so ownership comes from the generator's two lists and the note inside each patch, not from folders. A test checks that every patch is on exactly one list. This is a
   slimmed-down port of cento's `maxgen.py` idea. CI regenerates these files and fails if they
   differ.
 - **Checked:** `tests/patches.test.js` lints *all* patches:

@@ -13,7 +13,7 @@
 			60.0,
 			60.0,
 			900.0,
-			560.0
+			520.0
 		],
 		"openinpresentation": 0,
 		"default_fontsize": 12.0,
@@ -48,7 +48,7 @@
 			{
 				"box": {
 					"maxclass": "comment",
-					"text": "SPIKE (a) SEARCH PATH. Open this patch from a fresh clone with Max's File Preferences untouched. Click each message box. A working row prints to the Max window; a broken one shows a red error or a dashed box. Record which rows work in docs/M0-checklist.md.",
+					"text": "SPIKE (a) FLAT LAYOUT. Open this patch from a fresh clone with Max's File Preferences untouched. Click each message box: each row should print to the Max window. Finding from the first run: Max did not find scripts or patches in subfolders of patchers/, nor by relative path, so everything Max loads sits in patchers/ itself (PLAN.md 2.2).",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"linecount": 3,
@@ -64,13 +64,13 @@
 			{
 				"box": {
 					"maxclass": "comment",
-					"text": "1  bare name (needs the search path, or a Max Project)",
+					"text": "1  [v8] script by bare name",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
 						20.0,
 						110.0,
-						420.0,
+						400.0,
 						20.0
 					],
 					"id": "obj-3"
@@ -121,14 +121,14 @@
 			{
 				"box": {
 					"maxclass": "newobj",
-					"text": "print a1-bare-name",
+					"text": "print a1-script",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"outlettype": [],
 					"patching_rect": [
 						20.0,
 						200.0,
-						140.0,
+						119.0,
 						22.0
 					],
 					"id": "obj-6"
@@ -137,13 +137,13 @@
 			{
 				"box": {
 					"maxclass": "comment",
-					"text": "2  path relative to this patch",
+					"text": "2  abstraction by bare name",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
 						20.0,
-						240.0,
-						420.0,
+						250.0,
+						400.0,
 						20.0
 					],
 					"id": "obj-7"
@@ -152,7 +152,7 @@
 			{
 				"box": {
 					"maxclass": "message",
-					"text": "bang",
+					"text": "hello",
 					"numinlets": 2,
 					"numoutlets": 1,
 					"outlettype": [
@@ -160,8 +160,8 @@
 					],
 					"patching_rect": [
 						20.0,
-						265.0,
-						44.0,
+						275.0,
+						51.0,
 						22.0
 					],
 					"id": "obj-8"
@@ -170,22 +170,16 @@
 			{
 				"box": {
 					"maxclass": "newobj",
-					"text": "v8 scripts/cg.hello.bundle.js",
+					"text": "cg.engine",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"outlettype": [
 						""
 					],
-					"textfile": {
-						"filename": "scripts/cg.hello.bundle.js",
-						"flags": 0,
-						"embed": 0,
-						"autowatch": 1
-					},
 					"patching_rect": [
 						20.0,
-						295.0,
-						217.0,
+						305.0,
+						77.0,
 						22.0
 					],
 					"id": "obj-9"
@@ -194,14 +188,14 @@
 			{
 				"box": {
 					"maxclass": "newobj",
-					"text": "print a2-relative-path",
+					"text": "print a2-abstraction",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"outlettype": [],
 					"patching_rect": [
 						20.0,
-						330.0,
-						168.0,
+						340.0,
+						154.0,
 						22.0
 					],
 					"id": "obj-10"
@@ -210,7 +204,7 @@
 			{
 				"box": {
 					"maxclass": "comment",
-					"text": "3  abstraction by bare name (from parts/gen/)",
+					"text": "3  bpatcher by bare name",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
@@ -242,75 +236,8 @@
 			},
 			{
 				"box": {
-					"maxclass": "newobj",
-					"text": "cg.engine",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"outlettype": [
-						""
-					],
-					"patching_rect": [
-						470.0,
-						165.0,
-						77.0,
-						22.0
-					],
-					"id": "obj-13"
-				}
-			},
-			{
-				"box": {
-					"maxclass": "newobj",
-					"text": "print a3-abstraction",
-					"numinlets": 1,
-					"numoutlets": 0,
-					"outlettype": [],
-					"patching_rect": [
-						470.0,
-						200.0,
-						154.0,
-						22.0
-					],
-					"id": "obj-14"
-				}
-			},
-			{
-				"box": {
-					"maxclass": "comment",
-					"text": "4  bpatcher with a relative path",
-					"numinlets": 1,
-					"numoutlets": 0,
-					"patching_rect": [
-						470.0,
-						240.0,
-						400.0,
-						20.0
-					],
-					"id": "obj-15"
-				}
-			},
-			{
-				"box": {
-					"maxclass": "message",
-					"text": "hello",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"outlettype": [
-						""
-					],
-					"patching_rect": [
-						470.0,
-						265.0,
-						51.0,
-						22.0
-					],
-					"id": "obj-16"
-				}
-			},
-			{
-				"box": {
 					"maxclass": "bpatcher",
-					"name": "parts/gen/cg.engine.maxpat",
+					"name": "cg.engine.maxpat",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"outlettype": [
@@ -329,27 +256,27 @@
 					"lockeddragscroll": 0,
 					"patching_rect": [
 						470.0,
-						295.0,
+						165.0,
 						380.0,
 						140.0
 					],
-					"id": "obj-17"
+					"id": "obj-13"
 				}
 			},
 			{
 				"box": {
 					"maxclass": "newobj",
-					"text": "print a4-bpatcher",
+					"text": "print a3-bpatcher",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"outlettype": [],
 					"patching_rect": [
 						470.0,
-						445.0,
+						315.0,
 						133.0,
 						22.0
 					],
-					"id": "obj-18"
+					"id": "obj-14"
 				}
 			}
 		],
@@ -422,30 +349,6 @@
 					],
 					"destination": [
 						"obj-14",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-16",
-						0
-					],
-					"destination": [
-						"obj-17",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-17",
-						0
-					],
-					"destination": [
-						"obj-18",
 						0
 					]
 				}

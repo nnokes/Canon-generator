@@ -5,7 +5,7 @@
 //
 // Messages                 Outlet 0
 //   tone                     tone <hz> <midi>              the 31-EDO test note
-//   measured <midi>          cents <error>                 pitch tracker vs test note
+//   measuredhz <hz>          cents <error>                 pitch tracker vs test note
 //   mpeconfig                midi <b1> <b2> <b3> ...       MPE lower zone, bend +/-48
 //   mpenote / mpeoff         midi <b1> <b2> <b3> ...       test note on channel 2
 //   playerload [notes]       coll clear, coll <i> <ms>     fills the player's queue
@@ -20,6 +20,7 @@ outlets = 1;
 
 const spike = require("cg-spike");
 const mpe = require("cg-mpe");
+const tuning = require("cg-tuning");
 const { testNote } = require("cg-hello");
 
 const NOTE = testNote();
@@ -32,8 +33,10 @@ function tone() {
   outlet(0, "tone", NOTE.hz, NOTE.midi);
 }
 
-function measured(midi) {
-  outlet(0, "cents", spike.centsError(NOTE.midi, midi));
+// [fzero~]'s fundamental, in Hz.
+function measuredhz(hz) {
+  if (!(hz > 0)) return; // no pitch detected (silence, or audio off)
+  outlet(0, "cents", spike.centsError(NOTE.midi, tuning.hzToMidi(hz)));
 }
 
 function mpeconfig() {

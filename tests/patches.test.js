@@ -20,7 +20,6 @@ function walk(dir) {
 }
 const rel = (file) => path.relative(ROOT, file).split(path.sep).join("/");
 const files = walk(PATCHERS).filter((f) => f.endsWith(".maxpat")).map(rel).sort();
-const patchNames = new Set(files.map((f) => path.basename(f)));
 
 const readPatcher = (file) => JSON.parse(fs.readFileSync(path.join(ROOT, file), "utf8")).patcher;
 
@@ -34,17 +33,20 @@ function* patchers(patcher, where) {
 
 const firstWord = (box) => (box.text || "").split(/\s+/)[0];
 
-// A script or patch named in a patch: a relative path ("scripts/x.js") is
-// resolved from the patch's folder; a bare name is looked up where Max would
-// find it once patchers/ is reachable (spike a decides how).
-function scriptExists(file, name) {
-  if (name.includes("/")) return fs.existsSync(path.join(ROOT, path.dirname(file), name));
-  return fs.existsSync(path.join(PATCHERS, "scripts", name));
-}
-function patchExists(file, name) {
-  if (name.includes("/")) return fs.existsSync(path.join(ROOT, path.dirname(file), name));
-  return patchNames.has(name);
-}
+// Everything Max loads lives directly in patchers/: on a fresh clone Max finds
+// files only in the folder of the patch you open, not in subfolders or by a
+// relative path (M0 spike a, PLAN.md 2.2). So every name is bare.
+const hasPath = (name) => /[\\/]/.test(name);
+const scriptExists = (name) => !hasPath(name) && fs.existsSync(path.join(PATCHERS, name));
+const patchExists = (name) => !hasPath(name) && fs.existsSync(path.join(PATCHERS, name));
+
+test("everything Max loads sits directly in patchers/, not in a subfolder", () => {
+  const nested = walk(PATCHERS)
+    .filter((f) => path.dirname(f) !== PATCHERS)
+    .filter((f) => /\.(maxpat|amxd|js)$/.test(f))
+    .map(rel);
+  assert.deepEqual(nested, []);
+});
 
 for (const file of files) {
   test(`${file}: cords, [v8], bpatchers and abstractions`, () => {
@@ -81,15 +83,19 @@ for (const file of files) {
           const script = (box.textfile || {}).filename || "";
           if (!/\.bundle\.js$/.test(script) || box.textfile.embed !== 0) {
             problems.push(`${where}: ${label(box)} needs textfile {filename: "<name>.bundle.js", embed: 0}`);
-          } else if (!scriptExists(file, script)) {
+          } else if (hasPath(script)) {
+            problems.push(`${where}: ${label(box)} uses a path; Max won't follow it (name the file only)`);
+          } else if (!scriptExists(script)) {
             problems.push(`${where}: ${label(box)} names a missing script ${script}`);
           }
         }
-        if (box.maxclass === "bpatcher" && !patchExists(file, box.name || "")) {
+        if (box.maxclass === "bpatcher" && hasPath(box.name || "")) {
+          problems.push(`${where}: bpatcher ${box.name} uses a path; Max won't follow it`);
+        } else if (box.maxclass === "bpatcher" && !patchExists(box.name || "")) {
           problems.push(`${where}: bpatcher names a missing patch ${box.name}`);
         }
         // An abstraction of ours, by bare name: the patch must exist.
-        if (box.maxclass === "newobj" && /^cg\./.test(firstWord(box)) && !patchExists(file, firstWord(box) + ".maxpat")) {
+        if (box.maxclass === "newobj" && /^cg\./.test(firstWord(box)) && !patchExists(firstWord(box) + ".maxpat")) {
           problems.push(`${where}: ${label(box)} is not a patch in patchers/`);
         }
       }
