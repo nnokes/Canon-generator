@@ -17,9 +17,10 @@ The research behind each design choice is in [`docs/RESEARCH.md`](docs/RESEARCH.
 | Platform | Max 9 (needed for `[v8]`); Live 12 later |
 | Host order | **Standalone Max first** (M0–M8). The Max for Live adapter comes in M9. The engine stays host-agnostic from day one, so the port only adds an adapter. |
 | Microtonal output | **Hz to MSP synthesis first** (built in M0). **MPE MIDI with ±48 pitch bend second** (proven in M0, finished in M2). MTS-ESP and Live 12 `.scl` tuning are stretch goals. |
-| Patch authoring | **Hybrid.** UI panels and the main patch are built by hand in Max. Wiring-heavy abstractions are generated from code and checked in CI. The two sets live in separate folders, so the generator never touches a hand-built file (§4.3). |
+| Patch authoring | **Hybrid.** UI panels and the main patch are built by hand in Max. Wiring-heavy abstractions are generated from code and checked in CI. The two sets live in separate folders, so the generator never touches a hand-built file (§4.4). |
 | Live performance (play the leader, followers answer in real time) | **Stretch goal or future addition.** The engine API keeps it possible (§3.4). |
 | Architecture | Taken from [`nnokes/cento`](https://github.com/nnokes/cento): a pure-JS engine, thin `[v8]` wrappers, and single-file bundles with no `require()` at runtime |
+| Rule sources | **Fux** supplies the counterpoint rules. **Albrechtsberger** (Mann, pp. 213–261) supplies the canon rules, since Fux's *Gradus* does not treat canon. **Tymoczko** supplies the tuning-independent geometry: scalar vs. chromatic transposition, and the analysis metrics. |
 | License | **MIT**, the same as cento (see `LICENSE`) |
 | Max reference | The official Max documentation at <https://docs.cycling74.com/> is the authority for `[v8]`, search paths, projects and Max for Live behavior |
 
@@ -147,6 +148,8 @@ Builders (M1):
 - **stretched or compressed spectrum** `f_k = f0 · k^s` (Murail-style "spectral distortion")
 - **FM spectrum** `|c ± k·m|`
 - **Bohlen–Pierce** (13 steps to a 3:1 tritave)
+- **maximally even** `ME(c, d)`: *d* notes spread as evenly as possible over *c* equal steps
+  (Clough and Douthett), giving diatonic-like scales in any equal division
 - **raw Hz list**
 
 **Time.** Float beats, where a quarter note is 1.0. Irrational tempo ratios (√2, e:π) rule
@@ -180,16 +183,28 @@ Per-voice fields:
 | Field | Meaning |
 |---|---|
 | `delay` | Entry offset after the leader, in beats. |
-| `interval` + `domain` | `degree` transposes by scale steps, so it stays in the scale and the exact intervals change: the generalized "diatonic" answer. `absolute` transposes by an exact cents value or ratio, with optional `quantize: nearest`. In a harmonic series, a degree shift means partial *n* → *n+k*. An absolute ratio *r* means *n* → *n·r*, which stays inside the series when *r* is a whole number. |
-| `transform` | `P` (prime), `I` (inversion), `R` (retrograde) or `RI` (retrograde inversion). |
+| `interval` + `domain` | `degree` transposes by scale steps, so it stays in the scale and the exact intervals change: the generalized "diatonic" answer, which is Tymoczko's *scalar* transposition. `absolute` transposes by an exact cents value or ratio, with optional `quantize: nearest`: Tymoczko's *chromatic* transposition. Albrechtsberger says that only unison and octave canons can copy whole and half steps exactly (Mann p. 228), which is why `degree` is the ordinary case. In a harmonic series, a degree shift means partial *n* → *n+k*. An absolute ratio *r* means *n* → *n·r*, which stays inside the series when *r* is a whole number. One interval per follower (Mann p. 228). |
+| `scale` | Optional. The follower answers in a *different* scale system or spectrum, mapped degree by degree (Tymoczko's *interscalar* transposition). Examples: a harmonic-series dux answered in a stretched spectrum, or the tonal "e for e♭" answer (Mann p. 258). |
+| `transform` | `P` (prime), `I` (inversion), `R` (retrograde) or `RI` (retrograde inversion). Plus two segment transforms from Albrechtsberger's riddle canons: `segmentRetrograde` (each segment, such as each measure, is reversed in place; Mann Ex. 233–234) and `segmentPermute` (the beats inside each segment are reordered by a permutation, ties and rests included; Ex. 237–238). |
 | `axis` | The inversion axis. `axis.kind` is `degree` (mirror in scale steps), `log` (mirror in cents or log-frequency; around f0 this maps harmonic partials onto subharmonics, Fux's arithmetic/harmonic division taken literally) or `partial` (n ↦ N+1−n inside a spectrum). |
 | `timeScale` | Augmentation (2), diminution (0.5), or any float. Ratios give mensuration (prolation) canons; irrational ratios give Nancarrow-style tempo canons. |
 | `talea` | An optional duration cycle that replaces the leader's rhythm while keeping its pitch order (isorhythm: shared *color*, per-voice *talea*). This is the core of Ligeti mode. |
 | `loop`, `spiral` | Perpetual canon, and *per tonos* (each pass transposed by `spiral`, which drifts indefinitely in a microtonal system). |
 | `register`, `out` | Octave placement, and the output route (MSP voice, MPE channel). |
 
-Whole-canon fields: `ending` (`free-cadence`, `cut`, `loop` or `converge`) and `rules`
-(a profile name, §3.3).
+Whole-canon fields:
+- `ending`:
+  - `free-cadence`: a free coda after the strict canon (Mann p. 242), closing with the
+    cadence formulas 2–3 | 1 or 7–6 | 8, or on a unison, octave or third (p. 230)
+  - `cut`
+  - `loop`: a perpetual canon; the last note must lead smoothly back into the second
+    measure, and the analyzer checks that join (p. 229)
+  - `converge`
+- `rules`: a profile name (§3.3).
+- `groups`: several canons sounding at once, each with its own dux and followers. This
+  covers double (4 voices), triple (6) and quadruple (8) canons (Mann p. 227), such as
+  Palestrina's double canon in Ex. 225.
+- `free`: voices that are not canonic, such as a cantus firmus or a free bass under the canon.
 
 ### 3.2 Modules (`code/lib/`, prefix `cg.`)
 
@@ -201,7 +216,7 @@ Whole-canon fields: `ending` (`free-cadence`, `cut`, `loop` or `converge`) and `
 | `cg.canon` | Turns a spec into events; endings; convergence-point solver; incremental `step()` API | M2 / M6 |
 | `cg.consonance` | Pluggable consonance models (below) | M3 |
 | `cg.rules` | Rule profiles: hard and soft rules with weights | M3 |
-| `cg.analyze` | Vertical slices across N voices, motion classification, violations, dissonance curve | M3 |
+| `cg.analyze` | Vertical slices across N voices, using the sounding bass in real registers; motion classification; violations; dissonance curve; Tymoczko metrics; answer finder (§3.6) | M3 |
 | `cg.generate` | Searches for a dux (§3.5) | M4 |
 | `cg.io` | Spec JSON, MIDI file export, MusicXML with microtonal accidentals | M2 / M10 |
 
@@ -238,6 +253,17 @@ cost). Every rule is listed in `docs/controls.md` with its source.
 - **`fux-relaxed`**: the same rules, with soft weights scaled down as the voice count rises.
   Fux himself: *"as the number of voices increases, the rules are to be less rigorously
   observed"* (p. 139).
+- **`canon`** (Albrechtsberger, Mann pp. 213–261). Fux does not treat canon (p. 214), so these
+  canon-specific rules layer on top of any counterpoint profile:
+  - every slice is judged against the **actual sounding bass**, so a 6/4 on a strong beat,
+    or in the first or last measure, is flagged (pp. 228, 236–237)
+  - entries should be set up by a rest in that voice (p. 216)
+  - a new phrase should not start a 7th or 9th from the end of the previous one (p. 217)
+  - in a round, every group of voices that sounds while the entries pile up must already
+    be a complete 2- or 3-part setting (p. 237)
+  - **invertibility check**: within a scale system's period *P*, interval *x* inverts to
+    *P − x*. This is what turns a canon at the 2nd into one at the 7th or 9th
+    (pp. 231–232), and it can be checked in any tuning.
 - **`spectral`**: the motion rules use the model's perfect/imperfect classes. Roughness
   ceilings apply per slice and over a sliding window (a density envelope). Register spacing
   follows the spectrum (wide at the bottom, close at the top).
@@ -298,6 +324,44 @@ Treatises describe writing a canon as a chain:
 - **Diagnostics.** The search counts which rules caused backtracking. This is a lightweight
   version of FuxCP's minimal-unsatisfiable-subset idea, so when no canon exists for some
   settings, the report says which rule blocks it.
+
+**Block method for rounds** (Albrechtsberger's *first draft*, Mann pp. 232–237). A round has
+*k* voices at the unison, each entering one section length after the last. Once all voices
+are in, every section sounds at once, so the whole round is decided by one *k*-part
+**block** whose parts are the *k* sections. The melody is those sections joined end to end.
+The generator therefore:
+1. solves the block as ordinary *k*-part counterpoint
+2. checks the smaller groups of voices heard while the entries pile up (the "first two or
+   three voices form a perfect setting" rule)
+3. checks the joins between sections, and the wrap-around join for perpetual rounds
+4. places the bass-cadence section where it cannot cause a 6/4
+
+This is a much smaller search than the chain, and M4 uses it for rounds.
+
+### 3.6 Analysis extras: Tymoczko metrics and the answer finder
+
+**Tymoczko's five components of tonality** become analyzer metrics. Each works in any tuning
+(*A Geometry of Music*, ch. 1):
+
+| Metric | How it is measured | Use |
+|---|---|---|
+| conjunct motion | mean absolute melodic step, in cents | melody smoothness |
+| acoustic consonance | the chosen consonance model | the dissonance curve |
+| harmonic consistency | distance between successive vertical chord types, ignoring octave, voice order and transposition (OPT in OPTIC terms) | texture uniformity |
+| macroharmony | pitch-class spread over a sliding window | Ligeti band width; spectral density |
+| centricity | how concentrated the pitch-class weight is | a *Lontano*-style single-pitch start |
+
+Also **voice-leading size**: the summed motion of all voices between consecutive slices. In a
+canon this depends only on the dux's intervals at the different delays. The `spectral` and
+`micropoly` profiles can set targets or envelopes for any of these metrics.
+
+**Answer finder** (Albrechtsberger: hidden answers, p. 230; riddle canons, pp. 255–261).
+Given any dux, including one you wrote yourself, it searches every follower setting:
+interval (both domains), delay, transform (including the segment transforms) and time scale.
+It ranks the settings with the analyzer. This needs no generation, only rendering plus
+analysis, so it arrives in M3. It is also how Albrechtsberger's Ex. 201 can be answered in
+eight ways (at the upper 2nd, lower 3rd, upper 6th, lower 7th, both octaves, lower 9th and
+lower 10th), and how his canon for Haydn has two solutions.
 
 ---
 
@@ -368,10 +432,10 @@ Each milestone gets a checklist in `docs/Mx-checklist.md` when work on it starts
 | # | Milestone | Scope | Exit criteria |
 |---|---|---|---|
 | **M0** | Scaffold and spikes | Port cento's layout, bundler, path check, hooks, simulated `[v8]` tests and CI. `cg.hello` round trip. See [`docs/M0-checklist.md`](docs/M0-checklist.md). | Five spikes recorded:<br>(a) a fresh clone loads its bundles with no preference changes<br>(b) the player's jitter is measured and a design chosen<br>(c) a JS-generated 31-EDO note sounds through the MSP Hz path within ±1 cent, then through MPE at ±48<br>(d) the event dict round-trips JS ↔ Max with floats intact<br>(e) a hand-built panel hosts a generated abstraction, and regenerating it leaves the panel untouched |
-| **M1** | Scale systems | `cg.tuning`: every builder, `.scl` parse and write, degree/pitch/Hz conversion, quantize. A Max chooser with an audition keyboard. | Cents-value tests pass for every builder. `.scl` fixtures round-trip. Each system auditions in Max. |
-| **M2** | Canon renderer (process canons, no rules) | `cg.transform` and `cg.canon.render` for N voices: delay, interval (both domains), P/I/R/RI (all three axis kinds), time scale, talea, loop, spiral, endings. The dux comes from a list, MIDI file or random walk. MPE output finished. | Transform property tests pass. These presets play correctly in Max: a 4-voice round; a Pärt-style prolation canon on a descending scale at 1:2:4:8; a Goldberg-style ladder of canons at each interval; a spiral canon in 31-EDO. |
-| **M3** | Analysis and consonance models | `cg.consonance` (all four models), `cg.rules` (`fux-strict` first species, `spectral`, `free`), `cg.analyze`, piano-roll overlays. | **Golden tests from the Fux PDF** (Figs. 5–8):<br>• Fig. 5 is clean<br>• Fig. 6 flags the mode error at bar 1 and the hidden fifth from bar 2 to bar 3, as Fux marks them<br>• Figs. 7–8 show the hidden fifths that diminution reveals<br>The roughness curve matches Sethares's published shape for a harmonic timbre. |
-| **M4** | Generator: strict first-species canons | `cg.generate` with a left-to-right search, backtracking, beam, seed, node budget, diagnostics. 2 voices, then N; `fux-relaxed` for N > 2. Time-sliced in `[v8]` with progress. | Valid 2-voice canons at the octave, fifth and fourth with delays of 1–4 bars. 3–4-voice rounds. Same seed, same canon. A 32-note canon finishes in a time budget recorded in M0 without hanging Max. |
+| **M1** | Scale systems | `cg.tuning`: every builder (including maximally even), `.scl` parse and write, degree/pitch/Hz conversion, quantize. A Max chooser with an audition keyboard. | Cents-value tests pass for every builder. `.scl` fixtures round-trip. Each system auditions in Max. |
+| **M2** | Canon renderer (process canons, no rules) | `cg.transform` and `cg.canon.render` for N voices: delay, interval (both domains), P/I/R/RI (all three axis kinds), segment retrograde and segment permutation, time scale, talea, loop, spiral, endings (including the free coda and the 2–3 \| 1 and 7–6 \| 8 cadences), canon groups (double and triple canons), free voices, and a per-voice answer scale. The dux comes from a list, MIDI file or random walk. MPE output finished. | Transform property tests pass. These presets play correctly in Max: a 4-voice round; a double canon in the layout of Palestrina's Ex. 225 (Mann p. 242); a Pärt-style prolation canon on a descending scale at 1:2:4:8; a Goldberg-style ladder of canons at each interval; a spiral canon in 31-EDO. |
+| **M3** | Analysis and consonance models | `cg.consonance` (all four models), `cg.rules` (`fux-strict` first species, `canon`, `spectral`, `free`), `cg.analyze` with the sounding bass in real registers, Tymoczko metrics, the answer finder, piano-roll overlays. | **Golden tests from the Fux PDF** (Figs. 5–8):<br>• Fig. 5 is clean<br>• Fig. 6 flags the mode error at bar 1 and the hidden fifth from bar 2 to bar 3, as Fux marks them<br>• Figs. 7–8 show the hidden fifths that diminution reveals<br>**Answer-finder golden tests from Mann:** it finds the eight answers Albrechtsberger lists for Ex. 201 (p. 230) and both solutions of the canon for Haydn (Ex. 239–240, p. 261).<br>The roughness curve matches Sethares's published shape for a harmonic timbre. |
+| **M4** | Generator: strict first-species canons | `cg.generate` with a left-to-right search, backtracking, beam, seed, node budget, diagnostics. 2 voices, then N; `fux-relaxed` for N > 2. The block method for rounds (§3.5). Time-sliced in `[v8]` with progress. | Valid 2-voice canons at the octave, fifth and fourth with delays of 1–4 bars. 3–4-voice rounds, built by the block method, with no 6/4 on strong beats and smooth perpetual joins. Same seed, same canon. A 32-note canon finishes in a time budget recorded in M0 without hanging Max. |
 | **M5** | Rhythm: species 2–5 and florid | A rhythmic grid; passing and neighbour notes; suspensions (4th species); florid mixtures. Rules follow Fux's chapters on the second to fifth species (pp. 41–70). | A 4th-species canon at the 2nd/9th with chains of suspensions. A florid 2-voice canon passes `fux-strict`. |
 | **M6** | Transformations under rules, plus convergence | Generation with I, R and RI voices (outside-in order) and time-scaled voices. Convergence-point solver and "converge at x" endings. | Contrary-motion, crab, table and mensuration canons generated under the rules. The solver matches convergence points worked out by hand (including a √2 case within ε). |
 | **M7** | Microtonal and spectral counterpoint | Rule profiles running on the `ratio` and `roughness` models; spectral presets; undertone answers; partial-index inversion. | These presets analyze clean under their own models:<br>• **Tenney *Spectral CANON*-style**: voice *k* on partial *k*, tempo ∝ *k*, rhythm and frequency ratios matched<br>• a strict 31-EDO canon<br>• a Bohlen–Pierce canon<br>• a harmonic-series dux answered in the undertone series |
@@ -389,6 +453,8 @@ Each milestone gets a checklist in `docs/Mx-checklist.md` when work on it starts
 - **Rhythmic tiling (Vuza) canons**, after Tom Johnson's *Tilework*.
 - **A Nørgård infinity-series dux.** The series is a canon of itself, so it can feed the
   renderer directly.
+- **Chord-space view.** Draw a canon as a path through Tymoczko's chord space (as his
+  ChordGeometries software does), for example in Jitter.
 - **Learned rule weights.** Like Cope's *Gradus*, fit soft weights from example canons; this
   connects to cento's taste layer.
 
@@ -413,11 +479,11 @@ Each milestone gets a checklist in `docs/Mx-checklist.md` when work on it starts
 
 ## 7. Open questions
 
-1. **The second PDF and Mann.** The brief mentions two attached PDFs, and the user has since
-   sent the second PDF and Mann's book, but neither reached the build environment. Only Fux's
-   *Study of Counterpoint* is on file. Please re-attach them.
+1. **Tymoczko, *A Geometry of Music*.** This is the second PDF, and it would not load. Its
+   ideas are folded in from secondary sources (RESEARCH.md §3a). Chapters 2–5 should be read
+   in the book before M3 (metrics) and M7 (interscalar answers).
 2. **Ligeti mode details.** The exact rhythmic rules (Levy 2013) and the per-voice subdivisions
    in *Lux aeterna* still need checking against primary sources before M8 (see RESEARCH.md).
-3. **Mann's *Study of Fugue*.** Neither the archive.org scan nor the upload has reached the
-   build environment yet. Its canon and fugue material (translations of Fux, Marpurg and Albrechtsberger)
-   should be read before M5 and M6.
+3. **Rest of Mann's *Study of Fugue*.** The canon chapter (Albrechtsberger, pp. 213–261) has
+   been read and folded in. The Fux and Marpurg fugue chapters, which cover invertible
+   counterpoint, are optional reading before M5 and M6.

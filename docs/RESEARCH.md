@@ -49,15 +49,99 @@ them on a normal connection.
 - **Status.** `read` for pp. 1–33 and 138–149. Species 2–5 (pp. 41–70) are to be read in
   detail at M5.
 
-### Alfred Mann, *The Study of Fugue* (Rutgers UP, 1958; Norton/Dover reprints)
-- **What it is.** A history of fugal theory, with translations of the fugue chapters of Fux
-  and passages from Marpurg, Albrechtsberger and Martini. Older theory treats canon as the
-  strictest form of imitation (*fuga ligata*).
-- **What we take from it.** The canon and fugue terms, the historical methods of writing a
-  canon (the dux–comes chain behind §3.5), and invertible counterpoint for later work.
-- **Link.** <https://archive.org/details/studyoffugue00mann>
-- **Milestone.** M5, M6.
-- **Status.** `secondary`. archive.org was unreachable from the build environment.
+### Albrechtsberger, "The Canon," from *Gründliche Anweisung zur Komposition* (1790), trans. in Alfred Mann, *The Study of Fugue* (Rutgers UP, 1958), pp. 213–261
+- **What it is.** The canon chapter Albrechtsberger used to teach Beethoven. Mann's
+  introduction makes a point that matters for this project: **Fux's *Gradus* does not treat
+  canon at all.** Albrechtsberger added a canon chapter, citing Marpurg rather than Fux
+  (p. 214). So `fux-strict` supplies the counterpoint rules, and this chapter supplies the
+  canon-specific ones.
+- **What we take from it** (page numbers are Mann's):
+  1. **Definition and strictness** (p. 227). The follower imitates *everything*: note values,
+     rests (except those before its first entry), ties, syncopations, skips, whole and half
+     steps, and ornaments. In our terms, the renderer must carry rests, ties and ornaments
+     through every transform.
+  2. **Taxonomy** (pp. 227–228):
+     - concluded vs. perpetual canons
+     - retrograde, augmentation, diminution and inversion
+     - double (4 voices), triple (6) and quadruple (8) canons
+     - canons at every interval
+     - *"Entrances at different intervals … may not be mixed in one and the same canonic
+       voice"*: one interval per follower
+  3. **Strict vs. scale-step answers** (p. 228). Only canons at the unison and octave can
+     copy whole and half steps exactly. At the fifth and fourth this is sometimes possible.
+     At the 2nd, 3rd, 6th, 7th and 9th it is impossible. This is exactly our `interval.domain`
+     split: `absolute` is the strict answer, and `degree` is the ordinary answer in the scale.
+     It also matches Tymoczko's chromatic vs. scalar transposition (§3a).
+  4. **Register matters** (p. 228). A unison canon sung by soprano and tenor turns into an
+     octave canon. Open or closed canons sung in the wrong registers can produce a **6/4
+     chord where a 5/3 belongs**. So the analyzer must judge every slice against the
+     *actual sounding bass*, not the written voice order.
+  5. **Writing by chaining** (p. 228). A two-voice canon at the unison or octave needs no
+     double counterpoint: write it note by note, placing the answer "a half or full measure
+     or more" later. This is the chain method behind `cg.generate` (PLAN §3.5).
+  6. **Perpetual ↔ concluded** (pp. 229–230):
+     - perpetual: drop the closing note, and repeat from measure 2; the last note must lead
+       smoothly back into measure 2
+     - concluded: add a final note in each voice, ending on a unison, octave or third;
+       otherwise use the cadence formulas **2–3 | 1** (tied second) or **7–6 | 8** (tied
+       seventh)
+     
+     These become the `loop` wrap check and the `free-cadence` formulas.
+  7. **Hidden answers** (p. 230). A mostly stepwise line can hide several canons. Ex. 201 can
+     be answered at the upper 2nd, lower 3rd, upper 6th, lower 7th, upper and lower octave,
+     lower 9th and lower 10th. This motivates the **answer finder** (PLAN §3.6).
+  8. **Interval relationships** (pp. 231–232):
+     - canons at the 6th, 7th and octave come from double counterpoint at the octave
+     - the canon at the 10th is a simple transposition
+     - a canon at the 9th is a transposed canon at the 2nd, which can be read as a canon at
+       the 7th
+     
+     In general, in any scale system, an interval *x* inverts to *period − x* (PLAN §3.3,
+     invertibility check).
+  9. **The round as a block** (pp. 232–237). Write a *first draft* (*inventio*): a 3- or
+     4-part setting for equal voices. Its parts become successive *sections* of one melody.
+     That melody is notated either *open* (*apertus*, in score) or *closed* (*clausus*, one
+     line with § entry signs). Rules for the first draft (p. 237):
+     - every voice is a good melody on its own
+     - the first two or three voices already form a complete 2- or 3-part setting
+     - the last voice completes the harmony
+     
+     The section carrying the bass cadence (a fifth down or a fourth up, p. 233n) must sit
+     where it will not create a 6/4 on strong beats (pp. 236–237). This is the **block
+     method for rounds** (PLAN §3.5).
+  10. **Entries and phrases** (Albrechtsberger's corrections to Beethoven, pp. 216–217):
+      - let voices rest alternately, so rests set up the thematic entrances
+      - *"It is not good to place the beginning of a new phrase at the distance of a seventh
+        or ninth from the end of the preceding phrase."*
+      
+      Both become soft rules.
+  11. **Endings and sectional canons** (p. 242). § marks the end of the strict canon, and the
+      remaining bars are "a free addition". Ex. 225 (Palestrina, 5 voices) combines a 2-voice
+      canon and a 3-voice canon at the same time, a **double canon** (`groups` in the spec).
+  12. **Riddle canons** (pp. 255–261).
+      - Only the dux is given. The solver tries intervals, inversion, retrograde,
+        retrograde inversion, different clefs (nine possibilities), rests, augmentation and
+        diminution.
+      - Kirnberger's canon *"All of us fail, but each fails in a different way."*
+      - Ex. 233–234: **each measure is answered by its own retrograde** in the next voice.
+      - Ex. 237–238: the answer **reorders the beats inside each measure** (third quarter
+        first, then first, then second), including ties and rests.
+      - Ex. 239–240 (Albrechtsberger to Haydn, 1806): one perpetual canon with two
+        solutions, entering at the lower fifth and octave, or at the upper fourth and lower
+        octave.
+      
+      These become the **answer finder** and two new transforms, `segmentRetrograde` and
+      `segmentPermute` (PLAN §3.1).
+  13. **Aesthetics** (p. 245). The charm of canon is that *"a work of art appears before us in
+      the act of its very creation"*: one voice alone, then others joining until a full
+      harmony appears. That is also a fair description of *Lontano* fanning out from one
+      pitch.
+- **Link to the whole book.** <https://archive.org/details/studyoffugue00mann>
+- **Milestone.** M2 (transforms, groups, endings), M3 (register-aware bass, answer finder),
+  M4 (block method for rounds), M5–M6 (cadence formulas, invertibility).
+- **Status.** `read`: pp. 212–261 (the end of Marpurg, all of Albrechtsberger, including
+  the chorale fugue and the canon), from the chapter PDF the user supplied. The rest of the
+  book (Fux on fugue, Marpurg, Martini) is not read.
 
 ### J. S. Bach: *Goldberg Variations* BWV 988, *Musical Offering* BWV 1079, *Fourteen Canons* BWV 1087
 - **What it is.** The canon catalogue.
@@ -316,6 +400,115 @@ them on a normal connection.
 
 ---
 
+## 3a. Geometry of music and scale theory
+
+### Dmitri Tymoczko, *A Geometry of Music: Harmony and Counterpoint in the Extended Common Practice* (Oxford Studies in Music Theory, OUP, 2011)
+- **What it is.** A theory in which pitch is a continuous real number (log-frequency), each
+  chord is a point in a "chord space", and a voice leading is a path between points. The
+  spaces are orbifolds: the n-torus divided by voice permutation, Tⁿ/Sₙ. The book argues
+  that **harmony and counterpoint constrain each other**, and that tonality comes from **five
+  components**:
+  1. conjunct melodic motion
+  2. acoustic consonance
+  3. harmonic consistency
+  4. limited macroharmony (a small pitch collection over a moderate span of time)
+  5. centricity (one pitch heard as a centre)
+- **Structure:**
+  - Part I, Theory:
+    1. Five Components of Tonality
+    2. Harmony and Voice Leading
+    3. A Geometry of Chords
+    4. Scales
+    5. Macroharmony and Centricity
+  - Part II, History and analysis: the extended common practice, functional harmony,
+    chromaticism, scales in twentieth-century music, and jazz.
+  
+  Chapter 2 treats transposition and inversion as distance-preserving maps of pitch space,
+  and defines voice-leading size. Chapter 4 covers scale degrees, **scalar transposition**,
+  **scalar inversion**, evenness, and **interscalar transposition**.
+- **What we take from it:**
+  1. **The model of pitch is ours already.** Pitch is a continuous real number, so the
+     geometry works the same in 12-TET, 31-EDO or a harmonic series. Our float-MIDI pitch is
+     Tymoczko's pitch space.
+  2. **Canon transforms are his isometries.** Transposition and inversion in pitch space are
+     distance-preserving maps, the same as our `absolute` interval and `log`-axis inversion.
+     Retrograde and time-scaling act on time, not on pitch space.
+  3. **Scalar vs. chromatic transposition** formalizes our `interval.domain`:
+     - `degree` = scalar transposition or inversion (the scale works as a ruler)
+     - `absolute` = chromatic transposition or inversion
+     
+     Albrechtsberger's strict vs. ordinary answers (§1, Mann) are the same distinction, two
+     centuries earlier.
+  4. **Interscalar transposition** suggests a new option: a follower that answers in a
+     *different* scale or spectrum, mapped degree by degree. For example, a dux in the
+     harmonic series answered in a stretched spectrum, or a diatonic dux answered in a
+     31-EDO mode. Albrechtsberger's "e for e♭ according to the tonal changes" (Mann p. 258)
+     is the small tonal version of the same idea (PLAN §3.1, per-voice `scale`).
+  5. **The five components become analyzer metrics.** Each works on any tuning (PLAN §3.6):
+     - conjunct motion: mean absolute melodic step, in cents
+     - consonance: the chosen consonance model
+     - harmonic consistency: distance between successive vertical *chord types*, ignoring
+       transposition
+     - macroharmony: pitch-class spread over a sliding window
+     - centricity: how concentrated the pitch-class weight is
+     
+     Also **voice-leading size**: the summed motion of all voices between consecutive
+     slices. These double as targets for the `spectral` and `micropoly` profiles. In Ligeti
+     mode, for example, macroharmony *is* the band width, and centricity starts at maximum
+     on a single pitch, as in *Lontano*.
+  6. **A canon is a path.** Every slice of an N-voice canon is a point in N-note chord space.
+     The canon traces a path, and because the voices are copies of the dux, its
+     voice-leading size depends only on the dux's intervals at the different delays. One
+     stretch idea is to draw that path (as Tymoczko's ChordGeometries software does), for
+     example in Jitter.
+  7. **Evenness.** Nearly even chords sit close to their own transpositions, so they allow
+     efficient voice leading. This suggests a maximally-even scale builder (see Clough and
+     Douthett, below).
+- **Status.** `secondary`. The user's PDF of the book would not load. The structure and claims
+  above come from library catalogue records, the MAA review listing, reviews, and Tymoczko's
+  papers below. **Chapters 2–4 should be read in the book before M3** (metrics) **and M7**
+  (interscalar answers).
+- **Links:**
+  - [Wikipedia summary](https://en.wikipedia.org/wiki/Dmitri_Tymoczko)
+  - [MAA review / contents](https://old.maa.org/node/111660)
+  - [Princeton Alumni Weekly feature](https://paw.princeton.edu/article/grand-unified-theory-music)
+
+### Tymoczko, "Geometrical Methods in Recent Music Theory," *Music Theory Online* 16/1 (2010)
+- An open-access overview of the same ideas by the author. **This is the best substitute while
+  the book's PDF won't load.**
+  <https://mtosmt.org/issues/mto.10.16.1/mto.10.16.1.tymoczko.html>
+- **Status.** `secondary` (not yet read; mtosmt.org is blocked from the build environment).
+
+### Callender, Quinn and Tymoczko, "Generalized Voice-Leading Spaces," *Science* 320 (2008): 346–348
+- The **OPTIC** framework. Five equivalences, used in any combination: **O**ctave,
+  **P**ermutation, **T**ransposition, **I**nversion, **C**ardinality. Together they give
+  32 kinds of chord equivalence and their quotient spaces. A voice leading is a path in one of
+  these spaces.
+- **What we take from it.** A precise vocabulary for what the analyzer should ignore. For
+  example, "harmonic consistency" compares verticals while ignoring octave, permutation and
+  transposition (OPT). Canon transforms are the T and I in OPTIC.
+- **Link.** <https://collaborate.princeton.edu/en/publications/generalized-voice-leading-spaces/>
+- **Status.** `secondary`.
+
+### Tymoczko, "The Geometry of Musical Chords," *Science* 313 (2006): 72–74
+- The first paper on the orbifold model, with an algorithm for finding the shortest voice
+  leading between two chords. The companion ChordGeometries software draws pieces as paths in
+  chord space.
+- **Milestone.** M3 (voice-leading size), stretch (path view).
+- **Status.** `secondary`.
+
+### John Clough and Jack Douthett, "Maximally Even Sets," *Journal of Music Theory* 35 (1991): 93–173
+- Subsets of *c* equal steps whose notes are spread as evenly as possible, written ME(*c*, *d*).
+  ME(12, 7) is the diatonic scale. The construction works for any number of equal steps.
+- **What we take from it.** A `maximallyEven(c, d)` scale builder, which gives diatonic-like
+  but non-diatonic scales in any equal division (PLAN §3.1). Tymoczko's "evenness and scalar
+  transposition" builds on this idea.
+- **Link.** [Maximal evenness](https://en.wikipedia.org/wiki/Maximal_evenness)
+- **Milestone.** M1.
+- **Status.** `secondary`.
+
+---
+
 ## 4. Max, Live and output
 
 ### cento (`nnokes/cento`), the user's earlier project
@@ -369,12 +562,14 @@ them on a normal connection.
 
 ## 5. Still to find or read
 
-- [ ] The **second PDF** and **Mann's book**. The user sent both, but neither reached the
-      build environment. Re-attach them.
+- [x] Mann, *The Study of Fugue*: the canon chapter (Albrechtsberger, pp. 213–261), read from
+      the user's chapter PDF.
+- [ ] Tymoczko, *A Geometry of Music* (the user's second PDF, which would not load). Read
+      chapters 2–5 before M3 and M7. Until then, read Tymoczko's 2010 *MTO* article.
+- [ ] Transcribe Mann Ex. 201 (p. 228) and Ex. 239–240 (p. 261) as answer-finder golden tests
+      for M3.
 - [ ] The Max documentation pages for M0. docs.cycling74.com is blocked by this cloud
       environment's network policy, so read them locally, or allow the domain.
-- [ ] Mann, *The Study of Fugue*: the canon sections (needs a connection that can reach
-      archive.org).
 - [ ] Levy (2013) and Jarvlepp (1982): the exact Ligeti rules and subdivisions, before M8.
 - [ ] Schottstaedt STAN-M-19: the penalty table, before M4.
 - [ ] Nemire (2014): check the convergence formula, before M6.
