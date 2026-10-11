@@ -190,22 +190,34 @@ function compareValues(expected, received) {
   return { expected: expected.length, received: received.length, exact, maxAbs };
 }
 
-// n, mean, min and max of a list of numbers (the cents readings in spike c).
-function summary(values) {
-  if (values.length === 0) return { n: 0, mean: 0, min: 0, max: 0 };
-  let sum = 0;
-  let min = Infinity;
-  let max = -Infinity;
-  for (const value of values) {
-    sum += value;
-    min = Math.min(min, value);
-    max = Math.max(max, value);
-  }
-  return { n: values.length, mean: sum / values.length, min, max };
+// A pitch tracker on a harmonically rich sound (Drift, spike c) often locks
+// onto the octave below or above. Fold an error in cents to its nearest
+// octave: the residual in [-600, 600) and how many octaves were dropped.
+function foldOctave(cents) {
+  const octaves = Math.round(cents / 1200) || 0; // || 0: no "-0" octave
+  return { cents: cents - 1200 * octaves, octaves };
+}
+
+// n, median, min and max of the octave-folded readings, and how many
+// readings landed in each octave ({ "-1": 8, "0": 2 }). The median ignores
+// the odd wild reading, which a mean doesn't.
+function robustSummary(values) {
+  if (values.length === 0) return { n: 0, median: 0, min: 0, max: 0, octaves: {} };
+  const octaves = {};
+  const folded = values.map((value) => {
+    const f = foldOctave(value);
+    octaves[f.octaves] = (octaves[f.octaves] || 0) + 1;
+    return f.cents;
+  });
+  const sorted = folded.slice().sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  return { n: values.length, median, min: sorted[0], max: sorted[sorted.length - 1], octaves };
 }
 
 exports.tempoCanon = tempoCanon;
-exports.summary = summary;
+exports.foldOctave = foldOctave;
+exports.robustSummary = robustSummary;
 exports.queueRows = queueRows;
 exports.jitter = jitter;
 exports.centsError = centsError;
@@ -368,7 +380,7 @@ __cg_require.local = 1;
 //   tone                     amp 0.1 20, tone <hz> <midi>  the 31-EDO test note, faded in
 //   silence                  amp 0 50                      fade the sine out
 //   measuredhz <hz>          cents <error>                 pitch tracker vs what's playing
-//                            status cents n <10> mean <x> min <y> max <z>
+//                            status cents n <10> median <x> min <y> max <z> octaves <o:k> ...
 //                              [implied bend range <st>]   every 10 readings (range: MPE only)
 //   mpeconfig                midi <b1> <b2> <b3> ...       MPE lower zone, bend +/-48
 //   mpenote [pitch]          amp 0 50, midi ..., status    note on channel 2 (default: test note)
@@ -424,10 +436,15 @@ function measuredhz(hz) {
   outlet(0, "cents", cents);
   readings.push(cents);
   if (readings.length === CENTS_BATCH) {
-    const s = spike.summary(readings);
-    const line = ["status", "cents", "n", s.n, "mean", s.mean, "min", s.min, "max", s.max];
+    // Folded to the nearest octave, so a tracker jumping octaves on a rich
+    // sound can't hide the fine pitch; "octaves -1:8 0:2" shows how often it did.
+    const s = spike.robustSummary(readings);
+    const octaves = Object.keys(s.octaves)
+      .sort((a, b) => a - b)
+      .map((k) => `${k}:${s.octaves[k]}`);
+    const line = ["status", "cents", "n", s.n, "median", s.median, "min", s.min, "max", s.max, "octaves", ...octaves];
     if (mpeNote) {
-      line.push("implied", "bend", "range", mpe.impliedRange(expected + s.mean / 100, mpeNote.note, mpeNote.bend));
+      line.push("implied", "bend", "range", mpe.impliedRange(expected + s.median / 100, mpeNote.note, mpeNote.bend));
     }
     outlet(0, ...line);
     readings = [];

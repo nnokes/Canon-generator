@@ -21,7 +21,14 @@ five spikes that settle the risky platform questions before any music code is wr
   - (c) clicked when audio turned on. The sine's gain now ramps.
   - MPE was untested: no synth was listening. It now plays Ableton's Drift
     (`abl.device.drift~`) inside Max and measures it.
-- **To do: pull, then re-run (b) (a confirmation) and (c) MPE, and run (e).**
+- Fourth run: **(e) passes**, and (c) MPE sends the right bytes, but its reading was
+  inconclusive.
+  - `[fzero~]` jumped an octave on most readings of Drift's rich default sound, so the mean
+    meant nothing. The highest reading, +6 cents, leans towards Drift honouring ±48.
+  - Now: the summaries fold each reading to the nearest octave and report the median and the
+    number of jumps, and Drift runs one oscillator (`@osc2enable 0`).
+- **To do: pull, then one more (c) MPE run (below). M0 closes after it**, either way (see
+  the decision rule in (c)).
 
 ---
 
@@ -50,11 +57,14 @@ five spikes that settle the risky platform questions before any music code is wr
 - [x] `[v8]` wrappers:
   - `code/cg.hello.v8.js`
   - `code/cg.spike.v8.js` (for spikes b, c and d)
-- [x] 35 Node tests:
+- [x] 37 Node tests:
   - the engine maths
   - each bundle loaded in a simulated `[v8]`
   - a patch lint: cords, the `[v8]` one-inlet/one-outlet rule, scripts, bpatchers and
     abstractions exist, and generated vs. hand-built ownership
+  - spike (e), automated: in a scratch copy of the repo, an edited hand-built patch survives
+    `patchgen.py --init` and a plain run byte for byte, missing hand-built patches are
+    created, and the generated ones match the repo
 
 ### First-time setup on your Mac
 ```sh
@@ -108,34 +118,54 @@ or "error loading patcher".
   1. Click `tone`, then the speaker (`ezdac~`) to turn audio on.
   2. `[cycle~]` plays 31-EDO step 5 above D4 (328.40 Hz), and `[fzero~]` measures it.
      `sigmund~` isn't in Max 9.
-  3. Every ~5 s the Max window prints `output-status: cents n 10 mean … min … max …`.
-     Send two or three of these lines.
-  4. **Pass** if the mean is within ±1 cent.
+  3. Every ~5 s the Max window prints `output-status: cents n 10 median … min … max …
+     octaves 0:10`. Each reading is folded to the nearest octave first; `octaves -1:8 0:2`
+     would mean 8 of the 10 readings were an octave low (a sine shouldn't do that). Send two
+     or three of these lines.
+  4. **Pass** if the median is within ±1 cent.
   
   The Hz path is exact by construction (a float frequency into `[cycle~]`). The tracker is
   only a sanity check, so if `fzero~` itself wobbles by more on a pure sine, record its
   spread instead.
 - **MPE path (second), with Ableton's Drift inside Max:** our MPE bytes go one at a time
-  (`[iter]`) into `[abl.device.drift~ @drift 0]`. That's Drift from Live, as a Max 9 object
-  that takes raw MIDI bytes. `@drift 0` turns off its random per-voice detune. Drift's audio
-  goes to the speakers and to `[fzero~]`, so Max measures the pitch itself, with no tuner.
+  (`[iter]`) into `[abl.device.drift~ @drift 0 @osc2enable 0]`. That's Drift from Live, as
+  a Max 9 object that takes raw MIDI bytes:
+  - `@drift 0` turns off its random per-voice detune
+  - `@osc2enable 0` turns off its second oscillator, so the tracker has one clear
+    fundamental to follow
+
+  Drift's audio goes to the speakers and to `[fzero~]`, so Max measures the pitch itself,
+  with no tuner.
   1. Audio on. Click `silence` (the sine fades), then `mpeconfig` **once** (the zone setup:
      15 member channels, bend ±48).
-  2. Click `mpenote`. The Max window prints `output-status: mpe note ch 2: note 64 bend 8181
-     pitch 63.935… = note -6.45 cents`, then every ~5 s `cents n 10 mean … implied bend
-     range <st>`.
-  3. Click `mpenote 64.5` (a quarter-tone above E4: sent as F4 with a large downward bend).
-     This gives the clearest bend-range reading. Then click `mpeoff`.
-  4. Read `implied bend range`:
+  2. Click `mpenote 64.5`: a quarter-tone above E4, sent as F4 with a large downward bend,
+     which is the reading that best separates a ±48 range from a ±2 one. The Max window
+     prints `output-status: mpe note ch 2 note 65 bend 8107 pitch 64.5 = note -50 cents`.
+  3. **Hold it for about 15 s**, for 2–3 summaries: `cents n 10 median … min … max …
+     octaves … implied bend range <st>`. The bend range is worked out from the folded median.
+  4. Click `mpeoff`, and paste the summary lines.
+  5. Read them with this rule:
 
-     | Reading | What it means |
-     |---|---|
-     | ≈ 48 | Drift honoured our RPN setup. **Pass** if the cents mean is within ±1 cent. |
-     | ≈ 2 | Drift kept MIDI's default and ignored the RPN; the mean will be about −48 cents on `mpenote 64.5`. We then set Drift's bend range another way (a Drift attribute, or an `mpeformat` setting). |
-     | ≈ 0, or nonsense | Drift ignored per-channel bend (no MPE in this object). |
+     | Folded median | Implied bend range | What it means |
+     |---|---|---|
+     | within ±5 cents | ≈ 48 (about 43–53) | **Pass:** Drift honours our MPE setup, and is a usable MPE target inside Max. |
+     | ≈ +48 cents | ≈ 2 | Drift kept a ±2 note bend range. Find its note pitch-bend attribute (right-click Drift → Open Reference), set it to 48 in the generator, and re-run once. |
+     | ≈ +50 cents | ≈ 0 | Drift ignores per-channel bend: no MPE in this object. |
+     | scattered | — | Still unreadable. |
 
-  5. Paste the lines. If `[abl.device.drift~]` is a dashed box ("No such object"), tell me
-     your Max version (Max → About Max).
+     ±5 cents, not ±1: Drift models an analogue synth, and ±5 still tells 48 from 2 at a
+     glance. **Either way, M0 closes after this run.** If the result is "no MPE" or
+     "unreadable", M0 closes on the Hz path (the primary output, already passed), and the
+     MPE pitch check moves to M2 with an external synth or Live 12.
+
+     If `octaves` still shows readings spread over several octaves, open Drift's reference
+     and look for an oscillator-shape attribute (set it to the purest wave), and note the
+     name and default of its note pitch-bend range attribute.
+  6. If `[abl.device.drift~]` is a dashed box ("No such object"), tell me your Max version
+     (Max → About Max).
+
+  `mpenote` with no number plays the test note (`note 64 bend 8181 = note -6.45 cents`). It
+  still works, but at −6 cents the two bend ranges are hard to tell apart.
 - **External synth (optional):** the same bytes also go to `[midiout]`. Double-click it to
   pick a port, and read a tuner on that synth. Expect 328.4 Hz (E4 −6.45 cents) for
   `mpenote`.
@@ -151,12 +181,17 @@ or "error loading patcher".
 `canon.maxpat` and the panel are **hand-built**: they were created once by
 `npm run patches:init`, and they're yours now. The panel shows the *generated*
 `cg.engine.maxpat` in a bpatcher.
-1. Open `canon.maxpat`. Click `hello`. `panel: hello …` should print.
-2. Open the panel and move or add something. Save it in Max.
-3. Run `npm run patches`. The panel must be unchanged (`git diff` shows only your edit).
-4. Edit `patchers/cg.engine.maxpat` (generated) in Max, save it, then run
-   `npm run patches:check`. It must report the generated patch as stale. CI checks this
-   too.
+
+What needed Max has been seen in Max:
+- `canon.maxpat` loads its script: `canon: hello …` printed (fourth run).
+- A bpatcher of the generated `cg.engine.maxpat` loads and answers: spike (a), row 3.
+
+What didn't need Max is now an automated test (`tests/patches.test.js`, every `npm test`
+and every CI run): an edited hand-built patch survives the generator byte for byte. The
+manual edit-and-diff steps are no longer needed. `npm run patches:check` reports any
+generated patch edited in Max as stale, in CI too.
+
+Optional: in `canon.maxpat`, click `hello` above the panel. `panel: hello …` should print.
 
 ---
 
@@ -166,9 +201,9 @@ or "error loading patcher".
 |---|---|---|
 | (a) search path | **First run:** nothing in subfolders or behind relative paths was found (v8 "can't find file", abstraction "No such object", bpatcher "error loading patcher"). **Re-run after flattening: PASS.** `a1-script`, `a2-abstraction` and `a3-bpatcher` all print `hello canon-generator 0.1.0 seed 1 check 627 2 527 981 note 63.935484 328.401454`, the same values the Node tests produce. | **Flatten**: everything Max loads in `patchers/` (PLAN §2.2). Done. |
 | (b) player jitter | **Third run: PASS.** `player-stats: 200 2.298091 2.413542 2.311167` (old format: mean, max, last error), all ≈ 2.3 ms. That is a constant start offset: onset 0 was fired by the mouse click, every other onset by the scheduler. Onset to onset the spread is about ±0.1 ms, with no drift over 45 s. | **Keep design 1** (`[coll]` + `[delay]` in the scheduler thread, PLAN §4.2). Stats now report offset / jitter / sd / drift, and onset 0 goes through `[delay 100]`. |
-| (c) Hz / MPE accuracy | **First run:** `sigmund~: No such object` (not in Max 9). **Third run, Hz: PASS.** After the first batch (which caught the attack, min −9.2), every summary reads +0.13 to +0.24 cents, mean ≈ +0.17: `fzero~`'s own bias. **Click** when audio turned on before `tone` (DC from `[cycle~]` at 0 Hz). **MPE:** no synth was listening. | Use `fzero~`. The gain now ramps via `[line~]`; every M2 voice gets a ramp (PLAN §4.3). MPE is now measured with Drift inside Max. |
+| (c) Hz / MPE accuracy | **First run:** `sigmund~: No such object` (not in Max 9). **Third run, Hz: PASS.** After the first batch (which caught the attack, min −9.2), every summary reads +0.13 to +0.24 cents, mean ≈ +0.17: `fzero~`'s own bias. **Click** when audio turned on before `tone` (DC from `[cycle~]` at 0 Hz). **MPE:** no synth was listening. **Fourth run, MPE via Drift: bytes correct, reading inconclusive.** The status lines were right (`note 64 bend 8181 … = note -6.451613 cents`; `note 65 bend 8107 pitch 64.5 = note -50 cents`). The one summary, `cents n 10 mean -968.68 min -1239.78 max 6.23`, only fits most readings sitting about an octave low: `fzero~` jumping octaves on Drift's rich default patch. So its `implied bend range 981.77` meant nothing. The highest reading, +6 cents, leans towards ±48: a ±2 range would have read about +48 cents. | Use `fzero~`. The gain now ramps via `[line~]`; every M2 voice gets a ramp (PLAN §4.3). MPE is measured with Drift inside Max. The summaries now fold octaves and use the median; Drift runs one oscillator. One more run, then the decision rule in (c) closes it. |
 | (d) dict precision | **PASS:** `dict-check: 256 256 1 0`. All 256 doubles came back bit-exact through `[dict]` → `[dict.unpack]` → Max atoms → `[v8]`. | Float event times are safe through dicts and messages; no rounding scheme needed. |
-| (e) hybrid workflow | | |
+| (e) hybrid workflow | **PASS.** The hand-built `canon.maxpat` loads its script: `canon: hello canon-generator 0.1.0 seed 1 check 627 2 527 981 note 63.935484 328.401454` (fourth run). A bpatcher of the generated engine loads and answers: spike (a), row 3. "Regenerating never touches a hand-built patch" is an automated test now. | **Keep the hybrid workflow** (PLAN §4.4): generated patches for wiring, hand-built for the main patch and panels, ownership checked on every `npm test` and CI run. |
 
 ## 4. Notes and gotchas
 - `[v8]` needs Max 9 itself (or Live 12.2.1 or later, which bundles it).

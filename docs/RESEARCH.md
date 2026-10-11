@@ -804,17 +804,31 @@ and where centricity comes from.
   
   They have no built-in UI. `abl.device.drift~`'s reference lists `int`, raw MIDI bytes,
   as its input. Drift is MPE-capable in Live.
+- **Drift's attributes that matter here:**
+  - `@drift`: random per-voice detune (0 turns it off)
+  - `@osc2enable`: the second oscillator on or off. It exists as an attribute, because the
+    Max 9.0.5 release notes fix a bug in it.
+  - In Live, Drift has a per-note ("Note PB") pitch-bend range. Forum reports disagree on
+    whether its default is 2 or 48 semitones. The Max object's attribute name for it is
+    unconfirmed.
 - **What we take from it:**
   - `abl.dsp.*` oscillators and filters as voice-bank building blocks for the Hz path
   - `abl.device.drift~` as an MPE target *inside* Max, so the MPE path can be tested and
     used without an external synth
 - **Open question, answered by M0 spike (c):** does the Max object honour per-channel bend
   and our ±48 RPN?
+  - The first run sent the right bytes, but `fzero~` jumped octaves on Drift's default
+    sound.
+  - The highest reading (+6 cents) leans towards ±48. A ±2 range would read about +48 cents
+    on a quarter-tone request.
+  - Re-run with octave folding and one oscillator.
 - **Links:**
   - [abl.device.drift~ reference](https://docs.cycling74.com/reference/abl.device.drift~)
   - [Max 9.0.0 release notes](https://cycling74.com/releases/max/9.0.0)
+  - [Max 9.0.5 release notes](https://cycling74.com/releases/max/9.0.5) (`@osc2enable`)
   - [Max 9.1.0 release notes](https://cycling74.com/releases/max/9.1.0)
   - [mpeformat reference](https://docs.cycling74.com/reference/mpeformat/)
+  - [Ableton forum: Drift's MPE / Note PB range](https://forum.ableton.com/viewtopic.php?p=1817448)
 - **Milestone.** M0, M2, M9.
 - **Status.** `secondary`. The docs site is blocked from the build environment; the details
   come from search results.

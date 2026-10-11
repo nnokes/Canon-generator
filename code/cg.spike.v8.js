@@ -7,7 +7,7 @@
 //   tone                     amp 0.1 20, tone <hz> <midi>  the 31-EDO test note, faded in
 //   silence                  amp 0 50                      fade the sine out
 //   measuredhz <hz>          cents <error>                 pitch tracker vs what's playing
-//                            status cents n <10> mean <x> min <y> max <z>
+//                            status cents n <10> median <x> min <y> max <z> octaves <o:k> ...
 //                              [implied bend range <st>]   every 10 readings (range: MPE only)
 //   mpeconfig                midi <b1> <b2> <b3> ...       MPE lower zone, bend +/-48
 //   mpenote [pitch]          amp 0 50, midi ..., status    note on channel 2 (default: test note)
@@ -63,10 +63,15 @@ function measuredhz(hz) {
   outlet(0, "cents", cents);
   readings.push(cents);
   if (readings.length === CENTS_BATCH) {
-    const s = spike.summary(readings);
-    const line = ["status", "cents", "n", s.n, "mean", s.mean, "min", s.min, "max", s.max];
+    // Folded to the nearest octave, so a tracker jumping octaves on a rich
+    // sound can't hide the fine pitch; "octaves -1:8 0:2" shows how often it did.
+    const s = spike.robustSummary(readings);
+    const octaves = Object.keys(s.octaves)
+      .sort((a, b) => a - b)
+      .map((k) => `${k}:${s.octaves[k]}`);
+    const line = ["status", "cents", "n", s.n, "median", s.median, "min", s.min, "max", s.max, "octaves", ...octaves];
     if (mpeNote) {
-      line.push("implied", "bend", "range", mpe.impliedRange(expected + s.mean / 100, mpeNote.note, mpeNote.bend));
+      line.push("implied", "bend", "range", mpe.impliedRange(expected + s.median / 100, mpeNote.note, mpeNote.bend));
     }
     outlet(0, ...line);
     readings = [];

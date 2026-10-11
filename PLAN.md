@@ -430,13 +430,16 @@ back for sample-accurate *audio* events in the voice bank.
    - **M0 proved the path:** one `[cycle~]` at a float frequency, read by `[fzero~]` at
      +0.17 cents (the tracker's own bias). `sigmund~` isn't in Max 9.
    - The full voice bank arrives with the M2 renderer. Each voice is a simple additive
-     synth.
+     synth. Its **partial list is a parameter, and the same list feeds the `roughness`
+     consonance model**. There is no MIDI channel limit, which suits dense Ligeti textures.
    - **Every voice's gain ramps** (`[line~]` or `[curve~]`): never a DC step or a hard gate.
      M0 found that a bare `[cycle~]` at 0 Hz outputs DC and clicks when audio turns on.
    - **Candidate building blocks:** Max 9's ABL objects (Ableton's DSP). `abl.dsp.*`
-     oscillators and filters take frequencies directly, which suits this path. Its **partial list is a parameter, and the same list feeds the
-   `roughness` consonance model**. There is no MIDI channel limit, which suits dense Ligeti
-   textures.
+     oscillators and filters take frequencies directly, which suits this path.
+   - **Measuring a rich sound needs octave folding.** A pitch tracker on a harmonically rich
+     synth often locks an octave off (M0 saw this on Drift). Any pitch check folds each
+     reading to the nearest octave and uses the median, as `cg-spike`'s `robustSummary`
+     does.
 2. **`cg.mpe.out`: MPE MIDI.**
    - one channel per voice (lower zone, channels 2–16)
    - pitch bend range ±48 semitones, which Live 12's tuning system expects; resolution is
@@ -445,6 +448,13 @@ back for sample-accurate *audio* events in the voice bank.
    - **Inside Max, without an external synth:** `abl.device.*` instruments such as
      `abl.device.drift~` take raw MIDI bytes. M0 spike (c) measures whether Drift honours
      per-channel bend and our ±48 RPN; the "implied bend range" line answers it.
+     - First reading: the bytes are right, and the evidence leans towards ±48.
+     - Drift has its own per-note ("Note PB") bend range. Reports disagree on whether its
+       default is 2 or 48, so the measurement decides.
+     - It runs as `@drift 0 @osc2enable 0` (one oscillator) to give the tracker a clean
+       fundamental.
+     - The result goes here when it's in. If Drift can't be measured cleanly, the MPE pitch
+       check moves to M2 with an external synth or Live 12.
 3. **MIDI file** export, one track per voice (M10).
 4. **MTS-ESP** (stretch).
 

@@ -46,14 +46,39 @@ test("jitter: a constant start offset is not jitter; a wobble is", () => {
   assert.deepEqual(spike.jitter([5], [9]), { count: 1, offset: 0, jitter: 0, sd: 0, drift: 0 });
 });
 
-test("summary: n, mean, min, max", () => {
-  assert.deepEqual(spike.summary([]), { n: 0, mean: 0, min: 0, max: 0 });
-  assert.deepEqual(spike.summary([-0.3]), { n: 1, mean: -0.3, min: -0.3, max: -0.3 });
-  const s = spike.summary([0.5, -1, 2, 0.5]);
-  assert.equal(s.n, 4);
-  assert.ok(Math.abs(s.mean - 0.5) < 1e-12);
-  assert.equal(s.min, -1);
-  assert.equal(s.max, 2);
+test("foldOctave: octave jumps fold away, the residual stays", () => {
+  const near = (a, b) => Math.abs(a - b) < 1e-9;
+  const cases = [
+    [-1239.78, -39.78, -1],
+    [-1200, 0, -1],
+    [6.23, 6.23, 0],
+    [650, -550, 1],
+    [-600, -600, 0],
+    [600, -600, 1],
+    [2400.5, 0.5, 2],
+  ];
+  for (const [input, cents, octaves] of cases) {
+    const f = spike.foldOctave(input);
+    assert.ok(near(f.cents, cents), `${input}: residual ${f.cents}, expected ${cents}`);
+    assert.equal(f.octaves, octaves, `${input}: octaves`);
+    assert.ok(f.cents >= -600 && f.cents < 600);
+  }
+  assert.ok(Object.is(spike.foldOctave(-1).octaves, 0), "no -0 octave");
+});
+
+test("robustSummary: an octave-jumping tracker still gives the right median", () => {
+  // Eight readings an octave low and two in place, all within a few cents of the pitch.
+  const readings = [-1203, -1198, -1201, -1199, -1204, -1196, -1200, -1202, 1.5, -0.5];
+  const s = spike.robustSummary(readings);
+  assert.equal(s.n, 10);
+  // Folded: -4 -3 -2 -1 -0.5 0 1 1.5 2 4, so the median is (-0.5 + 0) / 2.
+  assert.ok(Math.abs(s.median - -0.25) < 1e-9, `median ${s.median}`);
+  assert.equal(s.min, -4);
+  assert.equal(s.max, 4);
+  assert.deepEqual(s.octaves, { "-1": 8, 0: 2 });
+  // Odd count: the middle value.
+  assert.equal(spike.robustSummary([3, -1, 2]).median, 2);
+  assert.deepEqual(spike.robustSummary([]), { n: 0, median: 0, min: 0, max: 0, octaves: {} });
 });
 
 test("cents error and dict value comparison", () => {

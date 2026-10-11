@@ -255,16 +255,19 @@ def spike_output():
       Hz path   [cycle~] at the exact frequency; its gain ramps through [line~],
                 so turning audio on or off never clicks
       MPE path  our MPE bytes into Ableton's Drift ([abl.device.drift~], raw MIDI
-                bytes in) and, optionally, out of [midiout] to an external synth.
-                The tracker reports the bend range Drift actually applied."""
+                bytes in, one oscillator) and, optionally, out of [midiout] to an
+                external synth. The tracker reports the bend range Drift applied.
+    A tracker can jump octaves on a rich sound, so the summaries fold each
+    reading to the nearest octave and count the jumps."""
     p = Patch(rect=(60, 60, 980, 640))
     p.note(GENERATED_NOTE, 20, 10, 920, 1)
     p.note("SPIKE (c) MICROTONAL OUTPUT. Turn audio on with the speaker. HZ PATH: click 'tone'; every ~5 s "
-           "output-status prints a cents summary against 31-EDO step 5 above D4 (328.40 Hz); pass if the mean "
-           "is within +/-1 cent. MPE PATH (Drift inside Max): click 'silence', 'mpeconfig' once, then "
-           "'mpenote': the summaries add 'implied bend range' (about 48 = our setup worked, 2 = Drift kept "
-           "its default). Then 'mpenote 64.5' (a quarter-tone above E4) for a clear reading, then 'mpeoff'. "
-           "If [abl.device.drift~] is a dashed box, note your Max version.", 20, 35, 920, 5)
+           "output-status prints a cents summary against 31-EDO step 5 above D4 (328.40 Hz), folded to the "
+           "nearest octave; 'octaves -1:8 0:2' means 8 readings were an octave low. Pass if the median is "
+           "within +/-1 cent. MPE PATH (Drift inside Max): click 'silence', 'mpeconfig' once, then 'mpenote "
+           "64.5' (a quarter-tone above E4) and hold it for 2-3 summaries: 'implied bend range' about 48 = "
+           "our setup worked, about 2 = Drift kept a +/-2 range. Then 'mpeoff'. If [abl.device.drift~] is a "
+           "dashed box, note your Max version.", 20, 35, 920, 5)
 
     msgs = [p.msg(text, x, 125) for text, x in
             [("tone", 20), ("silence", 75), ("mpeconfig", 160), ("mpenote", 250), ("mpenote 64.5", 325),
@@ -288,14 +291,18 @@ def spike_output():
 
     # MPE path: bytes one at a time into Drift (and out to an external synth).
     bytes_ = p.obj("iter", 520, 250, 1, 1, ["int"])
-    drift = p.obj("abl.device.drift~ @drift 0", 520, 290, 1, 2, ["signal", "signal"])
+    # One oscillator, no random detune: the tracker has a single clear fundamental.
+    drift = p.obj("abl.device.drift~ @drift 0 @osc2enable 0", 520, 290, 1, 2, ["signal", "signal"])
     drift_gain = p.obj("*~ 0.3", 520, 330, 2, 1, ["signal"])
-    midiout = p.obj("midiout", 720, 290, 1, 0)
+    midiout = p.obj("midiout", 380, 290, 1, 0)
     p.connect(route, 2, bytes_, 0)
     p.connect(bytes_, 0, drift, 0)
     p.connect(bytes_, 0, midiout, 0)
     p.connect(drift, 0, drift_gain, 0)
-    p.comment("external synth (optional): double-click to pick a port", 720, 315, w=230, h=34, linecount=2)
+    p.comment("external synth (optional): double-click to pick a port", 300, 315, w=200, h=34, linecount=2)
+    p.note("If the octaves still scatter: right-click Drift > Open Reference. Set its oscillator shape to "
+           "the purest wave, and note the name and default of its note pitch-bend range attribute.",
+           600, 330, 360, 4)
 
     # Both sources to the speakers and the tracker (only one sounds at a time).
     dac = p.ui("ezdac~", 20, 420, 45, 45, 2, 0, [])

@@ -67,12 +67,15 @@ test("cg.spike: every 10 readings, a cents summary goes to the Max window", () =
     summaries.push(...select(out, "status"));
   });
   assert.equal(summaries.length, 1);
-  assert.equal(summaries[0].length, 9, "no bend-range field for the sine");
-  const [label, , n, , mean, , min, , max] = summaries[0];
+  const [label, , n, , median, , min, , max, octavesLabel, ...octaves] = summaries[0];
   assert.equal(label, "cents");
   assert.equal(n, 10);
-  assert.ok(Math.abs(mean - cents.reduce((a, b) => a + b) / 10) < 1e-9);
+  // Sorted: -0.5 ... 0.4, so the median is (-0.1 + 0) / 2.
+  assert.ok(Math.abs(median - -0.05) < 1e-9, `median ${median}`);
   assert.ok(Math.abs(min + 0.5) < 1e-9 && Math.abs(max - 0.4) < 1e-9);
+  // A sine never jumps octaves, and there's no bend-range field without MPE.
+  assert.equal(octavesLabel, "octaves");
+  assert.deepEqual(octaves, ["0:10"]);
   // The next batch starts fresh; 'tone' also starts a fresh batch.
   assert.deepEqual(select(bundle.send("measuredhz", hz), "status"), []);
 });
@@ -101,23 +104,31 @@ test("cg.spike: MPE setup, then notes as raw bytes with a status line", () => {
   }
 });
 
-test("cg.spike: the MPE summary reports the bend range the synth actually applied", () => {
+test("cg.spike: the MPE summary reports the bend range the synth applied, despite octave jumps", () => {
   const { midiToHz } = require("cg-tuning");
-  const readRange = (soundedPitch) => {
+  // Ten readings of a synth sounding `sounded`: the tracker locks an octave low
+  // on eight of them (as fzero~ did on Drift's default patch) and wobbles a little.
+  const readSummary = (sounded) => {
     const bundle = loadBundle("cg.spike");
     bundle.send("mpenote", 64.5);
+    const wobble = [0.03, -0.02, 0.01, -0.04, 0.02, 0, -0.01, 0.04, -0.03, 0.02]; // semitones
     let summary = null;
-    for (let i = 0; i < 10; i++) {
-      const [line] = select(bundle.send("measuredhz", midiToHz(soundedPitch)), "status");
+    wobble.forEach((w, i) => {
+      const pitch = sounded + w - (i < 8 ? 12 : 0);
+      const [line] = select(bundle.send("measuredhz", midiToHz(pitch)), "status");
       if (line) summary = line;
-    }
-    assert.deepEqual(summary.slice(9, 12), ["implied", "bend", "range"]);
-    return summary[12];
+    });
+    const at = summary.indexOf("octaves");
+    return { octaves: summary.slice(at + 1, at + 3), range: summary[summary.indexOf("range") + 1] };
   };
   const { note, bend } = mpe.bendFor(64.5);
-  // A synth honouring our +/-48 sounds 64.5; one stuck at +/-2 sounds about F4 -2 cents.
-  assert.ok(Math.abs(readRange(64.5) - 48) < 0.5);
-  assert.ok(Math.abs(readRange(mpe.pitchOf(note, bend, 2)) - 2) < 1e-6);
+  // A synth honouring our +/-48 sounds 64.5.
+  const good = readSummary(64.5);
+  assert.deepEqual(good.octaves, ["-1:8", "0:2"]);
+  assert.ok(Math.abs(good.range - 48) < 1.5, `range ${good.range}`);
+  // One stuck at +/-2 sounds just under F4.
+  const stuck = readSummary(mpe.pitchOf(note, bend, 2));
+  assert.ok(Math.abs(stuck.range - 2) < 1.5, `range ${stuck.range}`);
 });
 
 test("cg.spike: the player queue, progress while it plays, then stats", () => {

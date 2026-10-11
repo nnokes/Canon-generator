@@ -48,7 +48,7 @@
 			{
 				"box": {
 					"maxclass": "comment",
-					"text": "SPIKE (c) MICROTONAL OUTPUT. Turn audio on with the speaker. HZ PATH: click 'tone'; every ~5 s output-status prints a cents summary against 31-EDO step 5 above D4 (328.40 Hz); pass if the mean is within +/-1 cent. MPE PATH (Drift inside Max): click 'silence', 'mpeconfig' once, then 'mpenote': the summaries add 'implied bend range' (about 48 = our setup worked, 2 = Drift kept its default). Then 'mpenote 64.5' (a quarter-tone above E4) for a clear reading, then 'mpeoff'. If [abl.device.drift~] is a dashed box, note your Max version.",
+					"text": "SPIKE (c) MICROTONAL OUTPUT. Turn audio on with the speaker. HZ PATH: click 'tone'; every ~5 s output-status prints a cents summary against 31-EDO step 5 above D4 (328.40 Hz), folded to the nearest octave; 'octaves -1:8 0:2' means 8 readings were an octave low. Pass if the median is within +/-1 cent. MPE PATH (Drift inside Max): click 'silence', 'mpeconfig' once, then 'mpenote 64.5' (a quarter-tone above E4) and hold it for 2-3 summaries: 'implied bend range' about 48 = our setup worked, about 2 = Drift kept a +/-2 range. Then 'mpeoff'. If [abl.device.drift~] is a dashed box, note your Max version.",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"linecount": 5,
@@ -311,7 +311,7 @@
 			{
 				"box": {
 					"maxclass": "newobj",
-					"text": "abl.device.drift~ @drift 0",
+					"text": "abl.device.drift~ @drift 0 @osc2enable 0",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"outlettype": [
@@ -321,7 +321,7 @@
 					"patching_rect": [
 						520.0,
 						290.0,
-						196.0,
+						294.0,
 						22.0
 					],
 					"id": "obj-16"
@@ -353,7 +353,7 @@
 					"numoutlets": 0,
 					"outlettype": [],
 					"patching_rect": [
-						720.0,
+						380.0,
 						290.0,
 						63.0,
 						22.0
@@ -369,12 +369,28 @@
 					"numoutlets": 0,
 					"linecount": 2,
 					"patching_rect": [
-						720.0,
+						300.0,
 						315.0,
-						230.0,
+						200.0,
 						34.0
 					],
 					"id": "obj-19"
+				}
+			},
+			{
+				"box": {
+					"maxclass": "comment",
+					"text": "If the octaves still scatter: right-click Drift > Open Reference. Set its oscillator shape to the purest wave, and note the name and default of its note pitch-bend range attribute.",
+					"numinlets": 1,
+					"numoutlets": 0,
+					"linecount": 4,
+					"patching_rect": [
+						600.0,
+						330.0,
+						360.0,
+						70.0
+					],
+					"id": "obj-20"
 				}
 			},
 			{
@@ -389,7 +405,7 @@
 						45.0,
 						45.0
 					],
-					"id": "obj-20"
+					"id": "obj-21"
 				}
 			},
 			{
@@ -407,7 +423,7 @@
 						40.0,
 						22.0
 					],
-					"id": "obj-21"
+					"id": "obj-22"
 				}
 			},
 			{
@@ -427,7 +443,7 @@
 						56.0,
 						22.0
 					],
-					"id": "obj-22"
+					"id": "obj-23"
 				}
 			},
 			{
@@ -445,7 +461,7 @@
 						98.0,
 						22.0
 					],
-					"id": "obj-23"
+					"id": "obj-24"
 				}
 			},
 			{
@@ -463,7 +479,7 @@
 						140.0,
 						22.0
 					],
-					"id": "obj-24"
+					"id": "obj-25"
 				}
 			},
 			{
@@ -478,7 +494,7 @@
 						81.5,
 						20.0
 					],
-					"id": "obj-25"
+					"id": "obj-26"
 				}
 			},
 			{
@@ -497,7 +513,7 @@
 						80.0,
 						22.0
 					],
-					"id": "obj-26"
+					"id": "obj-27"
 				}
 			},
 			{
@@ -513,7 +529,7 @@
 						147.0,
 						22.0
 					],
-					"id": "obj-27"
+					"id": "obj-28"
 				}
 			}
 		],
@@ -717,7 +733,7 @@
 						0
 					],
 					"destination": [
-						"obj-20",
+						"obj-21",
 						0
 					]
 				}
@@ -729,7 +745,7 @@
 						0
 					],
 					"destination": [
-						"obj-20",
+						"obj-21",
 						1
 					]
 				}
@@ -741,7 +757,7 @@
 						0
 					],
 					"destination": [
-						"obj-20",
+						"obj-21",
 						0
 					]
 				}
@@ -753,7 +769,7 @@
 						0
 					],
 					"destination": [
-						"obj-20",
+						"obj-21",
 						1
 					]
 				}
@@ -762,35 +778,23 @@
 				"patchline": {
 					"source": [
 						"obj-14",
-						0
-					],
-					"destination": [
-						"obj-21",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-17",
-						0
-					],
-					"destination": [
-						"obj-21",
-						1
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-21",
 						0
 					],
 					"destination": [
 						"obj-22",
 						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-17",
+						0
+					],
+					"destination": [
+						"obj-22",
+						1
 					]
 				}
 			},
@@ -822,6 +826,18 @@
 				"patchline": {
 					"source": [
 						"obj-24",
+						0
+					],
+					"destination": [
+						"obj-25",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-25",
 						0
 					],
 					"destination": [
@@ -837,7 +853,7 @@
 						1
 					],
 					"destination": [
-						"obj-26",
+						"obj-27",
 						0
 					]
 				}
@@ -849,7 +865,7 @@
 						3
 					],
 					"destination": [
-						"obj-27",
+						"obj-28",
 						0
 					]
 				}

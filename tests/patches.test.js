@@ -126,3 +126,38 @@ test("generated patches carry the generated note; hand-built ones never do", () 
 test("generated patches are up to date with tools/patchgen.py", () => {
   execFileSync("python3", [path.join(ROOT, "tools", "patchgen.py"), "--check"], { encoding: "utf8" });
 });
+
+// M0 spike (e): regenerating never touches a hand-built patch. Runs the
+// generator in a scratch copy of the repo (it writes next to its own tools/
+// folder), so the real patchers/ is never written.
+test("regenerating keeps hand-built patches as Max saved them, and only creates missing ones", () => {
+  const sandbox = fs.mkdtempSync(path.join(require("os").tmpdir(), "cg-patchgen-"));
+  try {
+    const tool = path.join(sandbox, "tools", "patchgen.py");
+    fs.mkdirSync(path.dirname(tool));
+    fs.mkdirSync(path.join(sandbox, "patchers"));
+    fs.copyFileSync(path.join(ROOT, "tools", "patchgen.py"), tool);
+    const run = (...args) => execFileSync("python3", [tool, ...args], { encoding: "utf8" });
+    const read = (file) => fs.readFileSync(path.join(sandbox, file), "utf8");
+
+    // The first hand-built patch has been edited and saved in Max; the rest don't exist yet.
+    const [edited, ...missing] = lists.hand;
+    const patch = JSON.parse(fs.readFileSync(path.join(ROOT, edited), "utf8"));
+    patch.patcher.boxes.push({ box: { id: "obj-edit", maxclass: "comment", text: "my edit", patching_rect: [0, 0, 60, 20] } });
+    const saved = JSON.stringify(patch, null, "\t");
+    fs.writeFileSync(path.join(sandbox, edited), saved);
+
+    run("--init");
+    run("--init");
+    run();
+    assert.equal(read(edited), saved, `${edited} was overwritten`);
+    const handNote = JSON.stringify(lists.hand_note).slice(1, -1);
+    for (const file of missing) assert.ok(read(file).includes(handNote), `${file} wasn't created`);
+    for (const file of lists.generated) {
+      assert.equal(read(file), fs.readFileSync(path.join(ROOT, file), "utf8"), `${file} differs from the repo's`);
+    }
+    assert.match(run("--check"), /up to date/);
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});

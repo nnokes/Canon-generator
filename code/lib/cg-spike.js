@@ -110,22 +110,34 @@ function compareValues(expected, received) {
   return { expected: expected.length, received: received.length, exact, maxAbs };
 }
 
-// n, mean, min and max of a list of numbers (the cents readings in spike c).
-function summary(values) {
-  if (values.length === 0) return { n: 0, mean: 0, min: 0, max: 0 };
-  let sum = 0;
-  let min = Infinity;
-  let max = -Infinity;
-  for (const value of values) {
-    sum += value;
-    min = Math.min(min, value);
-    max = Math.max(max, value);
-  }
-  return { n: values.length, mean: sum / values.length, min, max };
+// A pitch tracker on a harmonically rich sound (Drift, spike c) often locks
+// onto the octave below or above. Fold an error in cents to its nearest
+// octave: the residual in [-600, 600) and how many octaves were dropped.
+function foldOctave(cents) {
+  const octaves = Math.round(cents / 1200) || 0; // || 0: no "-0" octave
+  return { cents: cents - 1200 * octaves, octaves };
+}
+
+// n, median, min and max of the octave-folded readings, and how many
+// readings landed in each octave ({ "-1": 8, "0": 2 }). The median ignores
+// the odd wild reading, which a mean doesn't.
+function robustSummary(values) {
+  if (values.length === 0) return { n: 0, median: 0, min: 0, max: 0, octaves: {} };
+  const octaves = {};
+  const folded = values.map((value) => {
+    const f = foldOctave(value);
+    octaves[f.octaves] = (octaves[f.octaves] || 0) + 1;
+    return f.cents;
+  });
+  const sorted = folded.slice().sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  return { n: values.length, median, min: sorted[0], max: sorted[sorted.length - 1], octaves };
 }
 
 exports.tempoCanon = tempoCanon;
-exports.summary = summary;
+exports.foldOctave = foldOctave;
+exports.robustSummary = robustSummary;
 exports.queueRows = queueRows;
 exports.jitter = jitter;
 exports.centsError = centsError;
