@@ -140,7 +140,7 @@ def engine():
     """cg.engine: the engine's [v8] wrappers. So far only hello."""
     p = Patch(rect=(120, 120, 520, 300))
     p.note(GENERATED_NOTE, 20, 10, 470, 2)
-    p.comment("cg.engine: hello -> hello <name> <version> seed <n> check <a b c d> note <midi> <hz>", 20, 45)
+    p.comment("cg.engine: hello -> hello <name> <version> seed <n> check <a b c d> note <midi> <hz>", 20, 55)
     inl = p.inlet(20, 80, "messages for the engine: hello", 0)
     route = p.obj("route hello", 20, 125, 2, 2)
     hello = p.obj("v8 cg.hello.bundle.js", 20, 165, 1, 1)
@@ -401,7 +401,7 @@ GENERATED = {
 def main_patch():
     p = Patch(rect=(40, 40, 760, 440))
     p.note(HAND_NOTE, 20, 10, 700, 2)
-    p.comment("Canon Generator. Click bang: the engine says hello.", 20, 50)
+    p.comment("Canon Generator. Click bang: the engine says hello.", 20, 55)
     bang = p.msg("bang", 20, 85)
     hello = p.obj("v8 cg.hello.bundle.js", 20, 115, 1, 1)
     prt = p.obj("print canon", 20, 150, 1, 0)
@@ -417,11 +417,11 @@ def main_patch():
 
 
 def panel_main():
-    p = Patch(rect=(80, 80, 440, 200))
+    p = Patch(rect=(80, 80, 440, 210))
     p.note(HAND_NOTE, 10, 5, 400, 2)
-    inl = p.inlet(10, 45, "to the engine", 0)
-    engine_box = p.bpatcher("cg.engine.maxpat", 60, 45, 340, 100, 1, 1)
-    out = p.outlet(10, 155, "from the engine", 0)
+    inl = p.inlet(10, 55, "to the engine", 0)
+    engine_box = p.bpatcher("cg.engine.maxpat", 60, 55, 340, 100, 1, 1)
+    out = p.outlet(10, 165, "from the engine", 0)
     p.connect(inl, 0, engine_box, 0)
     p.connect(engine_box, 0, out, 0)
     return p
@@ -542,10 +542,10 @@ def panel_canon():
     p.connect(load_button, 0, dialog, 0)
     p.connect(dialog, 0, load, 0)
     p.connect(load, 0, engine, 0)
-    save_button = p.ui("button", 360, 200, 22, 22, 1, 1, ["bang"])
-    p.comment("save the spec...", 386, 201)
-    save_dialog = p.obj("savedialog", 500, 200, 1, 2, ["", "bang"])
-    save = p.obj("prepend savespec", 600, 200, 2, 1)
+    save_button = p.ui("button", 400, 200, 22, 22, 1, 1, ["bang"])
+    p.comment("save the spec...", 426, 201)
+    save_dialog = p.obj("savedialog", 545, 200, 1, 2, ["", "bang"])
+    save = p.obj("prepend savespec", 640, 200, 2, 1)
     p.connect(save_button, 0, save_dialog, 0)
     p.connect(save_dialog, 0, save, 0)
     p.connect(save, 0, engine, 0)

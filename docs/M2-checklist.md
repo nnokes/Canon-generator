@@ -31,9 +31,8 @@ renders and plays; M3 judges.
   ±5 cents, and the implied bend range is about 48.
 
 **Status:**
-- Parts A–D are built and tested in Node: 78 tests in all.
-- **To do: Max session 1** (end of part D).
-- Then parts E and F.
+- Parts A–D are done, and Max session 1 passed.
+- Next: part E (MIDI import), then part F (MPE).
 
 **In M2 / later:**
 
@@ -141,7 +140,7 @@ Specs can also use `groups` with a `start` time each, so canons can follow one a
     one bpatcher row per voice. The presets have up to 19 voices, and one editor is simpler
     to wire and to use.
 - [x] The patch lint now also checks that `[poly~ <voice>]` names a patch in `patchers/`.
-- [ ] **Max session 1** (below)
+- [x] **Max session 1** (below): passed, apart from a hidden save button, now fixed
 
 ### Max session 1
 `git pull`, then open **`patchers/cg.panel.canon.maxpat`**. The Max window should print
@@ -204,8 +203,9 @@ Specs can also use `groups` with a `start` time each, so canons can follow one a
 
 | Check | Result | Decision |
 |---|---|---|
-| transform property tests | | |
-| presets play in Max (session 1) | | |
+| transform property tests | **PASS** (Node, `tests/transform.test.js`): I∘I for all four axes, R∘R, T and back in both domains, time scale and back (irrational too), T∘I∘R | |
+| presets play in Max (session 1) | **PASS:** all five presets played, with no errors. | The `[coll]` + `[delay]` player and the `[poly~]` voice bank stand. |
+| `[v8]` writes a file (session 1) | **PASS:** a spec saved from `[v8]` through `File`. But the panel's save button was hidden: renaming `[prepend load]` to `[prepend loadspec]` widened that box under the button, so the user added their own bang. | Generator fixed. **The patch lint now fails on overlapping boxes** in anything the generator creates; it catches this exact bug. The committed panel is regenerated with part E's controls. |
 | `[v8]` reads raw bytes (Part E) | | |
 | `.mid` fixtures import intact | | |
 | a `.mid` melody plays as a canon | | |

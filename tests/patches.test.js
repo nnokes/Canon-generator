@@ -166,3 +166,39 @@ test("regenerating keeps hand-built patches as Max saved them, and only creates 
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
 });
+
+// Every box the generator places must be clickable and readable: no two may
+// overlap. A renamed object grows wider (M2: [prepend loadspec] slid under the
+// save button), so this runs on what the generator creates, in a scratch copy
+// with no patches yet. Hand-built patches the user has since edited in Max
+// aren't checked: their layout is theirs.
+test("the generator lays out every patch without overlapping boxes", () => {
+  const sandbox = fs.mkdtempSync(path.join(require("os").tmpdir(), "cg-layout-"));
+  try {
+    const tool = path.join(sandbox, "tools", "patchgen.py");
+    fs.mkdirSync(path.dirname(tool));
+    fs.mkdirSync(path.join(sandbox, "patchers"));
+    fs.copyFileSync(path.join(ROOT, "tools", "patchgen.py"), tool);
+    execFileSync("python3", [tool, "--init"], { encoding: "utf8" });
+    const created = fs.readdirSync(path.join(sandbox, "patchers")).filter((f) => f.endsWith(".maxpat")).sort();
+    assert.deepEqual(created, [...lists.generated, ...lists.hand].map((f) => path.basename(f)).sort());
+    const problems = [];
+    for (const file of created) {
+      const patch = JSON.parse(fs.readFileSync(path.join(sandbox, "patchers", file), "utf8")).patcher;
+      const boxes = patch.boxes.map(({ box }) => box);
+      boxes.forEach((a, i) => {
+        for (const b of boxes.slice(i + 1)) {
+          const [ax, ay, aw, ah] = a.patching_rect;
+          const [bx, by, bw, bh] = b.patching_rect;
+          if (ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah) {
+            const label = (box) => `[${(box.text || box.maxclass).slice(0, 30)}]`;
+            problems.push(`${file}: ${label(a)} overlaps ${label(b)}`);
+          }
+        }
+      });
+    }
+    assert.deepEqual(problems, []);
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
