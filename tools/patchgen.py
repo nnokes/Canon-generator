@@ -503,14 +503,14 @@ def panel_tuning():
 
 
 def panel_canon():
-    """The M2 canon panel: pick a preset and a tuning, play it, and edit one
-    voice at a time."""
-    p = Patch(rect=(60, 60, 820, 660))
+    """The M2 canon panel: pick a preset and a tuning, play it, load your own
+    melody from a .mid file, and edit one voice at a time."""
+    p = Patch(rect=(60, 60, 820, 750))
     p.note(HAND_NOTE, 20, 10, 780, 2)
     p.note("CANONS (M2). Turn audio on (speaker). Pick a preset, then play. The tuning menu plays the same "
            "canon in another scale system. The voice editor changes one voice at a time; every change "
            "re-renders (stop first if you don't want the change mid-play).", 20, 55, 780, 2)
-    engine = p.obj("cg.canon", 20, 440, 1, 3, ["", "signal", "signal"])
+    engine = p.obj("cg.canon", 20, 530, 1, 3, ["", "signal", "signal"])
 
     p.comment("preset:", 20, 100)
     presets = p.ui("umenu", 80, 100, 360, 22, 1, 3, ["int", "", ""])
@@ -550,63 +550,91 @@ def panel_canon():
     p.connect(save_dialog, 0, save, 0)
     p.connect(save, 0, engine, 0)
 
+    # Your melody: a .mid file becomes the dux of every canon in the spec.
+    midi_button = p.ui("button", 20, 240, 22, 22, 1, 1, ["bang"])
+    p.comment("load a .mid...", 46, 241)
+    midi_dialog = p.obj("opendialog", 150, 240, 1, 2, ["", "bang"])
+    midi_load = p.obj("prepend loadmidi", 250, 240, 2, 1)
+    p.comment("your melody becomes every canon's dux", 390, 241)
+    p.connect(midi_button, 0, midi_dialog, 0)
+    p.connect(midi_dialog, 0, midi_load, 0)
+    p.connect(midi_load, 0, engine, 0)
+    p.comment("line:", 20, 270)
+    line = p.ui("umenu", 65, 270, 80, 22, 1, 3, ["int", "", ""], items=["top", ",", "bottom", ",", "track"])
+    p.comment("map:", 160, 270)
+    pitch_map = p.ui("umenu", 198, 270, 85, 22, 1, 3, ["int", "", ""], items=["exact", ",", "nearest", ",", "degree"])
+    p.comment("quantize:", 295, 270)
+    grid = p.ui("flonum", 366, 270, 50, 22, 1, 2, ["", "bang"], format=6)
+    p.comment("track:", 425, 270)
+    track = p.ui("number", 476, 270, 45, 22, 1, 2, ["", "bang"])
+    p.comment("(-1 = all)", 525, 270)
+    for box, message, x in [(line, "midiline", 65), (pitch_map, "midimap", 198),
+                            (grid, "midiquantize", 320), (track, "miditrack", 480)]:
+        send = p.obj(f"prepend {message}", x, 300, 2, 1)
+        p.connect(box, 0, send, 0)
+        p.connect(send, 0, engine, 0)
+
     # The voice editor: pick a voice, then change its fields.
-    p.comment("VOICE EDITOR (canon voices; free voices are edited in the spec file)", 20, 245)
+    p.comment("VOICE EDITOR (canon voices; free voices are edited in the spec file)", 20, 335)
     labels = ["voice", "name", "delay", "interval", "transform", "time scale", "register", "passes"]
     xs = [20, 80, 240, 310, 380, 460, 540, 610]
     for label, x in zip(labels, xs):
-        p.comment(label, x, 268)
+        p.comment(label, x, 358)
     boxes = [
-        p.ui("number", 20, 290, 50, 22, 1, 2, ["", "bang"]),
-        p.msg("", 80, 290, w=150),
-        p.ui("flonum", 240, 290, 60, 22, 1, 2, ["", "bang"], format=6),
-        p.ui("number", 310, 290, 60, 22, 1, 2, ["", "bang"]),
-        p.ui("umenu", 380, 290, 70, 22, 1, 3, ["int", "", ""], items=["P", ",", "I", ",", "R", ",", "RI"]),
-        p.ui("flonum", 460, 290, 70, 22, 1, 2, ["", "bang"], format=6),
-        p.ui("number", 540, 290, 60, 22, 1, 2, ["", "bang"]),
-        p.ui("number", 610, 290, 60, 22, 1, 2, ["", "bang"]),
+        p.ui("number", 20, 380, 50, 22, 1, 2, ["", "bang"]),
+        p.msg("", 80, 380, w=150),
+        p.ui("flonum", 240, 380, 60, 22, 1, 2, ["", "bang"], format=6),
+        p.ui("number", 310, 380, 60, 22, 1, 2, ["", "bang"]),
+        p.ui("umenu", 380, 380, 70, 22, 1, 3, ["int", "", ""], items=["P", ",", "I", ",", "R", ",", "RI"]),
+        p.ui("flonum", 460, 380, 70, 22, 1, 2, ["", "bang"], format=6),
+        p.ui("number", 540, 380, 60, 22, 1, 2, ["", "bang"]),
+        p.ui("number", 610, 380, 60, 22, 1, 2, ["", "bang"]),
     ]
     messages = ["select", None, "delay", "interval", "transform", "timescale", "register", "passes"]
     for box, message, x in zip(boxes, messages, xs):
         if message is None:
             continue
-        send = p.obj(f"prepend {message}", x, 325 + 25 * (xs.index(x) % 2), 2, 1)
+        send = p.obj(f"prepend {message}", x, 415 + 25 * (xs.index(x) % 2), 2, 1)
         p.connect(box, 0, send, 0)
         p.connect(send, 0, engine, 0)
 
     # What the engine says: menus, the tempo, the editor's fields, the Max window.
-    route = p.obj("route menu tmenu bpm editor status error", 20, 480, 2, 7)
+    route = p.obj("route menu tmenu bpm editor status error", 20, 570, 2, 7)
     p.connect(engine, 0, route, 0)
     p.connect(route, 0, presets, 0)
     p.connect(route, 1, tunings, 0)
-    show_tempo = p.obj("prepend set", 130, 515, 2, 1)
+    show_tempo = p.obj("prepend set", 130, 605, 2, 1)
     p.connect(route, 2, show_tempo, 0)
     p.connect(show_tempo, 0, tempo, 0)
-    fields = p.obj("unpack i s f i i f i i", 240, 515, 1, 8, ["int", "", "float", "int", "int", "float", "int", "int"])
+    fields = p.obj("unpack i s f i i f i i", 240, 605, 1, 8, ["int", "", "float", "int", "int", "float", "int", "int"])
     p.connect(route, 3, fields, 0)
     for k, (box, x) in enumerate(zip(boxes, xs)):
-        show = p.obj("prepend set", x, 560 + 25 * (k % 2), 2, 1)
+        show = p.obj("prepend set", x, 650 + 25 * (k % 2), 2, 1)
         p.connect(fields, k, show, 0)
         p.connect(show, 0, box, 0)
-    status = p.obj("print canon", 380, 480, 1, 0)
-    problem = p.obj("print canon-error", 480, 480, 1, 0)
+    status = p.obj("print canon", 380, 570, 1, 0)
+    problem = p.obj("print canon-error", 480, 570, 1, 0)
     p.connect(route, 4, status, 0)
     p.connect(route, 5, problem, 0)
 
     # Audio: the volume scales both sides.
-    left = p.obj("*~ 0.7", 600, 440, 2, 1, ["signal"])
-    right = p.obj("*~ 0.7", 660, 440, 2, 1, ["signal"])
+    left = p.obj("*~ 0.7", 600, 530, 2, 1, ["signal"])
+    right = p.obj("*~ 0.7", 660, 530, 2, 1, ["signal"])
     p.connect(engine, 1, left, 0)
     p.connect(engine, 2, right, 0)
     p.connect(volume, 0, left, 1)
     p.connect(volume, 0, right, 1)
-    dac = p.ui("ezdac~", 620, 490, 45, 45, 2, 0, [])
+    dac = p.ui("ezdac~", 620, 580, 45, 45, 2, 0, [])
     p.connect(left, 0, dac, 0)
     p.connect(right, 0, dac, 1)
-    start = p.obj("loadbang", 600, 380, 1, 1, ["bang"])
-    level = p.msg("0.7", 600, 410)
+    # On load: the volume, and the track box showing -1 (all tracks, the default).
+    start = p.obj("loadbang", 600, 470, 1, 1, ["bang"])
+    level = p.msg("0.7", 600, 500)
+    all_tracks = p.msg("set -1", 680, 500)
     p.connect(start, 0, level, 0)
     p.connect(level, 0, volume, 0)
+    p.connect(start, 0, all_tracks, 0)
+    p.connect(all_tracks, 0, track, 0)
     return p
 
 

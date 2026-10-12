@@ -169,8 +169,9 @@ const rows = (out) => select(out, "coll").filter((r) => r[0] !== "clear");
 
 test("cg.canon exposes exactly its documented messages", () => {
   assert.deepEqual(loadBundle("cg.canon").handlers(), [
-    "delay", "info", "interval", "loadspec", "passes", "preset", "presets", "register", "render", "savespec",
-    "select", "tempo", "timescale", "transform", "tuning", "tunings",
+    "delay", "info", "interval", "loadmidi", "loadspec", "midiline", "midimap", "midiquantize", "miditrack",
+    "passes", "preset", "presets", "register", "render", "savespec", "select", "tempo", "timescale", "transform",
+    "tuning", "tunings",
   ]);
 });
 
@@ -257,4 +258,45 @@ test("cg.canon: save then load gives the same canon", () => {
   assert.deepEqual(rows(bundle.send("loadspec", file)), edited);
   fs.rmSync(path.dirname(file), { recursive: true });
   assert.match(errors(bundle.send("loadspec", file))[0], /can't open/);
+});
+
+test("cg.canon: loadmidi puts your melody into every canon, and the options re-read it", () => {
+  const bundle = loadBundle("cg.canon");
+  bundle.send("preset", 0); // the round: four voices, one section apart
+  const out = bundle.send("loadmidi", path.join(FIXTURES, "live-clip.mid"));
+  assert.deepEqual(errors(out), []);
+  const [, report] = select(out, "status");
+  assert.equal(report.join(" "),
+    "midi live-clip.mid: 13 notes, 0 rests, 16 beats, line top, map exact, quantize 0, dropped 0, cut 0, glides 0, trimmed 0, no tempo in the file (kept 100 bpm)");
+  // The first voice plays the clip: C4 for 1.5 beats at 100 bpm, then D4.
+  const queue = rows(out);
+  assert.ok(Math.abs(queue[0][2] - tuning.midiToHz(60)) < 1e-9);
+  assert.ok(Math.abs(queue[0][5] - 1.5 * 600) < 1e-9, "1.5 beats at 100 bpm");
+  // Saved specs carry the notes, not the file.
+  const os = require("os");
+  const fs = require("fs");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cg-midi-"));
+  bundle.send("savespec", path.join(dir, "clip.json"));
+  const saved = JSON.parse(fs.readFileSync(path.join(dir, "clip.json"), "utf8"));
+  assert.equal(saved.dux.from, "live-clip.mid");
+  assert.equal(saved.dux.notes.length, 13);
+  fs.rmSync(dir, { recursive: true });
+
+  // A file with a tempo sets it; a group preset gets the melody in every canon.
+  bundle.send("preset", 3); // the Goldberg ladder: nine canons
+  const ladder = bundle.send("loadmidi", path.join(FIXTURES, "melody-12tet.mid"));
+  assert.match(select(ladder, "status")[1].join(" "), /tempo 90 bpm/);
+  assert.deepEqual(select(ladder, "bpm"), [[90]]);
+
+  // Options: by name or menu index; a bad one changes nothing.
+  bundle.send("loadmidi", path.join(FIXTURES, "polyphonic.mid"));
+  assert.match(select(bundle.send("midiline", 1), "status")[1].join(" "), /1 notes, .*line bottom/);
+  assert.match(select(bundle.send("midiline", "top"), "status")[1].join(" "), /4 notes, .*line top/);
+  assert.match(select(bundle.send("miditrack", 1), "status")[1].join(" "), /line top/);
+  assert.match(select(bundle.send("midimap", 1), "status")[1].join(" "), /map nearest/);
+  assert.match(select(bundle.send("midiquantize", 0.5), "status")[1].join(" "), /quantize 0.5/);
+  assert.match(errors(bundle.send("midiline", "middle"))[0], /line must be one of top bottom track/);
+  assert.match(errors(bundle.send("miditrack", 7))[0], /no notes found/);
+  assert.match(select(bundle.send("midiline", 0), "status")[1].join(" "), /line top/, "track 7 was refused; track 1 stayed");
+  assert.match(errors(bundle.send("loadmidi", path.join(FIXTURES, "ji-major.scl")))[0], /not a MIDI file/);
 });

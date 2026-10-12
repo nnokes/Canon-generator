@@ -15,7 +15,8 @@ const ROOT = path.resolve(__dirname, "..");
 const MAX_GLOBALS = new Set(["outlet", "post", "error", "Dict", "File", "console"]);
 
 // Stand-in for Max's File: isopen, position, eof (the length; setting it
-// truncates), readline(maxchars) without the line ending, writestring, close().
+// truncates), readline(maxchars) without the line ending, readbytes(count),
+// writestring, close().
 // Max's own File is what M1 checked in [v8]; this one uses the real file system.
 class SimFile {
   constructor(file, access = "read") {
@@ -30,12 +31,22 @@ class SimFile {
       return;
     }
     try {
-      this._text = fs.readFileSync(file, "utf8");
+      this._bytes = fs.readFileSync(file);
     } catch {
       return;
     }
+    // One character per byte, so lines and bytes share one position, and eof
+    // is the length in bytes, as in Max.
+    this._text = this._bytes.toString("latin1");
     this.isopen = true;
-    this.eof = this._text.length;
+    this.eof = this._bytes.length;
+  }
+  // Bytes: like Max, an array of numbers.
+  readbytes(count) {
+    if (!this.isopen || this.position >= this._bytes.length) return null;
+    const out = Array.from(this._bytes.subarray(this.position, this.position + count));
+    this.position += out.length;
+    return out;
   }
   writestring(text) {
     this._text = this._text.slice(0, this.position) + text;

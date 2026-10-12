@@ -204,6 +204,14 @@ through the same renderer, analyzer and answer finder (§3.6, §3.7).
     those degrees in the target system. This is the interscalar mapping of the per-voice
     `scale` field, applied to the dux. A C-major tune becomes the same tune in 31-EDO Dorian
     or on a harmonic series.
+- **As built in M2** (`code/lib/cg-io.js`):
+  - The `top` and `bottom` lines are the skyline: at every moment the highest (lowest)
+    sounding note, so a covered note comes back when it's uncovered.
+  - Note-ons are paired with note-offs into intervals first, because Live writes the next
+    note-on before the previous note-off at the same tick.
+  - A loaded melody becomes the dux of every canon group in the spec.
+  - Glides keep their onset pitch and are reported. Following the bend through a note,
+    and detecting the source key for `degree`, are later.
 - **Max side.** The file comes from a dialog (`[opendialog]`, a full path; §2.2). The `[v8]`
   wrapper reads its bytes with Max's `File` object. M1 first checks that `[v8]` can read a
   text file this way (for `.scl`); the first M2 task checks raw bytes (for `.mid`).

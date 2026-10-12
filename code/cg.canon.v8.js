@@ -15,6 +15,12 @@
 //                                   <time scale> <register> <passes>
 //   delay|interval|transform|timescale|register|passes <value>
 //                                 edits the selected voice, then as render
+//   loadmidi <full path>          status midi ..., then as render       a .mid melody becomes
+//                                                                        the dux of every canon
+//   midiline top|bottom|track     re-reads the melody with that line (or 0-2)
+//   midimap exact|nearest|degree  ... with that pitch mapping (or 0-2)
+//   midiquantize <beats>          ... on that grid (0: off)
+//   miditrack <n>                 ... from track n only (-1: all tracks)
 //   loadspec <full path>          as render                             a spec (JSON)
 //   savespec <full path>          status saved ...                      the current spec
 //                                 (not "save": [v8] calls a save() function when the patch is saved)
@@ -30,13 +36,18 @@ const library = require("cg-presets");
 const scaleLibrary = require("cg-scales");
 const tuningLibrary = require("cg-tuning");
 const files = require("cg-file");
+const io = require("cg-io");
 
 const TRANSFORMS = ["P", "I", "R", "RI"];
+const LINES = ["top", "bottom", "track"];
+const MAPS = ["exact", "nearest", "degree"];
 const LEVEL = 0.25; // a note's peak gain at velocity 127, before the partial weights
 
 let spec = library.preset(0);
 let selected = 0;
 let rendered = null;
+let midi = null; // the last .mid file: { name, parsed }
+const midiOptions = { line: "top", map: "exact", quantize: 0, track: -1 };
 
 function presets() {
   outlet(0, "menu", "clear");
@@ -129,6 +140,30 @@ function passes(count) {
   });
 }
 
+function loadmidi(path) {
+  attempt(() => {
+    const name = String(path).split(/[/:\\]/).pop();
+    midi = { name, parsed: io.parseMidi(files.readBytes(String(path))) };
+    applyMidi();
+  });
+}
+
+function midiline(which) {
+  midiOption("line", which, LINES);
+}
+
+function midimap(which) {
+  midiOption("map", which, MAPS);
+}
+
+function midiquantize(beats) {
+  midiOption("quantize", beats);
+}
+
+function miditrack(track) {
+  midiOption("track", track);
+}
+
 function loadspec(path) {
   attempt(() => {
     spec = JSON.parse(files.readLines(String(path)).join("\n"));
@@ -149,6 +184,58 @@ function info() {
 }
 
 // ---------------------------------------------------------------- helpers
+
+// Sets a MIDI option (a name, or its index in `names`), then re-reads the
+// melody if a file is loaded. A bad value leaves the option as it was.
+function midiOption(key, value, names) {
+  attempt(() => {
+    const before = midiOptions[key];
+    midiOptions[key] = names && typeof value === "number" ? names[value] : value;
+    if (names && !names.includes(midiOptions[key])) {
+      midiOptions[key] = before;
+      throw new Error(`${key} must be one of ${names.join(" ")}, got ${value}`);
+    }
+    if (!midi) return;
+    try {
+      applyMidi();
+    } catch (e) {
+      midiOptions[key] = before;
+      throw e;
+    }
+  });
+}
+midiOption.local = 1;
+
+// The loaded melody into every canon group's dux, read in that group's scale
+// system (for nearest and degree). The spec keeps the notes themselves, so a
+// saved spec needs no .mid. The file's tempo is used if it has one.
+function applyMidi() {
+  const next = JSON.parse(JSON.stringify(spec));
+  const groups = next.groups || [next];
+  let report = null;
+  for (const g of groups) {
+    const system = scaleLibrary.fromSpec(g.system || next.system);
+    const melody = io.melodyFromMidi(midi.parsed, { ...midiOptions, system });
+    g.dux = { source: "list", notes: melody.notes, from: midi.name };
+    report = melody.report;
+  }
+  if (report.tempo) next.tempo = report.tempo;
+  const previous = spec;
+  spec = next;
+  try {
+    update();
+  } catch (e) {
+    spec = previous;
+    throw e;
+  }
+  // No ";" atoms: Max reads a semicolon as the end of a message.
+  outlet(0, "status", "midi", midi.name + ":", report.notes, "notes,", report.rests, "rests,", report.beats, "beats,",
+    "line", report.line + ",", "map", report.map + ",", "quantize", report.quantize + ",",
+    "dropped", report.dropped + ",", "cut", report.cut + ",", "glides", report.glides + ",", "trimmed", report.trimmed + ",",
+    report.tempo ? "tempo " + report.tempo + " bpm" : "no tempo in the file (kept " + spec.tempo + " bpm)");
+  for (const warning of midi.parsed.warnings) outlet(0, "status", "midi", "warning:", warning);
+}
+applyMidi.local = 1;
 
 // The canon voices in order (groups flattened), as the renderer numbers them.
 function canonVoices() {
