@@ -8,10 +8,11 @@ playable in Max: pick a system, play its degrees from a keyboard, hear the exact
 - `.scl` fixtures round-trip (parse → write → parse gives the same system)
 - each system auditions in Max
 
-**Status:**
-- The engine, the `[v8]` wrapper and both patches are built.
-- All builders and the `.scl` round trip pass in Node (47 tests in all).
-- **To do: the run in Max (§3).**
+**Status: closed 2026-10-12.** All three exit criteria are met (Results, §4).
+- Built and tested in Node: the engine, the `[v8]` wrapper and both patches (47 tests).
+- Run in Max: a `.scl` file loaded by full path, every starter system auditioned, and
+  two measurements passed.
+- Next: [`M2-checklist.md`](M2-checklist.md).
 
 ---
 
@@ -97,7 +98,7 @@ The scale-system object is the one in PLAN §3.1:
     schedules.
   - a readout: degree, Hz, MIDI pitch, cents from 12-TET
 
-## 3. In Max (to do)
+## 3. In Max (done)
 `git pull`, then open **`patchers/cg.panel.tuning.maxpat`**. The Max window should print
 `tuning: 12-EDO: 12 degrees per period of 1200 cents ref 60 …`.
 
@@ -127,5 +128,5 @@ The scale-system object is the one in PLAN §3.1:
 |---|---|---|
 | every builder's cents tests | **PASS** (Node, `tests/tuning.test.js`) | |
 | `.scl` round trip | **PASS** (Node): 4 fixtures, plus 31-EDO, Bohlen–Pierce, ME(22,7) and the harmonic 8–16 scale, ratios kept | |
-| `[v8]` reads a `.scl` file by full path (§3 step 2) | | |
-| each system auditions in Max (§3 steps 3–4) | | |
+| `[v8]` reads a `.scl` file by full path (§3 step 2) | **PASS.** Loading `tests/fixtures/meantone-quarter-comma.scl`, from outside `patchers/`, printed `tuning: "1/4-comma meantone, 12 notes from C:" 12 "degrees per period of" 1200 cents ref 60 261.625565 Hz`. That name exists only inside the file, so `[v8]`'s `File` read it and the parser understood it. | **Use Max's `File` in `[v8]`** for text files opened by full path; no `[text]` fallback needed. M2 still checks raw bytes, for `.mid`. |
+| each system auditions in Max (§3 steps 3–4) | **PASS**, as reported in Max: all 20 starters played from the keyboard and the run, and both measurements (31-EDO degree 5; just 3/2) came in within ±1 cent. The summary lines weren't pasted, so their exact medians aren't recorded. | M1's audition voice and its self-measuring loop are the base for M2's voice bank. |

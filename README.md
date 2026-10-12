@@ -5,10 +5,9 @@ electroacoustic music. It ranges from strict Fux-style canons through process ca
 (mensuration, tempo, spiral) to Ligeti-style micropolyphony, in any tuning: equal divisions,
 just intonation, Scala files, and harmonic and inharmonic spectra.
 
-> **Status:** M0 (scaffold and platform spikes) is done; see
-> [`docs/M0-checklist.md`](docs/M0-checklist.md). M1, scale systems, is built and tested in
-> Node, and waiting on its run in Max ([`docs/M1-checklist.md`](docs/M1-checklist.md)).
-> Open `patchers/cg.panel.tuning.maxpat` to try it.
+> **Status:** M0 (scaffold and spikes) and M1 (scale systems) are done. Next: M2, the canon
+> renderer ([`docs/M2-checklist.md`](docs/M2-checklist.md)). To try the scale systems, open
+> `patchers/cg.panel.tuning.maxpat`.
 
 ## What it will do
 - **Render** canons with **N voices**. Each voice has its own **delay**, **interval of
@@ -31,7 +30,8 @@ just intonation, Scala files, and harmonic and inharmonic spectra.
 - [`docs/RESEARCH.md`](docs/RESEARCH.md): annotated research on canons, algorithmic
   counterpoint, tuning and spectral music, each entry mapped to a milestone.
 - [`docs/M0-checklist.md`](docs/M0-checklist.md): the scaffold and platform spikes (done).
-- [`docs/M1-checklist.md`](docs/M1-checklist.md): scale systems (in progress).
+- [`docs/M1-checklist.md`](docs/M1-checklist.md): scale systems (done).
+- [`docs/M2-checklist.md`](docs/M2-checklist.md): the canon renderer (next).
 
 ## Development
 ```sh
