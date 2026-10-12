@@ -1,0 +1,177 @@
+{
+  "name": "4-voice round (Frere Jacques)",
+  "tempo": 100,
+  "system": {
+    "type": "edo",
+    "divisions": 12,
+    "mode": [
+      0,
+      2,
+      4,
+      5,
+      7,
+      9,
+      11
+    ],
+    "ref": {
+      "step": 0,
+      "midi": 60
+    }
+  },
+  "dux": {
+    "source": "list",
+    "notes": [
+      {
+        "dur": 1,
+        "degree": 0
+      },
+      {
+        "dur": 1,
+        "degree": 1
+      },
+      {
+        "dur": 1,
+        "degree": 2
+      },
+      {
+        "dur": 1,
+        "degree": 0
+      },
+      {
+        "dur": 1,
+        "degree": 0
+      },
+      {
+        "dur": 1,
+        "degree": 1
+      },
+      {
+        "dur": 1,
+        "degree": 2
+      },
+      {
+        "dur": 1,
+        "degree": 0
+      },
+      {
+        "dur": 1,
+        "degree": 2
+      },
+      {
+        "dur": 1,
+        "degree": 3
+      },
+      {
+        "dur": 2,
+        "degree": 4
+      },
+      {
+        "dur": 1,
+        "degree": 2
+      },
+      {
+        "dur": 1,
+        "degree": 3
+      },
+      {
+        "dur": 2,
+        "degree": 4
+      },
+      {
+        "dur": 0.5,
+        "degree": 4
+      },
+      {
+        "dur": 0.5,
+        "degree": 5
+      },
+      {
+        "dur": 0.5,
+        "degree": 4
+      },
+      {
+        "dur": 0.5,
+        "degree": 3
+      },
+      {
+        "dur": 1,
+        "degree": 2
+      },
+      {
+        "dur": 1,
+        "degree": 0
+      },
+      {
+        "dur": 0.5,
+        "degree": 4
+      },
+      {
+        "dur": 0.5,
+        "degree": 5
+      },
+      {
+        "dur": 0.5,
+        "degree": 4
+      },
+      {
+        "dur": 0.5,
+        "degree": 3
+      },
+      {
+        "dur": 1,
+        "degree": 2
+      },
+      {
+        "dur": 1,
+        "degree": 0
+      },
+      {
+        "dur": 1,
+        "degree": 0
+      },
+      {
+        "dur": 1,
+        "degree": -3
+      },
+      {
+        "dur": 2,
+        "degree": 0
+      },
+      {
+        "dur": 1,
+        "degree": 0
+      },
+      {
+        "dur": 1,
+        "degree": -3
+      },
+      {
+        "dur": 2,
+        "degree": 0
+      }
+    ]
+  },
+  "voices": [
+    {
+      "name": "voice 1",
+      "delay": 0,
+      "loop": 2,
+      "timeScale": 2
+    },
+    {
+      "name": "voice 2",
+      "delay": 8,
+      "loop": 2
+    },
+    {
+      "name": "voice 3",
+      "delay": 16,
+      "loop": 2
+    },
+    {
+      "name": "voice 4",
+      "delay": 24,
+      "loop": 2
+    }
+  ]
+}
