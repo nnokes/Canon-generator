@@ -53,6 +53,41 @@ function starter(index) {
   return { ...entry.build(), name: entry.name };
 }
 
+// A scale system as a canon spec writes it (PLAN.md 3.1), e.g.
+//   { type: "edo", divisions: 31, ref: { step: 0, midi: 62 }, mode: [0, 5, 8, 13, 18, 23, 26] }
+// Types: edo, ed, bp, ji, harmonic, subharmonic, stretched, fm, me, hz, scl (the
+// file's text), starter (a menu index). ref, mode and name are optional on all.
+function fromSpec(spec = { type: "edo", divisions: 12 }) {
+  const options = {};
+  if (spec.name) options.name = spec.name;
+  if (spec.ref) options.ref = spec.ref;
+  if (spec.mode) options.mode = spec.mode;
+  let system;
+  switch (spec.type) {
+    case "edo": system = tuning.edo(spec.divisions, options); break;
+    case "ed": system = tuning.ed(spec.divisions, spec.period, options); break;
+    case "bp": system = tuning.bohlenPierce(options); break;
+    case "ji": system = tuning.ji(spec.ratios, options); break;
+    case "harmonic": system = tuning.harmonic(spec.low, spec.high, spec.f0, options); break;
+    case "subharmonic": system = tuning.subharmonic(spec.low, spec.high, spec.f0, options); break;
+    case "stretched": system = tuning.stretched(spec.low, spec.high, spec.f0, spec.s, options); break;
+    case "fm": system = tuning.fm(spec.carrier, spec.modulator, spec.sidebands, options); break;
+    case "me": system = tuning.maximallyEven(spec.c, spec.d, { ...options, offset: spec.offset }); break;
+    case "hz": system = tuning.hzList(spec.hz, options); break;
+    case "scl": system = tuning.parseScl(spec.text).system; break;
+    case "starter": system = starter(spec.index); break;
+    default: throw new Error(`unknown system type "${spec.type}"`);
+  }
+  // A file or starter keeps its own ref and mode unless the spec gives them.
+  if (spec.type === "scl" || spec.type === "starter") {
+    if (spec.ref) system = tuning.withRef(system, spec.ref);
+    if (spec.mode) system = tuning.withMode(system, spec.mode);
+    if (spec.name) system = { ...system, name: spec.name };
+  }
+  return system;
+}
+
+exports.fromSpec = fromSpec;
 exports.names = () => STARTERS.map((s) => s.name);
 exports.starter = starter;
 exports.count = STARTERS.length;

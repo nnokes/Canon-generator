@@ -20,6 +20,7 @@ var __cg_require = (function () {
 //   mode           optional: the step indices the degrees walk through
 //   ratios         optional: each step as a ratio ("3/2"), or null where a
 //                  step is only known in cents; period_ratio likewise
+//   first_partial  optional, on spectra: the partial number of step 0
 // Degrees count through `mode` if there is one, else through every step. In a
 // repeating system degree d is degree (d mod size) in period floor(d / size),
 // so negative degrees go down. A non-repeating system has degrees 0..size-1.
@@ -109,7 +110,7 @@ function ratioText(value) {
 // Checks a system and fills in its reference pitch. Throws on anything that
 // would make degree arithmetic wrong.
 function makeSystem({ name = "untitled", period_cents = null, steps_cents, ref = {}, mode = null,
-  ratios = null, period_ratio = null }) {
+  ratios = null, period_ratio = null, first_partial = null }) {
   const steps = Array.from(steps_cents || []);
   check(steps.length > 0, `${name}: no steps`);
   check(steps[0] === 0, `${name}: the first step must be 0 cents, got ${steps[0]}`);
@@ -145,6 +146,7 @@ function makeSystem({ name = "untitled", period_cents = null, steps_cents, ref =
     mode: walk,
     ratios: ratios ? Array.from(ratios) : null,
     period_ratio: repeating ? period_ratio : null,
+    first_partial,
   };
 }
 
@@ -288,7 +290,7 @@ function harmonic(low, high, f0, options = {}) {
     ratios.push(`${k}/${low}`);
   }
   return makeSystem({ name: `Harmonics ${low}-${high} on ${f0} Hz`, ...options,
-    period_cents: null, steps_cents: steps, ratios, ref: { step: 0, hz: f0 * low } });
+    period_cents: null, steps_cents: steps, ratios, ref: { step: 0, hz: f0 * low }, first_partial: low });
 }
 
 // Undertones f0/k for k = high..low, lowest first: degree 0 is f0/high.
@@ -314,7 +316,7 @@ function stretched(low, high, f0, s, options = {}) {
   const steps = [];
   for (let k = low; k <= high; k++) steps.push(s * 1200 * Math.log2(k / low));
   return makeSystem({ name: `Spectrum ${low}-${high} on ${f0} Hz, stretch ${s}`, ...options,
-    period_cents: null, steps_cents: steps, ref: { step: 0, hz: f0 * Math.pow(low, s) } });
+    period_cents: null, steps_cents: steps, ref: { step: 0, hz: f0 * Math.pow(low, s) }, first_partial: low });
 }
 
 // Any list of frequencies (Hz): sorted, duplicates dropped. Non-repeating.
@@ -506,6 +508,41 @@ function starter(index) {
   return { ...entry.build(), name: entry.name };
 }
 
+// A scale system as a canon spec writes it (PLAN.md 3.1), e.g.
+//   { type: "edo", divisions: 31, ref: { step: 0, midi: 62 }, mode: [0, 5, 8, 13, 18, 23, 26] }
+// Types: edo, ed, bp, ji, harmonic, subharmonic, stretched, fm, me, hz, scl (the
+// file's text), starter (a menu index). ref, mode and name are optional on all.
+function fromSpec(spec = { type: "edo", divisions: 12 }) {
+  const options = {};
+  if (spec.name) options.name = spec.name;
+  if (spec.ref) options.ref = spec.ref;
+  if (spec.mode) options.mode = spec.mode;
+  let system;
+  switch (spec.type) {
+    case "edo": system = tuning.edo(spec.divisions, options); break;
+    case "ed": system = tuning.ed(spec.divisions, spec.period, options); break;
+    case "bp": system = tuning.bohlenPierce(options); break;
+    case "ji": system = tuning.ji(spec.ratios, options); break;
+    case "harmonic": system = tuning.harmonic(spec.low, spec.high, spec.f0, options); break;
+    case "subharmonic": system = tuning.subharmonic(spec.low, spec.high, spec.f0, options); break;
+    case "stretched": system = tuning.stretched(spec.low, spec.high, spec.f0, spec.s, options); break;
+    case "fm": system = tuning.fm(spec.carrier, spec.modulator, spec.sidebands, options); break;
+    case "me": system = tuning.maximallyEven(spec.c, spec.d, { ...options, offset: spec.offset }); break;
+    case "hz": system = tuning.hzList(spec.hz, options); break;
+    case "scl": system = tuning.parseScl(spec.text).system; break;
+    case "starter": system = starter(spec.index); break;
+    default: throw new Error(`unknown system type "${spec.type}"`);
+  }
+  // A file or starter keeps its own ref and mode unless the spec gives them.
+  if (spec.type === "scl" || spec.type === "starter") {
+    if (spec.ref) system = tuning.withRef(system, spec.ref);
+    if (spec.mode) system = tuning.withMode(system, spec.mode);
+    if (spec.name) system = { ...system, name: spec.name };
+  }
+  return system;
+}
+
+exports.fromSpec = fromSpec;
 exports.names = () => STARTERS.map((s) => s.name);
 exports.starter = starter;
 exports.count = STARTERS.length;

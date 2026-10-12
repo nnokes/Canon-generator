@@ -272,8 +272,11 @@ Wrappers are named `code/cg.<name>.v8.js` and bundle to `patchers/cg.<name>.bund
 |---|---|---|
 | `cg.rng` | mulberry32, seeded | M0 |
 | `cg.tuning` | Scale-system builders, `.scl` parse/write, degree ↔ pitch ↔ Hz, quantize, cents/ratio utilities | M1 |
-| `cg.transform` | Transpose (degree or absolute), invert (3 axis kinds), retrograde, time-scale, talea re-rhythm, spiral; all pure, and composable as `T∘I∘R` | M2 |
-| `cg.canon` | Turns a spec into events; endings; convergence-point solver; incremental `step()` API | M2 / M6 |
+| `cg.scales` | The starter scale systems, and a scale system from a spec | M1 |
+| `cg.time` | Float beats: `EPS` and the comparisons that use it; event order | M2 |
+| `cg.transform` | Transpose (degree or absolute), invert (4 axis kinds), retrograde, segment retrograde and permutation, time-scale, talea re-rhythm; all pure, and composable as `T∘I∘R` | M2 |
+| `cg.canon` | Turns a spec into events; loops and spirals; endings; convergence-point solver (M6); incremental `start`/`step`/`finish` API | M2 / M6 |
+| `cg.presets` | Canon specs as code, built into the bundle (§2.2) | M2 |
 | `cg.consonance` | Pluggable consonance models (below) | M3 |
 | `cg.rules` | Rule profiles: hard and soft rules with weights | M3 |
 | `cg.analyze` | Vertical slices across N voices, using the sounding bass in real registers; motion classification; violations; dissonance curve; Tymoczko metrics; answer finder for one follower and N-voice sets (§3.6) | M3 |

@@ -55,6 +55,7 @@ exports.create = create;
 //   mode           optional: the step indices the degrees walk through
 //   ratios         optional: each step as a ratio ("3/2"), or null where a
 //                  step is only known in cents; period_ratio likewise
+//   first_partial  optional, on spectra: the partial number of step 0
 // Degrees count through `mode` if there is one, else through every step. In a
 // repeating system degree d is degree (d mod size) in period floor(d / size),
 // so negative degrees go down. A non-repeating system has degrees 0..size-1.
@@ -144,7 +145,7 @@ function ratioText(value) {
 // Checks a system and fills in its reference pitch. Throws on anything that
 // would make degree arithmetic wrong.
 function makeSystem({ name = "untitled", period_cents = null, steps_cents, ref = {}, mode = null,
-  ratios = null, period_ratio = null }) {
+  ratios = null, period_ratio = null, first_partial = null }) {
   const steps = Array.from(steps_cents || []);
   check(steps.length > 0, `${name}: no steps`);
   check(steps[0] === 0, `${name}: the first step must be 0 cents, got ${steps[0]}`);
@@ -180,6 +181,7 @@ function makeSystem({ name = "untitled", period_cents = null, steps_cents, ref =
     mode: walk,
     ratios: ratios ? Array.from(ratios) : null,
     period_ratio: repeating ? period_ratio : null,
+    first_partial,
   };
 }
 
@@ -323,7 +325,7 @@ function harmonic(low, high, f0, options = {}) {
     ratios.push(`${k}/${low}`);
   }
   return makeSystem({ name: `Harmonics ${low}-${high} on ${f0} Hz`, ...options,
-    period_cents: null, steps_cents: steps, ratios, ref: { step: 0, hz: f0 * low } });
+    period_cents: null, steps_cents: steps, ratios, ref: { step: 0, hz: f0 * low }, first_partial: low });
 }
 
 // Undertones f0/k for k = high..low, lowest first: degree 0 is f0/high.
@@ -349,7 +351,7 @@ function stretched(low, high, f0, s, options = {}) {
   const steps = [];
   for (let k = low; k <= high; k++) steps.push(s * 1200 * Math.log2(k / low));
   return makeSystem({ name: `Spectrum ${low}-${high} on ${f0} Hz, stretch ${s}`, ...options,
-    period_cents: null, steps_cents: steps, ref: { step: 0, hz: f0 * Math.pow(low, s) } });
+    period_cents: null, steps_cents: steps, ref: { step: 0, hz: f0 * Math.pow(low, s) }, first_partial: low });
 }
 
 // Any list of frequencies (Hz): sorted, duplicates dropped. Non-repeating.

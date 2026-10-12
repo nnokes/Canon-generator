@@ -30,7 +30,9 @@ renders and plays; M3 judges.
   `cg.mpe.out`, measured with `fzero~` and `centsSummary`. The folded median is within
   ±5 cents, and the implied bend range is about 48.
 
-**Status:** not started.
+**Status:**
+- Parts A–C (the engine) are done and tested in Node: 70 tests in all.
+- Next: part D, the Max side, then Max session 1.
 
 **In M2 / later:**
 
@@ -41,49 +43,71 @@ renders and plays; M3 judges.
 
 ---
 
-## Part A. Time and events (engine)
-- [ ] `cg-time`: float beats, with `EPS` and comparisons that use it (PLAN §3.1: irrational
+## Part A. Time and events (engine): done
+- [x] `cg-time`: float beats, with `EPS` and comparisons that use it (PLAN §3.1: irrational
   ratios need a tolerance)
-- [ ] The event model `{ t, dur, pitch, vel, voice }`, sorted by time, then voice
-- [ ] Events into the named dict `cg.events` (M0 spike d showed doubles survive exactly)
+- [x] The event model `{ t, dur, pitch, vel, voice }`, sorted by time, then voice. Each event
+  also carries:
+  - `index`: which dux note it came from (M3's analysis needs it)
+  - `pass`
+  - `coda`, for cadence notes
+- [ ] Events into the named dict `cg.events` (M0 spike d showed doubles survive exactly).
+  Moved to part D: the Max wrapper writes it.
 
-## Part B. Transforms: `cg-transform` (engine)
-- [ ] Transpose:
+## Part B. Transforms: `cg-transform` (engine): done
+A note is a scale degree plus a cents offset, so off-scale pitches stay exact through
+scale-step transposition.
+- [x] Transpose:
   - `degree` domain: scalar, in steps of the active scale
   - `absolute` domain: cents or a ratio, with optional `quantize: nearest`
-- [ ] Invert around an `axis`:
+- [x] Invert around an `axis`:
   - `degree`: mirror in scale steps
   - `log`: mirror in cents
   - `partial`: n ↦ N + 1 − n inside a spectrum
   - `linear`: f ↦ 2c − f in Hz
-- [ ] Retrograde and RI. Plus `segmentRetrograde` (each segment reversed in place) and
+- [x] Retrograde and RI. Plus `segmentRetrograde` (each segment reversed in place) and
   `segmentPermute` (beats inside each segment reordered; ties and rests come along)
-- [ ] `timeScale` (any float, irrational included), and `tapeSpeed` (ratio *r* plus
+- [x] `timeScale` (any float, irrational included), and `tapeSpeed` (ratio *r* plus
   time scale 1/*r*)
-- [ ] `talea`: a duration cycle replaces the rhythm, keeping the pitch order
-- [ ] Answer `scale`: degree *x* of the dux's system maps to degree *x + c* of the
+- [x] `talea`: a duration cycle replaces the rhythm, keeping the pitch order
+- [x] Answer `scale`: degree *x* of the dux's system maps to degree *x + c* of the
   follower's (interscalar)
-- [ ] **Property tests** (PLAN §6):
+- [x] **Property tests** (PLAN §6):
   - I∘I = id and R∘R = id
   - transposing up then down gives the identity
   - augmentation then diminution gives the identity
   - transforms compose (T∘I∘R)
 
-## Part C. Renderer: `cg-canon` (engine)
-- [ ] `render(spec)` → `{ voices: [{ events }], meta }`, for N voices
-- [ ] `step(state, leaderEvent)` → follower events. **`render` equals the fold of
+## Part C. Renderer: `cg-canon` (engine): done
+The order inside a voice:
+1. segment transform
+2. retrograde
+3. inversion
+4. transposition (scale steps or exact)
+5. answer scale
+6. rhythm (talea, time scale)
+7. register
+8. passes, with spiral
+
+Specs can also use `groups` with a `start` time each, so canons can follow one another
+(the ladder). A random-walk dux (`source: "walk"`, seeded) is in too.
+- [x] `render(spec)` → `{ voices: [{ events }], meta }`, for N voices
+- [x] `step(state, leaderEvent)` → follower events. **`render` equals the fold of
   `step()`** (a property test; this is what live mode needs later).
-- [ ] `register` (octave placement) and `out` (Hz voice or MPE channel) per voice
-- [ ] `loop` (perpetual) and `spiral` (each pass transposed, so it drifts in a microtonal
+- [x] `register` (octave placement) and `out` (Hz voice or MPE channel) per voice
+- [x] `loop` (perpetual) and `spiral` (each pass transposed, so it drifts in a microtonal
   system)
-- [ ] Endings:
+- [x] Endings:
   - `cut`
-  - `loop`: the last note leads back into the second bar
-  - `free-cadence`: a short coda closing on 2–3 | 1 or 7–6 | 8, or on a unison, octave or
-    third. In M2 this is a fixed formula; M4 can generate smarter codas under the rules.
-- [ ] `groups` (several canons at once: double, triple) and `free` voices (e.g. a cantus
+  - `loop`: every voice repeats `passes` times, and all stop at the end of the leader's
+    last pass. Whether the last note leads smoothly back is M3's analyzer check.
+  - `free-cadence`: after the cut, the outer voices close with 7–6 | 8 (ending on the
+    octave) or 2–3 | 1 (on the unison). Each line is placed nearest where its voice is,
+    and the inner voices hold the final, its third or its fifth. In M2 this is a fixed
+    formula; M4 can write smarter codas under the rules.
+- [x] `groups` (several canons at once: double, triple) and `free` voices (e.g. a cantus
   firmus)
-- [ ] **Presets** as JS data, built into the bundle (PLAN §2.2), with Node tests on their
+- [x] **Presets** as JS data, built into the bundle (PLAN §2.2), with Node tests on their
   rendered events:
   - the round: voice *k* is the dux, *k* section-lengths later
   - Pärt: durations exactly 1:2:4:8
