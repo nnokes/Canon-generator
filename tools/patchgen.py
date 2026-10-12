@@ -151,8 +151,62 @@ def engine():
     return p
 
 
+def tuning():
+    """cg.tuning (M1): the scale-system engine with an audition voice that
+    measures itself. Inlet: messages (see code/cg.tuning.v8.js). Outlet 0: the
+    engine's other messages, selector first (menu, readout, runmax, cents,
+    status, error). Outlet 1: the voice's signal."""
+    p = Patch(rect=(100, 100, 640, 520))
+    p.note(GENERATED_NOTE, 20, 10, 600, 2)
+    p.note("cg.tuning: scale systems and an audition voice. In: starter, system, load, mode, ref, play, "
+           "key, hold, silence, info. Out (left): menu, readout, runmax, cents, status, error. "
+           "Out (right): the voice. [fzero~] measures the voice; every 10 readings a cents summary "
+           "comes out as status.", 20, 55, 600, 3)
+    inl = p.inlet(20, 115, "messages: starter, system, load, mode, ref, play, key, hold, silence, info", 0)
+    # On load: fill the chooser, then pick the first starter.
+    load = p.obj("loadbang", 120, 115, 1, 1, ["bang"])
+    order = p.obj("t b b", 120, 145, 1, 2, ["bang", "bang"])
+    fill = p.msg("starters", 200, 175)
+    first = p.msg("starter 0", 120, 175)
+    v8 = p.obj("v8 cg.tuning.bundle.js", 20, 215, 1, 1)
+    route = p.obj("route freq amp", 20, 255, 2, 3)
+    p.connect(inl, 0, v8, 0)
+    p.connect(load, 0, order, 0)
+    p.connect(order, 1, fill, 0)
+    p.connect(order, 0, first, 0)
+    p.connect(fill, 0, v8, 0)
+    p.connect(first, 0, v8, 0)
+    p.connect(v8, 0, route, 0)
+
+    # The voice: a sine at the exact frequency; its gain always ramps (no clicks).
+    osc = p.obj("cycle~", 20, 300, 2, 1, ["signal"])
+    ramp = p.obj("line~", 120, 300, 2, 2, ["signal", "bang"])
+    gain = p.obj("*~", 20, 340, 2, 1, ["signal"])
+    p.connect(route, 0, osc, 0)
+    p.connect(route, 1, ramp, 0)
+    p.connect(osc, 0, gain, 0)
+    p.connect(ramp, 0, gain, 1)
+
+    # It measures itself: the fundamental goes back to the script.
+    tracker = p.obj("fzero~", 300, 340, 1, 3, ["float", "float", "bang"])
+    limit = p.obj("speedlim 500", 300, 375, 2, 1)
+    measured = p.obj("prepend measuredhz", 300, 410, 2, 1)
+    p.connect(gain, 0, tracker, 0)
+    p.connect(tracker, 0, limit, 0)
+    p.connect(limit, 0, measured, 0)
+    p.connect(measured, 0, v8, 0)
+
+    # Max numbers outlets by position, left to right: messages left, signal right.
+    out_messages = p.outlet(20, 460, "menu, readout, runmax, cents, status, error", 0)
+    out_signal = p.outlet(200, 460, "the voice (signal)", 1)
+    p.connect(route, 2, out_messages, 0)
+    p.connect(gain, 0, out_signal, 0)
+    return p
+
+
 GENERATED = {
     "patchers/cg.engine.maxpat": engine,
+    "patchers/cg.tuning.maxpat": tuning,
 }
 
 
@@ -187,9 +241,85 @@ def panel_main():
     return p
 
 
+def panel_tuning():
+    """The M1 tuning panel: choose or load a scale system, play it from a
+    keyboard or as a run, hold a degree to measure it."""
+    p = Patch(rect=(60, 60, 700, 600))
+    p.note(HAND_NOTE, 20, 10, 660, 2)
+    p.note("SCALE SYSTEMS (M1). Turn audio on (speaker). Pick a system, or load a .scl file. Play the "
+           "keyboard (C4 = degree 0) or switch on the run. To measure: hold a degree and watch the Max "
+           "window, where a cents summary prints every ~5 s.", 20, 55, 660, 2)
+    engine = p.obj("cg.tuning", 20, 420, 1, 2, ["", "signal"])
+
+    p.comment("system:", 20, 100)
+    menu = p.ui("umenu", 80, 100, 280, 22, 1, 3, ["int", "", ""])
+    pick = p.obj("prepend starter", 380, 100, 2, 1)
+    p.connect(menu, 0, pick, 0)
+    p.connect(pick, 0, engine, 0)
+
+    browse = p.ui("button", 20, 135, 22, 22, 1, 1, ["bang"])
+    p.comment("load a .scl file...", 48, 136)
+    dialog = p.obj("opendialog", 190, 135, 1, 2, ["", "bang"])
+    load = p.obj("prepend load", 290, 135, 2, 1)
+    p.connect(browse, 0, dialog, 0)
+    p.connect(dialog, 0, load, 0)
+    p.connect(load, 0, engine, 0)
+
+    keys = p.ui("kslider", 20, 175, 336, 53, 2, 2, ["int", "int"], offset=48, range=25)
+    notes = p.obj("stripnote", 380, 175, 2, 2, ["int", "int"])
+    key = p.obj("prepend key", 380, 205, 2, 1)
+    p.connect(keys, 0, notes, 0)
+    p.connect(keys, 1, notes, 1)
+    p.connect(notes, 0, key, 0)
+    p.connect(key, 0, engine, 0)
+
+    p.comment("hold degree:", 20, 245)
+    degree = p.ui("number", 110, 245, 50, 22, 1, 2, ["", "bang"])
+    hold = p.obj("prepend hold", 170, 245, 2, 1)
+    silence = p.msg("silence", 290, 245)
+    info = p.msg("info", 360, 245)
+    p.connect(degree, 0, hold, 0)
+    p.connect(hold, 0, engine, 0)
+    p.connect(silence, 0, engine, 0)
+    p.connect(info, 0, engine, 0)
+
+    run = p.ui("toggle", 20, 285, 24, 24, 1, 1, ["int"])
+    p.comment("run: one period up and down", 50, 287)
+    clock = p.obj("metro 300", 20, 315, 2, 1, ["bang"])
+    count = p.obj("counter 2 0 7", 20, 345, 4, 4, ["int", "", "", "int"])
+    play = p.obj("prepend play", 20, 375, 2, 1)
+    p.connect(run, 0, clock, 0)
+    p.connect(clock, 0, count, 0)
+    p.connect(count, 0, play, 0)
+    p.connect(play, 0, engine, 0)
+
+    route = p.obj("route menu readout runmax cents status error", 20, 460, 2, 7)
+    p.connect(engine, 0, route, 0)
+    p.connect(route, 0, menu, 0)
+    show = p.obj("prepend set", 20, 500, 2, 1)
+    readout = p.msg("", 20, 535, w=620)
+    p.connect(route, 1, show, 0)
+    p.connect(show, 0, readout, 0)
+    size = p.obj("prepend max", 130, 500, 2, 1)
+    p.connect(route, 2, size, 0)
+    p.connect(size, 0, count, 0)
+    cents = p.ui("flonum", 240, 500, 70, 22, 1, 2, ["", "bang"], format=6)
+    p.connect(route, 3, cents, 0)
+    status = p.obj("print tuning", 330, 500, 1, 0)
+    problem = p.obj("print tuning-error", 440, 500, 1, 0)
+    p.connect(route, 4, status, 0)
+    p.connect(route, 5, problem, 0)
+
+    dac = p.ui("ezdac~", 480, 415, 45, 45, 2, 0, [])
+    p.connect(engine, 1, dac, 0)
+    p.connect(engine, 1, dac, 1)
+    return p
+
+
 HAND = {
     "patchers/canon.maxpat": main_patch,
     "patchers/cg.panel.main.maxpat": panel_main,
+    "patchers/cg.panel.tuning.maxpat": panel_tuning,
 }
 
 

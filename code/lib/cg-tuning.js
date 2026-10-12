@@ -1,10 +1,24 @@
 "use strict";
 // Pitch is a float MIDI number: 60 is middle C, 60.5 a quarter-tone above it.
-// The engine never rounds it; Hz is derived from it. M1 adds the scale-system
-// builders (PLAN.md 3.1).
+// The engine never rounds it; Hz is derived from it.
+//
+// A scale system (PLAN.md 3.1) says which pitches exist and how degrees map
+// to them:
+//   name
+//   period_cents   1200 (octave), 1901.955 (tritave), or null: non-repeating
+//   steps_cents    ascending, from 0: one period's steps, or every pitch of a
+//                  non-repeating system (0 is its lowest)
+//   ref            { step, midi, hz }: step `step` sounds at this pitch
+//   mode           optional: the step indices the degrees walk through
+//   ratios         optional: each step as a ratio ("3/2"), or null where a
+//                  step is only known in cents; period_ratio likewise
+// Degrees count through `mode` if there is one, else through every step. In a
+// repeating system degree d is degree (d mod size) in period floor(d / size),
+// so negative degrees go down. A non-repeating system has degrees 0..size-1.
 
 // The reference pitch: A4 = MIDI 69 = 440 Hz unless a scale system says otherwise.
 const A4 = { midi: 69, hz: 440 };
+const TRITAVE = 1200 * Math.log2(3);
 
 function midiToHz(pitch, ref = A4) {
   return ref.hz * Math.pow(2, (pitch - ref.midi) / 12);
@@ -52,10 +66,376 @@ function centsSummary(errors, period = 1200) {
   return { n: errors.length, median, min: sorted[0], max: sorted[sorted.length - 1], periods };
 }
 
+// ---------------------------------------------------------------- ratios
+
+function check(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+// "3/2", "5" or a number such as 1.5 -> the ratio as a number.
+function parseRatio(value) {
+  let ratio = value;
+  if (typeof value !== "number") {
+    const match = /^(\d+)(?:\/(\d+))?$/.exec(String(value).trim());
+    check(match, `not a ratio: "${value}" (use a whole-number ratio such as 3/2)`);
+    ratio = Number(match[1]) / (match[2] === undefined ? 1 : Number(match[2]));
+  }
+  check(Number.isFinite(ratio) && ratio > 0, `not a ratio above 0: "${value}"`);
+  return ratio;
+}
+
+function ratioCents(value) {
+  return 1200 * Math.log2(parseRatio(value));
+}
+
+// A ratio as Scala writes it ("3/2", "2/1"), or null if it isn't one.
+function ratioText(value) {
+  const text = String(value).trim();
+  if (/^\d+\/\d+$/.test(text)) return text;
+  if (/^\d+$/.test(text)) return text + "/1";
+  return null;
+}
+
+// ---------------------------------------------------------------- scale systems
+
+// Checks a system and fills in its reference pitch. Throws on anything that
+// would make degree arithmetic wrong.
+function makeSystem({ name = "untitled", period_cents = null, steps_cents, ref = {}, mode = null,
+  ratios = null, period_ratio = null }) {
+  const steps = Array.from(steps_cents || []);
+  check(steps.length > 0, `${name}: no steps`);
+  check(steps[0] === 0, `${name}: the first step must be 0 cents, got ${steps[0]}`);
+  for (let i = 1; i < steps.length; i++) {
+    check(Number.isFinite(steps[i]) && steps[i] > steps[i - 1],
+      `${name}: steps must ascend, but step ${i} (${steps[i]}) isn't above step ${i - 1} (${steps[i - 1]})`);
+  }
+  const repeating = period_cents !== null;
+  if (repeating) {
+    check(Number.isFinite(period_cents) && period_cents > 0, `${name}: the period must be above 0 cents`);
+    check(steps[steps.length - 1] < period_cents, `${name}: every step must lie below the period`);
+  }
+  let walk = null;
+  if (mode !== null && mode !== undefined && mode.length > 0) {
+    walk = Array.from(mode);
+    walk.forEach((step, i) => {
+      check(Number.isInteger(step) && step >= 0 && step < steps.length,
+        `${name}: mode entry ${step} isn't a step of this system (0-${steps.length - 1})`);
+      check(i === 0 || step > walk[i - 1], `${name}: mode steps must ascend`);
+    });
+  }
+  const refStep = ref.step === undefined ? 0 : ref.step;
+  check(Number.isInteger(refStep), `${name}: the reference step must be a whole number`);
+  check(repeating || (refStep >= 0 && refStep < steps.length), `${name}: the reference step is outside the system`);
+  const midi = ref.midi !== undefined ? ref.midi : ref.hz !== undefined ? hzToMidi(ref.hz) : 60;
+  const hz = ref.hz !== undefined ? ref.hz : midiToHz(midi);
+  check(Number.isFinite(midi) && Number.isFinite(hz) && hz > 0, `${name}: the reference pitch isn't a pitch`);
+  return {
+    name,
+    period_cents: repeating ? period_cents : null,
+    steps_cents: steps,
+    ref: { step: refStep, midi, hz },
+    mode: walk,
+    ratios: ratios ? Array.from(ratios) : null,
+    period_ratio: repeating ? period_ratio : null,
+  };
+}
+
+// The same system with a different mode (none: every step) or reference pitch.
+function withMode(system, mode) {
+  return makeSystem({ ...system, mode: mode && mode.length ? mode : null });
+}
+
+function withRef(system, ref) {
+  return makeSystem({ ...system, ref });
+}
+
+// Degrees per period (or in all, if non-repeating).
+function size(system) {
+  return system.mode ? system.mode.length : system.steps_cents.length;
+}
+
+function stepCents(system, step) {
+  const steps = system.steps_cents;
+  const n = steps.length;
+  if (system.period_cents === null) {
+    check(step >= 0 && step < n, `${system.name}: step ${step} is outside its ${n} pitches`);
+    return steps[step];
+  }
+  const period = Math.floor(step / n);
+  return period * system.period_cents + steps[step - period * n];
+}
+
+function degreeStep(system, degree) {
+  check(Number.isInteger(degree), `a degree must be a whole number, got ${degree}`);
+  const count = size(system);
+  if (system.period_cents === null) {
+    check(degree >= 0 && degree < count, `${system.name}: degree ${degree} is outside its ${count} degrees (0-${count - 1})`);
+    return system.mode ? system.mode[degree] : degree;
+  }
+  if (!system.mode) return degree;
+  const period = Math.floor(degree / count);
+  return system.mode[degree - period * count] + period * system.steps_cents.length;
+}
+
+// Cents of a degree above step 0.
+function degreeCents(system, degree) {
+  return stepCents(system, degreeStep(system, degree));
+}
+
+// Cents of a degree above the reference pitch.
+function centsAboveRef(system, degree) {
+  return degreeCents(system, degree) - stepCents(system, system.ref.step);
+}
+
+function degreeToPitch(system, degree) {
+  return system.ref.midi + centsAboveRef(system, degree) / 100;
+}
+
+function degreeToHz(system, degree) {
+  return system.ref.hz * Math.pow(2, centsAboveRef(system, degree) / 1200);
+}
+
+// The nearest degree to a float MIDI pitch. A pitch exactly halfway between
+// two degrees goes to the lower one. Outside a non-repeating system, the
+// nearest end. error = pitch - the degree's pitch, in cents.
+function quantize(system, pitch) {
+  const target = (pitch - system.ref.midi) * 100 + stepCents(system, system.ref.step); // above step 0
+  const count = size(system);
+  let low = 0;
+  let high = count - 1;
+  if (system.period_cents !== null) {
+    // Degrees period*count .. period*count + count - 1 cover one period from
+    // degree 0's pitch; the nearest is one of them or a neighbour.
+    const period = Math.floor((target - degreeCents(system, 0)) / system.period_cents);
+    low = period * count - 1;
+    high = period * count + count;
+  }
+  let best = low;
+  let bestDistance = Infinity;
+  for (let degree = low; degree <= high; degree++) {
+    const distance = Math.abs(target - degreeCents(system, degree));
+    if (distance < bestDistance) {
+      best = degree;
+      bestDistance = distance;
+    }
+  }
+  const quantized = degreeToPitch(system, best);
+  return { degree: best, pitch: quantized, error: (pitch - quantized) * 100 };
+}
+
+// ---------------------------------------------------------------- builders
+
+const wholeNumber = (value, label) => check(Number.isInteger(value), `${label} must be a whole number, got ${value}`);
+const positive = (value, label) => check(Number.isFinite(value) && value > 0, `${label} must be above 0, got ${value}`);
+
+// `divisions` equal steps per period (in cents).
+function ed(divisions, period, options = {}) {
+  wholeNumber(divisions, "divisions");
+  check(divisions >= 1, `divisions must be at least 1, got ${divisions}`);
+  positive(period, "the period");
+  const steps = [];
+  for (let k = 0; k < divisions; k++) steps.push((k * period) / divisions);
+  return makeSystem({ name: `${divisions} equal steps per ${period.toFixed(3)} c`, ...options,
+    period_cents: period, steps_cents: steps });
+}
+
+function edo(divisions, options = {}) {
+  return ed(divisions, 1200, { name: `${divisions}-EDO`, ...options });
+}
+
+// 13 equal steps to a 3:1 tritave.
+function bohlenPierce(options = {}) {
+  return ed(13, TRITAVE, { name: "Bohlen-Pierce (13-ED3)", ...options });
+}
+
+// Just intonation from ratios. As in a Scala file, the last ratio is the
+// period and 1/1 is implied. The others are sorted.
+function ji(ratios, options = {}) {
+  check(ratios.length >= 1, "ji: give at least the period (e.g. 2/1)");
+  const entries = ratios.map((value) => ({ cents: ratioCents(value), ratio: ratioText(value) }));
+  const period = entries[entries.length - 1];
+  check(period.cents > 0, "ji: the last ratio is the period, and it must be above 1/1");
+  const inner = entries.slice(0, -1).sort((a, b) => a.cents - b.cents);
+  inner.forEach((entry) => check(entry.cents > 0 && entry.cents < period.cents,
+    "ji: every ratio before the last must lie between 1/1 and the period"));
+  return makeSystem({ name: "Just intonation", ...options, period_cents: period.cents,
+    steps_cents: [0, ...inner.map((e) => e.cents)], ratios: ["1/1", ...inner.map((e) => e.ratio)],
+    period_ratio: period.ratio });
+}
+
+function partialRange(low, high) {
+  wholeNumber(low, "the lowest partial");
+  wholeNumber(high, "the highest partial");
+  check(low >= 1 && high > low, `partials must run upwards from 1 or more, got ${low}-${high}`);
+}
+
+// Partials low..high of f0 (Hz). Non-repeating; degree 0 is partial `low`.
+function harmonic(low, high, f0, options = {}) {
+  partialRange(low, high);
+  positive(f0, "the fundamental");
+  const steps = [];
+  const ratios = [];
+  for (let k = low; k <= high; k++) {
+    steps.push(1200 * Math.log2(k / low));
+    ratios.push(`${k}/${low}`);
+  }
+  return makeSystem({ name: `Harmonics ${low}-${high} on ${f0} Hz`, ...options,
+    period_cents: null, steps_cents: steps, ratios, ref: { step: 0, hz: f0 * low } });
+}
+
+// Undertones f0/k for k = high..low, lowest first: degree 0 is f0/high.
+function subharmonic(low, high, f0, options = {}) {
+  partialRange(low, high);
+  positive(f0, "the top frequency");
+  const steps = [];
+  const ratios = [];
+  for (let k = high; k >= low; k--) {
+    steps.push(1200 * Math.log2(high / k));
+    ratios.push(`${high}/${k}`);
+  }
+  return makeSystem({ name: `Undertones ${low}-${high} under ${f0} Hz`, ...options,
+    period_cents: null, steps_cents: steps, ratios, ref: { step: 0, hz: f0 / high } });
+}
+
+// A stretched (s > 1) or compressed (s < 1) spectrum: partial k at f0 * k^s
+// (Murail's "spectral distortion"). s = 1 is the harmonic series.
+function stretched(low, high, f0, s, options = {}) {
+  partialRange(low, high);
+  positive(f0, "the fundamental");
+  positive(s, "the stretch");
+  const steps = [];
+  for (let k = low; k <= high; k++) steps.push(s * 1200 * Math.log2(k / low));
+  return makeSystem({ name: `Spectrum ${low}-${high} on ${f0} Hz, stretch ${s}`, ...options,
+    period_cents: null, steps_cents: steps, ref: { step: 0, hz: f0 * Math.pow(low, s) } });
+}
+
+// Any list of frequencies (Hz): sorted, duplicates dropped. Non-repeating.
+function hzList(frequencies, options = {}) {
+  const sorted = frequencies.map(Number).sort((a, b) => a - b);
+  sorted.forEach((f) => positive(f, "every frequency"));
+  const unique = sorted.filter((f, i) => i === 0 || f - sorted[i - 1] > 1e-9 * f);
+  return makeSystem({ name: `Hz list (${unique.length} pitches)`, ...options, period_cents: null,
+    steps_cents: unique.map((f) => 1200 * Math.log2(f / unique[0])), ref: { step: 0, hz: unique[0] } });
+}
+
+// An FM spectrum: the carrier and its sidebands |c +/- k*m|, k = 1..sidebands.
+function fm(carrier, modulator, sidebands, options = {}) {
+  positive(carrier, "the carrier");
+  positive(modulator, "the modulator");
+  wholeNumber(sidebands, "sidebands");
+  const frequencies = [carrier];
+  for (let k = 1; k <= sidebands; k++) {
+    frequencies.push(carrier + k * modulator, Math.abs(carrier - k * modulator));
+  }
+  return hzList(frequencies.filter((f) => f > 1e-9), {
+    name: `FM ${carrier}:${modulator} Hz, ${sidebands} sidebands`, ...options });
+}
+
+// Maximally even ME(c, d) (Clough and Douthett): d notes spread as evenly as
+// possible over c-EDO, step k = floor((c*k + offset) / d). The result is the
+// c-EDO with that mode, so its chromatic steps stay available.
+function maximallyEven(chromatic, notes, options = {}) {
+  wholeNumber(chromatic, "the chromatic size");
+  wholeNumber(notes, "the number of notes");
+  check(notes >= 1 && notes <= chromatic, `ME(c, d) needs 1 <= d <= c, got ME(${chromatic}, ${notes})`);
+  const offset = options.offset === undefined ? 0 : options.offset;
+  wholeNumber(offset, "the offset");
+  check(offset >= 0 && offset < chromatic, `the offset must be 0-${chromatic - 1}, got ${offset}`);
+  const mode = [];
+  for (let k = 0; k < notes; k++) mode.push(Math.floor((chromatic * k + offset) / notes));
+  const { offset: _unused, ...rest } = options;
+  return edo(chromatic, { name: `ME(${chromatic},${notes})`, ...rest, mode });
+}
+
+// ---------------------------------------------------------------- Scala .scl
+
+// Reads a Scala .scl file (https://www.huygens-fokker.org/scala/scl_format.html):
+// "!" comment lines, a description line, the note count, then one pitch per
+// line. A pitch with a "." is cents; anything else is a ratio ("5" is 5/1).
+// Text after the pitch is ignored. 1/1 is implied and the last pitch is the
+// period. Returns { system, warnings }.
+function parseScl(text, fallbackName = "scale") {
+  const lines = String(text).split(/\r\n|\r|\n/).filter((line) => !line.trimStart().startsWith("!"));
+  check(lines.length >= 2, "not a Scala file: it needs a description line and a note count");
+  const description = lines[0].trim();
+  const countText = lines[1].trim().split(/\s+/)[0];
+  check(/^\d+$/.test(countText), `not a Scala file: the note count is "${lines[1].trim()}"`);
+  const count = Number(countText);
+  check(count >= 1, "a Scala file with no notes has no period");
+  const pitchLines = lines.slice(2).filter((line) => line.trim() !== "");
+  check(pitchLines.length >= count, `the file says ${count} notes but has ${pitchLines.length}`);
+  const warnings = [];
+  if (pitchLines.length > count) warnings.push(`ignored ${pitchLines.length - count} lines after the ${count} notes`);
+
+  const pitches = pitchLines.slice(0, count).map((line, i) => sclPitch(line.trim().split(/\s+/)[0], i + 1));
+  const period = pitches[pitches.length - 1];
+  check(period.cents > 0, "the period (the last pitch) must be above 1/1");
+  const inner = pitches.slice(0, -1);
+  inner.forEach((p) => check(p.cents > 0 && p.cents < period.cents,
+    `pitch ${p.index} (${p.text}) must lie between 1/1 and the period`));
+  const sorted = inner.slice().sort((a, b) => a.cents - b.cents);
+  if (sorted.some((p, i) => p !== inner[i])) warnings.push("the pitches weren't in ascending order, so they were sorted");
+  const system = makeSystem({
+    name: description || fallbackName,
+    period_cents: period.cents,
+    steps_cents: [0, ...sorted.map((p) => p.cents)],
+    ratios: ["1/1", ...sorted.map((p) => p.ratio)],
+    period_ratio: period.ratio,
+  });
+  return { system, warnings };
+}
+
+function sclPitch(token, index) {
+  if (token.includes(".")) {
+    const value = Number(token);
+    check(Number.isFinite(value), `pitch ${index}: "${token}" is not a number of cents`);
+    return { cents: value, ratio: null, text: token, index };
+  }
+  const ratio = ratioText(token);
+  check(ratio !== null, `pitch ${index}: "${token}" is neither cents (with a ".") nor a ratio`);
+  return { cents: ratioCents(ratio), ratio, text: token, index };
+}
+
+// Writes a repeating system as a Scala .scl file: ratios where known, cents
+// (6 decimals) otherwise. The mode isn't part of the format, so it's left out.
+function writeScl(system) {
+  check(system.period_cents !== null,
+    `${system.name}: a non-repeating system can't be a .scl file (Scala repeats the last pitch as the period)`);
+  const pitch = (value, ratio) => (ratio ? ratio : value.toFixed(6));
+  const steps = system.steps_cents;
+  const lines = [`! ${system.name}`, "!", system.name, ` ${steps.length}`, "!"];
+  for (let i = 1; i < steps.length; i++) lines.push(" " + pitch(steps[i], system.ratios && system.ratios[i]));
+  lines.push(" " + pitch(system.period_cents, system.period_ratio));
+  return lines.join("\n") + "\n";
+}
+
 exports.A4 = A4;
+exports.TRITAVE = TRITAVE;
 exports.midiToHz = midiToHz;
 exports.hzToMidi = hzToMidi;
 exports.cents = cents;
 exports.edoPitch = edoPitch;
 exports.foldCents = foldCents;
 exports.centsSummary = centsSummary;
+exports.parseRatio = parseRatio;
+exports.ratioCents = ratioCents;
+exports.makeSystem = makeSystem;
+exports.withMode = withMode;
+exports.withRef = withRef;
+exports.size = size;
+exports.degreeCents = degreeCents;
+exports.degreeToPitch = degreeToPitch;
+exports.degreeToHz = degreeToHz;
+exports.quantize = quantize;
+exports.ed = ed;
+exports.edo = edo;
+exports.bohlenPierce = bohlenPierce;
+exports.ji = ji;
+exports.harmonic = harmonic;
+exports.subharmonic = subharmonic;
+exports.stretched = stretched;
+exports.hzList = hzList;
+exports.fm = fm;
+exports.maximallyEven = maximallyEven;
+exports.parseScl = parseScl;
+exports.writeScl = writeScl;

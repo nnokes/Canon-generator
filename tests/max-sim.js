@@ -12,7 +12,38 @@ const ROOT = path.resolve(__dirname, "..");
 
 // Max calls a script's global functions by message name, except functions
 // marked with .local = 1.
-const MAX_GLOBALS = new Set(["outlet", "post", "error", "Dict", "console"]);
+const MAX_GLOBALS = new Set(["outlet", "post", "error", "Dict", "File", "console"]);
+
+// Stand-in for Max's File, reading only: isopen, position, eof (the length),
+// readline(maxchars) without the line ending, close(). Max's own File is what
+// M1 checks in [v8]; this one reads the real file system for the tests.
+class SimFile {
+  constructor(file, access = "read") {
+    this.isopen = false;
+    this.position = 0;
+    this.eof = 0;
+    if (access !== "read") return;
+    try {
+      this._text = fs.readFileSync(file, "utf8");
+    } catch {
+      return;
+    }
+    this.isopen = true;
+    this.eof = this._text.length;
+  }
+  readline(maxchars) {
+    if (!this.isopen || this.position >= this.eof) return null;
+    let end = this._text.indexOf("\n", this.position);
+    if (end < 0) end = this.eof;
+    const stop = Math.min(end, this.position + maxchars);
+    const line = this._text.slice(this.position, stop);
+    this.position = stop < end ? stop : end + 1;
+    return line;
+  }
+  close() {
+    this.isopen = false;
+  }
+}
 
 // Stand-in for Max's Dict: named dictionaries shared by every script, as in Max.
 const dictionaries = new Map();
@@ -47,6 +78,7 @@ function loadBundle(name) {
     post: (...atoms) => posted.push(atoms.join(" ")),
     error: () => {},
     Dict: SimDict,
+    File: SimFile,
     console,
   };
   vm.createContext(context);

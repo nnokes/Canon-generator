@@ -145,10 +145,24 @@ never rounded inside the engine. Hz is derived from it (`hz = ref.hz · 2^((p �
 **Scale system.** This says which pitches exist and how scale degrees map to them:
 ```js
 { name, period_cents /* 1200, 1901.955 (tritave), or null for non-repeating */,
-  steps_cents: [...],            // one period's steps, or the full list if non-repeating
-  ref: { degree: 0, midi: 62, hz: 293.66 },
-  mode: [0, 5, 8, 13, 18, 23, 26] /* optional subset of step indices */ }
+  steps_cents: [...],            // ascending from 0: one period's steps, or every pitch if non-repeating
+  ref: { step: 0, midi: 62, hz: 293.66 },   // this step sounds at this pitch
+  mode: [0, 5, 8, 13, 18, 23, 26],          // optional: the step indices the degrees walk through
+  ratios: ["1/1", "9/8", ...], period_ratio: "2/1" }   // optional: steps known as ratios
 ```
+- **Degrees vs. steps.** Degrees count through the mode, or through every step if there
+  is none. In a repeating system, degree *d* is degree *d* mod *size* in period
+  ⌊*d* / *size*⌋, so negative degrees go down. A non-repeating system has degrees
+  0 … *size* − 1 only. `ref` anchors a *step*, not a degree, so changing the mode never
+  moves the tuning.
+- **Quantize** gives the nearest degree and the error in cents. A pitch exactly halfway
+  goes to the lower degree, and outside a non-repeating system it goes to the nearest end.
+- **As built in M1** (`code/lib/cg-tuning.js`):
+  - `ME(c, d)` is c-EDO with the ME set as its mode, so the chromatic steps stay available
+    for `absolute` answers.
+  - `.scl` files keep their ratios, so writing one back gives the same ratios.
+  - The starter systems (`code/lib/cg-scales.js`) are built into the bundle.
+
 Builders (M1):
 - **n-EDO**: 12, 19, 22, 24, 31, 53 or 72 equal divisions
 - **just-intonation ratio lists**
@@ -206,7 +220,7 @@ through the same renderer, analyzer and answer finder (§3.6, §3.7).
 D Dorian.
 ```json
 {
-  "system": { "type": "edo", "divisions": 31, "ref": { "degree": 0, "midi": 62 },
+  "system": { "type": "edo", "divisions": 31, "ref": { "step": 0, "midi": 62 },
               "mode": [0, 5, 8, 13, 18, 23, 26] },
   "dux":    { "source": "generate", "length": 16, "rules": "fux-strict", "seed": 7 },
   "voices": [
