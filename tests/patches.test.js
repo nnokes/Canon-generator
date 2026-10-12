@@ -98,6 +98,11 @@ for (const file of files) {
         if (box.maxclass === "newobj" && /^cg\./.test(firstWord(box)) && !patchExists(firstWord(box) + ".maxpat")) {
           problems.push(`${where}: ${label(box)} is not a patch in patchers/`);
         }
+        // [poly~ <voice>] loads its voice patch by bare name too.
+        if (box.maxclass === "newobj" && firstWord(box) === "poly~") {
+          const voice = (box.text || "").split(/\s+/)[1] || "";
+          if (!patchExists(voice + ".maxpat")) problems.push(`${where}: ${label(box)} names a missing voice patch ${voice}`);
+        }
       }
     }
     assert.deepEqual(problems, []);

@@ -576,7 +576,21 @@ function readLines(path) {
   return lines;
 }
 
+// Writes a text file, replacing what was there. Throws if it can't be opened.
+function writeText(path, text) {
+  const file = new File(path, "write", "TEXT");
+  if (!file.isopen) throw new Error("can't write " + path);
+  try {
+    file.eof = 0; // truncate an existing file
+    file.position = 0;
+    file.writestring(text);
+  } finally {
+    file.close();
+  }
+}
+
 exports.readLines = readLines;
+exports.writeText = writeText;
   };
 
   var cache = {};

@@ -31,8 +31,9 @@ renders and plays; M3 judges.
   ±5 cents, and the implied bend range is about 48.
 
 **Status:**
-- Parts A–C (the engine) are done and tested in Node: 70 tests in all.
-- Next: part D, the Max side, then Max session 1.
+- Parts A–D are built and tested in Node: 78 tests in all.
+- **To do: Max session 1** (end of part D).
+- Then parts E and F.
 
 **In M2 / later:**
 
@@ -51,8 +52,8 @@ renders and plays; M3 judges.
   - `index`: which dux note it came from (M3's analysis needs it)
   - `pass`
   - `coda`, for cadence notes
-- [ ] Events into the named dict `cg.events` (M0 spike d showed doubles survive exactly).
-  Moved to part D: the Max wrapper writes it.
+- [x] Events into the named dict `cg.events` (M0 spike d showed doubles survive exactly).
+  The Max wrapper writes it on every render.
 
 ## Part B. Transforms: `cg-transform` (engine): done
 A note is a scale degree plus a cents offset, so off-scale pitches stay exact through
@@ -114,18 +115,63 @@ Specs can also use `groups` with a `start` time each, so canons can follow one a
   - the spiral: each pass transposed by the spiral step
 
 ## Part D. Max, first session: presets play
-- [ ] **Player** (generated, design 1 from M0): `[coll]` + `[delay]` in the scheduler,
-  started through a short `[delay]`. Each event goes to its voice.
-- [ ] **Hz voice bank** `cg.voices~` (generated):
-  - additive voices whose partial list is a parameter (the same list M3's roughness model
-    will use)
-  - each note's envelope is one `[line~]` list, so no note-off scheduling is needed
-  - every gain ramps
-- [ ] **Canon panel** (hand-built):
-  - a preset menu; render, play and stop; tempo
-  - the scale system (reusing `cg.tuning`)
-  - one voice row per voice (a bpatcher): delay, interval + domain, transform, time scale
-- [ ] **Max session 1:** all five presets play, and changing a voice row re-renders.
+- [x] **Wrapper** `code/cg.canon.v8.js`:
+  - presets, tunings, preset, tuning, tempo, render
+  - the voice editor: select, then delay, interval, transform, timescale, register, passes
+  - loadspec and savespec (JSON, through a file dialog)
+
+  A bad edit is refused, and the spec stays as it was. The spec commands are `loadspec`
+  and `savespec`, not `load` and `save`, because `[v8]` calls any `save()` function
+  whenever the patch is saved.
+- [x] **Player** (in the generated `cg.canon.maxpat`; design 1 from M0):
+  - `[coll]` + `[delay]` in the scheduler, started through `[delay 100]`
+  - each `[coll]` row holds the delay to the next note, then the note
+  - notes at the same time have a delay of 0, and the last row's -1 stops the chain
+- [x] **Hz voice bank** `[poly~ cg.voice~ 32]` (generated):
+  - four harmonic partials; their weights are a `partials` message
+  - each note's envelope is one `[line~]` list, so no note-offs
+  - each voice is busy for its note's length, timed by Max
+  - voices are panned across the stereo field, equal power
+  - `[poly~]`'s `note` message strips the word "note", so a voice gets notes as plain lists
+- [x] **Canon panel** `cg.panel.canon.maxpat` (hand-built, created once):
+  - preset and tuning menus, play/stop, tempo, volume
+  - load a spec / save the spec
+  - the voice editor
+  - **Changed from the plan:** one editor where you pick the voice by number, instead of
+    one bpatcher row per voice. The presets have up to 19 voices, and one editor is simpler
+    to wire and to use.
+- [x] The patch lint now also checks that `[poly~ <voice>]` names a patch in `patchers/`.
+- [ ] **Max session 1** (below)
+
+### Max session 1
+`git pull`, then open **`patchers/cg.panel.canon.maxpat`**. The Max window should print
+`canon: 4-voice round (Frere Jacques): 4 voices, 256 notes, 88 beats at 100 bpm (53 s)`.
+
+1. Turn audio on (the speaker), click **play**: the round, its four voices entering every
+   two bars, spread left to right. Click **stop**: everything fades out.
+2. **Every preset:** pick it, play at least 30 s, then stop. Listen for:
+
+   | Preset | What to hear |
+   |---|---|
+   | round | entries every 2 bars, each voice twice through |
+   | double canon | 5 voices (2 high, 3 low); after the canon, a cadence closing on D |
+   | prolation 1:2:4:8 | the same descending line at four speeds, the fastest highest |
+   | Goldberg ladder | a 2-voice canon every 4 bars, at the unison, then the second, ... the ninth, over the ground bass |
+   | 31-EDO spiral | the canon rising a whole tone each pass. The 7th pass starts 38.7 cents short of the octave above the first. |
+3. **Voice editor:** on the round, set voice to 1. Voices count from 0, so that's the one
+   named "voice 2". Then:
+   - set transform to I: that voice now plays the round upside down
+   - set time scale to 2: it plays twice as slowly
+   - type 0 into time scale: `canon-error: time scale must be above 0`, and nothing
+     changes
+4. **Tuning menu:** play the round in "31-EDO D Dorian" or "Just major (5-limit)". Then try
+   plain "31-EDO": the presets' degrees then fall on 31-EDO's small steps, so the melody
+   shrinks.
+5. **Save and load:** "save the spec…" as `test.json` anywhere, pick another preset, then
+   "load a spec…" with `test.json`. It should come back as saved. This is the first file
+   *write* from `[v8]`.
+6. Paste anything from `canon-error`, and note anything that sounds wrong: clicks, notes
+   cut short, timing, voices missing.
 
 ## Part E. Your melody: dux sources (engine + Max)
 - [ ] A list, and a seeded random walk

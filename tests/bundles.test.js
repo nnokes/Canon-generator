@@ -159,3 +159,102 @@ test("cg.tuning: pitch readings against the held note, summarized every 10", () 
   assert.ok(Math.abs(median - 0.5) < 1e-9, `median ${median}`);
   assert.deepEqual(bundle.send("measuredhz", 0), [], "no pitch: no reply");
 });
+
+// ---------------------------------------------------------------- cg.canon (M2)
+
+const canonEngine = require("cg-canon");
+const library = require("cg-presets");
+const { SimDict } = require("./max-sim");
+const rows = (out) => select(out, "coll").filter((r) => r[0] !== "clear");
+
+test("cg.canon exposes exactly its documented messages", () => {
+  assert.deepEqual(loadBundle("cg.canon").handlers(), [
+    "delay", "info", "interval", "loadspec", "passes", "preset", "presets", "register", "render", "savespec",
+    "select", "tempo", "timescale", "transform", "tuning", "tunings",
+  ]);
+});
+
+test("cg.canon: the menus, then a preset fills the player's queue", () => {
+  const bundle = loadBundle("cg.canon");
+  assert.deepEqual(select(bundle.send("presets"), "menu").slice(1), library.names().map((n) => ["append", n]));
+  assert.equal(select(bundle.send("tunings"), "tmenu").length, 1 + scales.count);
+
+  const out = bundle.send("preset", 0);
+  const expected = canonEngine.render(library.preset(0));
+  assert.deepEqual(select(out, "coll")[0], ["clear"]);
+  const queue = rows(out);
+  assert.equal(queue.length, expected.events.length);
+  // Row i: index, ms to the next note, Hz, gain L, gain R, total ms, envelope pairs.
+  const ms = 60000 / expected.tempo;
+  let clock = 0;
+  queue.forEach(([i, delta, hz, gl, gr, total, ...envelope], k) => {
+    const e = expected.events[k];
+    assert.equal(i, k);
+    assert.ok(Math.abs(clock - e.t * ms) < 1e-6, `row ${k} starts at its time`);
+    assert.ok(Math.abs(hz - tuning.midiToHz(e.pitch)) < 1e-9);
+    assert.ok(Math.abs(gl * gl + gr * gr - 1) < 1e-12, "equal-power pan");
+    assert.ok(Math.abs(total - e.dur * ms) < 1e-9);
+    assert.equal(envelope.length, 6);
+    assert.ok(Math.abs(envelope[1] + envelope[3] + envelope[5] - total) < 1e-9, "the envelope lasts the note");
+    clock += delta;
+  });
+  assert.equal(queue.at(-1)[1], -1, "the last row stops the chain");
+  assert.deepEqual(select(out, "bpm"), [[100]]);
+  assert.deepEqual(select(out, "editor"), [[0, "voice 1", 0, 0, 0, 1, 0, 2]]);
+  assert.match(select(out, "status")[0].join(" "), /4 voices, 256 notes, 88 beats at 100 bpm/);
+  // The events are in the named dict too, for whatever else reads them.
+  assert.equal(new SimDict("cg.events").get("events").length, expected.events.length);
+});
+
+test("cg.canon: the voice editor changes one voice and re-renders; a bad edit changes nothing", () => {
+  const bundle = loadBundle("cg.canon");
+  bundle.send("preset", 0);
+  assert.deepEqual(select(bundle.send("select", 1), "editor"), [[1, "voice 2", 8, 0, 0, 1, 0, 2]]);
+  const before = rows(bundle.send("render"));
+  // Voice 2 inverted around its first note (C): its D becomes a B.
+  const inverted = rows(bundle.send("transform", 1));
+  assert.deepEqual(select(bundle.send("select", 1), "editor")[0].slice(4, 5), [1]);
+  assert.notDeepEqual(inverted, before);
+  const spec = library.preset(0);
+  spec.voices[1].transform = "I";
+  assert.equal(inverted.length, canonEngine.render(spec).events.length);
+  // A time scale of 0 is refused, and the queue stays as it was.
+  const refused = bundle.send("timescale", 0);
+  assert.deepEqual(errors(refused), ["time scale must be above 0, got 0"]);
+  assert.deepEqual(rows(refused), []);
+  assert.deepEqual(rows(bundle.send("render")), inverted);
+  // Other fields.
+  for (const [message, value] of [["delay", 4], ["interval", 2], ["timescale", 2], ["register", -1], ["passes", 1]]) {
+    assert.deepEqual(errors(bundle.send(message, value)), [], message);
+  }
+  assert.deepEqual(select(bundle.send("select", 1), "editor"), [[1, "voice 2", 4, 2, 1, 2, -1, 1]]);
+  assert.match(errors(bundle.send("select", 9))[0], /no canon voice 9/);
+});
+
+test("cg.canon: the tuning menu plays the canon in another system; tempo rescales the queue", () => {
+  const bundle = loadBundle("cg.canon");
+  const twelve = rows(bundle.send("preset", 0));
+  const thirtyOne = rows(bundle.send("tuning", 4)); // 31-EDO, every step
+  assert.notDeepEqual(thirtyOne.map((r) => r[2]), twelve.map((r) => r[2]));
+  assert.ok(Math.abs(thirtyOne[1][2] - tuning.midiToHz(60 + 12 / 31)) < 1e-9, "degree 1 is one 31-EDO step");
+  const faster = rows(bundle.send("tempo", 200));
+  assert.ok(Math.abs(faster[0][1] - thirtyOne[0][1] / 2) < 1e-9, "twice the tempo, half the delay");
+  assert.match(errors(bundle.send("tuning", 99))[0], /no starter system 99/);
+});
+
+test("cg.canon: save then load gives the same canon", () => {
+  const os = require("os");
+  const fs = require("fs");
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "cg-spec-")), "my canon.json");
+  const bundle = loadBundle("cg.canon");
+  bundle.send("preset", 4);
+  bundle.send("select", 1);
+  bundle.send("delay", 3);
+  const edited = rows(bundle.send("render"));
+  assert.deepEqual(select(bundle.send("savespec", file), "status"), [["saved", file]]);
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).voices[1].delay, 3);
+  bundle.send("preset", 0);
+  assert.deepEqual(rows(bundle.send("loadspec", file)), edited);
+  fs.rmSync(path.dirname(file), { recursive: true });
+  assert.match(errors(bundle.send("loadspec", file))[0], /can't open/);
+});

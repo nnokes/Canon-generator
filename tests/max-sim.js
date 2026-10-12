@@ -14,15 +14,21 @@ const ROOT = path.resolve(__dirname, "..");
 // marked with .local = 1.
 const MAX_GLOBALS = new Set(["outlet", "post", "error", "Dict", "File", "console"]);
 
-// Stand-in for Max's File, reading only: isopen, position, eof (the length),
-// readline(maxchars) without the line ending, close(). Max's own File is what
-// M1 checks in [v8]; this one reads the real file system for the tests.
+// Stand-in for Max's File: isopen, position, eof (the length; setting it
+// truncates), readline(maxchars) without the line ending, writestring, close().
+// Max's own File is what M1 checked in [v8]; this one uses the real file system.
 class SimFile {
   constructor(file, access = "read") {
     this.isopen = false;
     this.position = 0;
     this.eof = 0;
-    if (access !== "read") return;
+    this._file = file;
+    this._access = access;
+    if (access === "write") {
+      this._text = "";
+      this.isopen = true;
+      return;
+    }
     try {
       this._text = fs.readFileSync(file, "utf8");
     } catch {
@@ -30,6 +36,11 @@ class SimFile {
     }
     this.isopen = true;
     this.eof = this._text.length;
+  }
+  writestring(text) {
+    this._text = this._text.slice(0, this.position) + text;
+    this.position = this._text.length;
+    this.eof = this.position;
   }
   readline(maxchars) {
     if (!this.isopen || this.position >= this.eof) return null;
@@ -41,6 +52,7 @@ class SimFile {
     return line;
   }
   close() {
+    if (this.isopen && this._access === "write") fs.writeFileSync(this._file, this._text.slice(0, this.eof));
     this.isopen = false;
   }
 }

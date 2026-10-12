@@ -204,9 +204,195 @@ def tuning():
     return p
 
 
+def voice():
+    """cg.voice~ (M2): one voice of the [poly~ cg.voice~] bank. Four harmonic
+    partials whose weights are a parameter, an envelope that is one [line~]
+    list, and a stereo gain pair. Messages arrive through [in 1] ([poly~]'s "note"
+    message gives the first free voice the rest of the message, without "note"):
+      <hz> <gain L> <gain R> <total ms> <envelope pairs...>   a note
+      partials <w1> <w2> <w3> <w4>
+      stop
+    It marks itself busy for the note's length, timed by Max (not JS)."""
+    p = Patch(rect=(120, 120, 760, 560))
+    p.note(GENERATED_NOTE, 20, 10, 700, 1)
+    p.note("cg.voice~: one voice of the canon's [poly~] voice bank. A list 'hz gainL gainR totalms envelope...' "
+           "plays a note ([poly~] strips the word 'note'); 'partials w1 w2 w3 w4' sets the weights of partials 1-4; "
+           "'stop' fades out.", 20, 40, 700, 2)
+    inp = p.obj("in 1", 20, 85, 0, 1)
+    route = p.obj("route partials stop", 20, 115, 2, 3)
+    p.connect(inp, 0, route, 0)
+
+    # A note: busy now; split the head (hz, gains, length) from the envelope.
+    order = p.obj("t l b", 20, 150, 1, 2, ["", "bang"])
+    busy_on = p.msg("1", 120, 180)
+    voice_state = p.obj("thispoly~", 120, 470, 1, 2, ["int", "int"])
+    head = p.obj("zl slice 4", 20, 180, 2, 2)
+    fields = p.obj("unpack f f f f", 20, 210, 1, 4, ["float", "float", "float", "float"])
+    env = p.obj("line~", 330, 210, 2, 2, ["signal", "bang"])
+    p.connect(route, 2, order, 0)
+    p.connect(order, 1, busy_on, 0)
+    p.connect(busy_on, 0, voice_state, 0)
+    p.connect(order, 0, head, 0)
+    p.connect(head, 0, fields, 0)
+    p.connect(head, 1, env, 0)
+
+    # Free again once the note is over.
+    free_after = p.obj("delay", 230, 410, 2, 1, ["bang"])
+    busy_off = p.msg("0", 230, 440)
+    p.connect(fields, 3, free_after, 0)
+    p.connect(free_after, 0, busy_off, 0)
+    p.connect(busy_off, 0, voice_state, 0)
+
+    # Partials 1-4 of the note's frequency, weighted (defaults sum to 1).
+    split = p.obj("t f f f f", 20, 245, 1, 4, ["float", "float", "float", "float"])
+    p.connect(fields, 0, split, 0)
+    weights = p.obj("unpack f f f f", 440, 115, 1, 4, ["float", "float", "float", "float"])
+    defaults = p.msg("0.48 0.24 0.16 0.12", 560, 85)
+    start = p.obj("loadbang", 440, 85, 1, 1, ["bang"])
+    p.connect(route, 0, weights, 0)
+    p.connect(start, 0, defaults, 0)
+    p.connect(defaults, 0, weights, 0)
+    partials = []
+    for k in range(4):
+        x = 20 + 110 * k
+        if k == 0:
+            src = split
+            src_outlet = 3
+        else:
+            src = p.obj(f"* {k + 1}.", x, 275, 2, 1, ["float"])
+            p.connect(split, 3 - k, src, 0)
+            src_outlet = 0
+        osc = p.obj("cycle~", x, 305, 2, 1, ["signal"])
+        p.connect(src, src_outlet, osc, 0)
+        weight = p.obj(f"*~ {[0.48, 0.24, 0.16, 0.12][k]}", x, 335, 2, 1, ["signal"])
+        p.connect(osc, 0, weight, 0)
+        p.connect(weights, k, weight, 1)
+        partials.append(weight)
+    sum1 = p.obj("+~", 20, 365, 2, 1, ["signal"])
+    sum2 = p.obj("+~", 240, 365, 2, 1, ["signal"])
+    total = p.obj("+~", 20, 395, 2, 1, ["signal"])
+    p.connect(partials[0], 0, sum1, 0)
+    p.connect(partials[1], 0, sum1, 1)
+    p.connect(partials[2], 0, sum2, 0)
+    p.connect(partials[3], 0, sum2, 1)
+    p.connect(sum1, 0, total, 0)
+    p.connect(sum2, 0, total, 1)
+
+    # Envelope, then the stereo gains.
+    shaped = p.obj("*~", 20, 425, 2, 1, ["signal"])
+    p.connect(total, 0, shaped, 0)
+    p.connect(env, 0, shaped, 1)
+    left = p.obj("*~", 20, 455, 2, 1, ["signal"])
+    right = p.obj("*~", 70, 455, 2, 1, ["signal"])
+    p.connect(shaped, 0, left, 0)
+    p.connect(shaped, 0, right, 0)
+    p.connect(fields, 1, left, 1)
+    p.connect(fields, 2, right, 1)
+    out_left = p.obj("out~ 1", 20, 495, 1, 0)
+    out_right = p.obj("out~ 2", 90, 495, 1, 0)
+    p.connect(left, 0, out_left, 0)
+    p.connect(right, 0, out_right, 0)
+
+    # stop: fade out, cancel the busy timer, free the voice.
+    halt = p.obj("t b b", 560, 150, 1, 2, ["bang", "bang"])
+    fade = p.msg("0 30", 560, 180)
+    cancel = p.msg("stop", 640, 180)
+    p.connect(route, 1, halt, 0)
+    p.connect(halt, 1, fade, 0)
+    p.connect(fade, 0, env, 0)
+    p.connect(halt, 0, cancel, 0)
+    p.connect(cancel, 0, free_after, 0)
+    p.connect(halt, 0, busy_off, 0)
+    return p
+
+
+def canon():
+    """cg.canon (M2): the renderer, its player and the voice bank. Inlet:
+    messages (see code/cg.canon.v8.js), plus play and stop. Outlet 0: the
+    engine's other messages (menu, tmenu, bpm, editor, status, error).
+    Outlets 1 and 2: left and right audio."""
+    p = Patch(rect=(80, 80, 760, 600))
+    p.note(GENERATED_NOTE, 20, 10, 700, 1)
+    p.note("cg.canon: renders a canon spec and plays it. In: preset, tuning, tempo, render, select and the editor "
+           "fields, loadspec, savespec, play, stop. The script fills [coll] with one row per note (the delay to the next "
+           "note first); Max plays it in the scheduler (PLAN 4.2, design 1).", 480, 440, 260, 7)
+    inl = p.obj("route play stop", 20, 115, 2, 3)
+    inlet = p.inlet(20, 85, "messages: preset, tuning, tempo, render, select, edits, loadspec, savespec, play, stop", 0)
+    p.connect(inlet, 0, inl, 0)
+    load = p.obj("loadbang", 430, 85, 1, 1, ["bang"])
+    order = p.obj("t b b b", 430, 115, 1, 3, ["bang", "bang", "bang"])
+    fill = p.msg("presets", 600, 145)
+    fill_tunings = p.msg("tunings", 520, 145)
+    first = p.msg("preset 0", 430, 145)
+    v8 = p.obj("v8 cg.canon.bundle.js", 230, 185, 1, 1)
+    p.connect(load, 0, order, 0)
+    p.connect(order, 2, fill, 0)
+    p.connect(order, 1, fill_tunings, 0)
+    p.connect(order, 0, first, 0)
+    for m in (fill, fill_tunings, first):
+        p.connect(m, 0, v8, 0)
+    p.connect(inl, 2, v8, 0)
+    route = p.obj("route coll", 230, 220, 2, 2)
+    p.connect(v8, 0, route, 0)
+
+    # The player: index -> [coll] row -> play the note, wait the delay, next index.
+    play = p.obj("t b b", 20, 150, 1, 2, ["bang", "bang"])
+    zero = p.msg("0", 110, 180)
+    start = p.obj("delay 100", 20, 180, 2, 1, ["bang"])
+    index = p.obj("i", 20, 260, 2, 1, ["int"])
+    step = p.obj("t i i", 20, 290, 1, 2, ["int", "int"])
+    nxt = p.obj("+ 1", 110, 290, 2, 1, ["int"])
+    queue = p.obj("coll", 230, 320, 1, 4, ["", "", "", "bang"])
+    head = p.obj("zl slice 1", 230, 355, 2, 2)
+    gate = p.obj("if $f1 >= 0. then $f1", 20, 390, 1, 1)
+    wait = p.obj("delay", 20, 420, 2, 1, ["bang"])
+    note = p.obj("prepend note", 330, 390, 2, 1)
+    bank = p.obj("poly~ cg.voice~ 32", 330, 420, 1, 2, ["signal", "signal"])
+    p.connect(inl, 0, play, 0)
+    p.connect(play, 1, zero, 0)
+    p.connect(zero, 0, index, 1)
+    p.connect(play, 0, start, 0)
+    p.connect(start, 0, index, 0)
+    p.connect(index, 0, step, 0)
+    p.connect(step, 1, nxt, 0)
+    p.connect(nxt, 0, index, 1)
+    p.connect(step, 0, queue, 0)
+    p.connect(route, 0, queue, 0)
+    p.connect(queue, 0, head, 0)
+    p.connect(head, 0, gate, 0)
+    p.connect(gate, 0, wait, 0)
+    p.connect(wait, 0, index, 0)
+    p.connect(head, 1, note, 0)
+    p.connect(note, 0, bank, 0)
+
+    # stop: halt the chain and fade every voice.
+    halt = p.obj("t b b", 160, 115, 1, 2, ["bang", "bang"])
+    stop_chain = p.msg("stop", 160, 220)
+    stop_voices = p.msg("target 0, stop", 470, 390)
+    p.connect(inl, 1, halt, 0)
+    p.connect(halt, 1, stop_chain, 0)
+    p.connect(stop_chain, 0, start, 0)
+    p.connect(stop_chain, 0, wait, 0)
+    p.connect(halt, 0, stop_voices, 0)
+    p.connect(stop_voices, 0, bank, 0)
+
+    # Outlets left to right: messages, left audio, right audio.
+    out_messages = p.outlet(230, 520, "menu, tmenu, bpm, editor, status, error", 0)
+    out_left = p.outlet(330, 520, "left audio", 1)
+    out_right = p.outlet(430, 520, "right audio", 2)
+    p.connect(route, 1, out_messages, 0)
+    p.connect(bank, 0, out_left, 0)
+    p.connect(bank, 1, out_right, 0)
+    p.note("A number into [delay]'s left inlet sets the time and starts it. Events at the same time have a "
+           "delay of 0. The last row's delay is -1, which [if] stops.", 20, 455, 280, 3)
+    return p
+
+
 GENERATED = {
     "patchers/cg.engine.maxpat": engine,
     "patchers/cg.tuning.maxpat": tuning,
+    "patchers/cg.voice~.maxpat": voice,
+    "patchers/cg.canon.maxpat": canon,
 }
 
 
@@ -316,10 +502,119 @@ def panel_tuning():
     return p
 
 
+def panel_canon():
+    """The M2 canon panel: pick a preset and a tuning, play it, and edit one
+    voice at a time."""
+    p = Patch(rect=(60, 60, 820, 660))
+    p.note(HAND_NOTE, 20, 10, 780, 2)
+    p.note("CANONS (M2). Turn audio on (speaker). Pick a preset, then play. The tuning menu plays the same "
+           "canon in another scale system. The voice editor changes one voice at a time; every change "
+           "re-renders (stop first if you don't want the change mid-play).", 20, 55, 780, 2)
+    engine = p.obj("cg.canon", 20, 440, 1, 3, ["", "signal", "signal"])
+
+    p.comment("preset:", 20, 100)
+    presets = p.ui("umenu", 80, 100, 360, 22, 1, 3, ["int", "", ""])
+    pick = p.obj("prepend preset", 460, 100, 2, 1)
+    p.connect(presets, 0, pick, 0)
+    p.connect(pick, 0, engine, 0)
+    p.comment("tuning:", 20, 130)
+    tunings = p.ui("umenu", 80, 130, 360, 22, 1, 3, ["int", "", ""])
+    retune = p.obj("prepend tuning", 460, 130, 2, 1)
+    p.connect(tunings, 0, retune, 0)
+    p.connect(retune, 0, engine, 0)
+
+    play = p.msg("play", 20, 165)
+    stop = p.msg("stop", 70, 165)
+    p.connect(play, 0, engine, 0)
+    p.connect(stop, 0, engine, 0)
+    p.comment("tempo:", 130, 165)
+    tempo = p.ui("number", 180, 165, 50, 22, 1, 2, ["", "bang"])
+    set_tempo = p.obj("prepend tempo", 240, 165, 2, 1)
+    p.connect(tempo, 0, set_tempo, 0)
+    p.connect(set_tempo, 0, engine, 0)
+    p.comment("volume:", 360, 165)
+    volume = p.ui("flonum", 420, 165, 50, 22, 1, 2, ["", "bang"], format=6)
+
+    load_button = p.ui("button", 20, 200, 22, 22, 1, 1, ["bang"])
+    p.comment("load a spec...", 46, 201)
+    dialog = p.obj("opendialog", 150, 200, 1, 2, ["", "bang"])
+    load = p.obj("prepend loadspec", 250, 200, 2, 1)
+    p.connect(load_button, 0, dialog, 0)
+    p.connect(dialog, 0, load, 0)
+    p.connect(load, 0, engine, 0)
+    save_button = p.ui("button", 360, 200, 22, 22, 1, 1, ["bang"])
+    p.comment("save the spec...", 386, 201)
+    save_dialog = p.obj("savedialog", 500, 200, 1, 2, ["", "bang"])
+    save = p.obj("prepend savespec", 600, 200, 2, 1)
+    p.connect(save_button, 0, save_dialog, 0)
+    p.connect(save_dialog, 0, save, 0)
+    p.connect(save, 0, engine, 0)
+
+    # The voice editor: pick a voice, then change its fields.
+    p.comment("VOICE EDITOR (canon voices; free voices are edited in the spec file)", 20, 245)
+    labels = ["voice", "name", "delay", "interval", "transform", "time scale", "register", "passes"]
+    xs = [20, 80, 240, 310, 380, 460, 540, 610]
+    for label, x in zip(labels, xs):
+        p.comment(label, x, 268)
+    boxes = [
+        p.ui("number", 20, 290, 50, 22, 1, 2, ["", "bang"]),
+        p.msg("", 80, 290, w=150),
+        p.ui("flonum", 240, 290, 60, 22, 1, 2, ["", "bang"], format=6),
+        p.ui("number", 310, 290, 60, 22, 1, 2, ["", "bang"]),
+        p.ui("umenu", 380, 290, 70, 22, 1, 3, ["int", "", ""], items=["P", ",", "I", ",", "R", ",", "RI"]),
+        p.ui("flonum", 460, 290, 70, 22, 1, 2, ["", "bang"], format=6),
+        p.ui("number", 540, 290, 60, 22, 1, 2, ["", "bang"]),
+        p.ui("number", 610, 290, 60, 22, 1, 2, ["", "bang"]),
+    ]
+    messages = ["select", None, "delay", "interval", "transform", "timescale", "register", "passes"]
+    for box, message, x in zip(boxes, messages, xs):
+        if message is None:
+            continue
+        send = p.obj(f"prepend {message}", x, 325 + 25 * (xs.index(x) % 2), 2, 1)
+        p.connect(box, 0, send, 0)
+        p.connect(send, 0, engine, 0)
+
+    # What the engine says: menus, the tempo, the editor's fields, the Max window.
+    route = p.obj("route menu tmenu bpm editor status error", 20, 480, 2, 7)
+    p.connect(engine, 0, route, 0)
+    p.connect(route, 0, presets, 0)
+    p.connect(route, 1, tunings, 0)
+    show_tempo = p.obj("prepend set", 130, 515, 2, 1)
+    p.connect(route, 2, show_tempo, 0)
+    p.connect(show_tempo, 0, tempo, 0)
+    fields = p.obj("unpack i s f i i f i i", 240, 515, 1, 8, ["int", "", "float", "int", "int", "float", "int", "int"])
+    p.connect(route, 3, fields, 0)
+    for k, (box, x) in enumerate(zip(boxes, xs)):
+        show = p.obj("prepend set", x, 560 + 25 * (k % 2), 2, 1)
+        p.connect(fields, k, show, 0)
+        p.connect(show, 0, box, 0)
+    status = p.obj("print canon", 380, 480, 1, 0)
+    problem = p.obj("print canon-error", 480, 480, 1, 0)
+    p.connect(route, 4, status, 0)
+    p.connect(route, 5, problem, 0)
+
+    # Audio: the volume scales both sides.
+    left = p.obj("*~ 0.7", 600, 440, 2, 1, ["signal"])
+    right = p.obj("*~ 0.7", 660, 440, 2, 1, ["signal"])
+    p.connect(engine, 1, left, 0)
+    p.connect(engine, 2, right, 0)
+    p.connect(volume, 0, left, 1)
+    p.connect(volume, 0, right, 1)
+    dac = p.ui("ezdac~", 620, 490, 45, 45, 2, 0, [])
+    p.connect(left, 0, dac, 0)
+    p.connect(right, 0, dac, 1)
+    start = p.obj("loadbang", 600, 380, 1, 1, ["bang"])
+    level = p.msg("0.7", 600, 410)
+    p.connect(start, 0, level, 0)
+    p.connect(level, 0, volume, 0)
+    return p
+
+
 HAND = {
     "patchers/canon.maxpat": main_patch,
     "patchers/cg.panel.main.maxpat": panel_main,
     "patchers/cg.panel.tuning.maxpat": panel_tuning,
+    "patchers/cg.panel.canon.maxpat": panel_canon,
 }
 
 
