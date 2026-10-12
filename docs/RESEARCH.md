@@ -815,13 +815,15 @@ and where centricity comes from.
   - `abl.dsp.*` oscillators and filters as voice-bank building blocks for the Hz path
   - `abl.device.drift~` as an MPE target *inside* Max, so the MPE path can be tested and
     used without an external synth
-- **Open question, answered by M0 spike (c):** does the Max object honour per-channel bend
-  and our ±48 RPN?
+- **Open question, still open after M0 spike (c):** does the Max object honour per-channel
+  bend and our ±48 RPN?
   - The first run sent the right bytes, but `fzero~` jumped octaves on Drift's default
     sound.
   - The highest reading (+6 cents) leans towards ±48. A ±2 range would read about +48 cents
     on a quarter-tone request.
-  - Re-run with octave folding and one oscillator.
+  - The second run, with octave folding and one oscillator (`@osc2enable 0`), gave no pitch
+    readings at all. Drift may go silent with its second oscillator off; untested.
+  - The MPE pitch check moved to M2, on an external MPE synth or a Live 12 instrument.
 - **Links:**
   - [abl.device.drift~ reference](https://docs.cycling74.com/reference/abl.device.drift~)
   - [Max 9.0.0 release notes](https://cycling74.com/releases/max/9.0.0)

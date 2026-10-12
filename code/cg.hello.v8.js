@@ -1,4 +1,4 @@
-// [v8] wrapper for the M0 "hello" spike. Glue only: the logic is in code/lib.
+// [v8] wrapper for the "hello" smoke test (M0). Glue only: the logic is in code/lib.
 // Patches load the bundled copy, patchers/cg.hello.bundle.js (npm run build).
 //
 // Messages:  bang  -> hello with seed 1

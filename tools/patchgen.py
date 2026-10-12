@@ -6,7 +6,8 @@ a, PLAN.md 2.2). So every patch, abstraction and bundle has a bare name.
 
 Patch authoring is hybrid (PLAN.md 4.4):
 
-  GENERATED  wiring-heavy abstractions and the M0 spike patches. This script is
+  GENERATED  wiring-heavy abstractions (M0's spike patches were too, until M0
+             closed; they're in git history). This script is
              their master copy: change them here, run it, commit both. A change
              made in Max is lost the next time this runs. CI runs --check.
   HAND       the main patch and the UI panels. --init creates each one only if
@@ -136,7 +137,7 @@ class Patch:
 # ---------------------------------------------------------------- generated
 
 def engine():
-    """cg.engine: the engine's [v8] wrappers. M0 holds only hello."""
+    """cg.engine: the engine's [v8] wrappers. So far only hello."""
     p = Patch(rect=(120, 120, 520, 300))
     p.note(GENERATED_NOTE, 20, 10, 470, 2)
     p.comment("cg.engine: hello -> hello <name> <version> seed <n> check <a b c d> note <midi> <hz>", 20, 45)
@@ -150,215 +151,8 @@ def engine():
     return p
 
 
-def spike_paths():
-    """M0 spike (a), now a check of the flat layout. The first run showed that on
-    a fresh clone Max finds files only in the folder of the patch you open: not
-    in subfolders, not by relative path. So everything Max loads lives in
-    patchers/, and every row here names a file in this same folder."""
-    p = Patch(rect=(60, 60, 900, 520))
-    p.note(GENERATED_NOTE, 20, 10, 840, 1)
-    p.note("SPIKE (a) FLAT LAYOUT. Open this patch from a fresh clone with Max's File Preferences untouched. "
-           "Click each message box: each row should print to the Max window. Finding from the first run: "
-           "Max did not find scripts or patches in subfolders of patchers/, nor by relative path, so "
-           "everything Max loads sits in patchers/ itself (PLAN.md 2.2).", 20, 35, 840, 3)
-
-    p.comment("1  [v8] script by bare name", 20, 110, w=400)
-    bang = p.msg("bang", 20, 135)
-    v8 = p.obj("v8 cg.hello.bundle.js", 20, 165, 1, 1)
-    prt1 = p.obj("print a1-script", 20, 200, 1, 0)
-    p.connect(bang, 0, v8, 0)
-    p.connect(v8, 0, prt1, 0)
-
-    p.comment("2  abstraction by bare name", 20, 250, w=400)
-    msg2 = p.msg("hello", 20, 275)
-    abst = p.obj("cg.engine", 20, 305, 1, 1)
-    prt2 = p.obj("print a2-abstraction", 20, 340, 1, 0)
-    p.connect(msg2, 0, abst, 0)
-    p.connect(abst, 0, prt2, 0)
-
-    x = 470
-    p.comment("3  bpatcher by bare name", x, 110, w=400)
-    msg3 = p.msg("hello", x, 135)
-    bp = p.bpatcher("cg.engine.maxpat", x, 165, 380, 140, 1, 1)
-    prt3 = p.obj("print a3-bpatcher", x, 315, 1, 0)
-    p.connect(msg3, 0, bp, 0)
-    p.connect(bp, 0, prt3, 0)
-    return p
-
-
-def spike_player():
-    """M0 spike (b): a Max-native player walks a queue of irrational onset
-    times (a sqrt(2):1 tempo canon) with [delay] in the scheduler thread, and
-    reports each onset's [cpuclock] time so the script can measure jitter."""
-    p = Patch(rect=(60, 60, 900, 640))
-    p.note(GENERATED_NOTE, 20, 10, 840, 1)
-    p.note("SPIKE (b) PLAYER JITTER. Turn on Overdrive (Options menu). Click 'playerload 100' (200 onsets of "
-           "a sqrt(2):1 tempo canon, ~45 s), then 'go'. player-status shows 'playing', then progress every 50 "
-           "onsets; after the last onset player-stats prints: count, offset (constant start latency), jitter "
-           "(largest deviation from it: pass if <= 2 ms), sd, drift (all ms).",
-           20, 35, 840, 4)
-
-    load = p.msg("playerload 100", 20, 110)
-    v8 = p.obj("v8 cg.spike.bundle.js", 20, 150, 1, 1)
-    route = p.obj("route coll stats status", 20, 190, 2, 4)
-    stats = p.obj("print player-stats", 160, 230, 1, 0)
-    status = p.obj("print player-status", 300, 230, 1, 0)
-    p.connect(load, 0, v8, 0)
-    p.connect(v8, 0, route, 0)
-    p.connect(route, 1, stats, 0)
-    p.connect(route, 2, status, 0)
-
-    # The queue: row i = delay (ms) to the next onset, -1 after the last.
-    coll = p.obj("coll cg.queue", 20, 430, 1, 4, ["", "", "", "bang"])
-    p.connect(route, 0, coll, 0)
-
-    # The chain: go -> index 0 -> [t i i i b] -> clock, log, next index, lookup -> [delay] -> next.
-    go = p.msg("go", 470, 110)
-    t_go = p.obj("t b b", 470, 150, 1, 2, ["bang", "bang"])
-    zero = p.msg("0", 560, 190)
-    index = p.obj("i", 470, 230, 2, 1, ["int"])
-    step = p.obj("t i i i b", 470, 270, 1, 4, ["int", "int", "int", "bang"])
-    clock = p.obj("cpuclock", 680, 310, 1, 1, ["float"])
-    pack = p.obj("pack i f", 560, 350, 2, 1)
-    fired = p.obj("prepend fired", 560, 390, 2, 1)
-    inc = p.obj("+ 1", 620, 310, 2, 1, ["int"])
-    gate = p.obj("if $f1 >= 0. then $f1", 20, 470, 1, 1)
-    wait = p.obj("delay", 20, 510, 2, 1, ["bang"])
-    p.connect(go, 0, t_go, 0)
-    p.connect(t_go, 1, zero, 0)
-    p.connect(zero, 0, index, 1)
-    # Through [delay] so onset 0 is fired by the scheduler like every later one,
-    # not by the mouse click (that start offset showed up as 2.3 ms "jitter").
-    start = p.obj("delay 100", 470, 190, 2, 1, ["bang"])
-    p.connect(t_go, 0, start, 0)
-    p.connect(start, 0, index, 0)
-    p.connect(index, 0, step, 0)
-    p.connect(step, 3, clock, 0)
-    p.connect(clock, 0, pack, 1)
-    p.connect(step, 2, inc, 0)
-    p.connect(inc, 0, index, 1)
-    p.connect(step, 1, pack, 0)
-    p.connect(pack, 0, fired, 0)
-    p.connect(fired, 0, v8, 0)
-    p.connect(step, 0, coll, 0)
-    p.connect(coll, 0, gate, 0)
-    p.connect(gate, 0, wait, 0)
-    p.connect(wait, 0, index, 0)
-    p.note("A number into [delay]'s left inlet sets the time and starts it. Logical time in the scheduler "
-           "keeps the chain from drifting; [cpuclock] shows what actually happened.", 160, 505, 420, 2)
-    return p
-
-
-def spike_output():
-    """M0 spike (c): the 31-EDO test note two ways, both measured by [fzero~]
-    (left outlet: the fundamental in Hz):
-      Hz path   [cycle~] at the exact frequency; its gain ramps through [line~],
-                so turning audio on or off never clicks
-      MPE path  our MPE bytes into Ableton's Drift ([abl.device.drift~], raw MIDI
-                bytes in, one oscillator) and, optionally, out of [midiout] to an
-                external synth. The tracker reports the bend range Drift applied.
-    A tracker can jump octaves on a rich sound, so the summaries fold each
-    reading to the nearest octave and count the jumps."""
-    p = Patch(rect=(60, 60, 980, 640))
-    p.note(GENERATED_NOTE, 20, 10, 920, 1)
-    p.note("SPIKE (c) MICROTONAL OUTPUT. Turn audio on with the speaker. HZ PATH: click 'tone'; every ~5 s "
-           "output-status prints a cents summary against 31-EDO step 5 above D4 (328.40 Hz), folded to the "
-           "nearest octave; 'octaves -1:8 0:2' means 8 readings were an octave low. Pass if the median is "
-           "within +/-1 cent. MPE PATH (Drift inside Max): click 'silence', 'mpeconfig' once, then 'mpenote "
-           "64.5' (a quarter-tone above E4) and hold it for 2-3 summaries: 'implied bend range' about 48 = "
-           "our setup worked, about 2 = Drift kept a +/-2 range. Then 'mpeoff'. If [abl.device.drift~] is a "
-           "dashed box, note your Max version.", 20, 35, 920, 5)
-
-    msgs = [p.msg(text, x, 125) for text, x in
-            [("tone", 20), ("silence", 75), ("mpeconfig", 160), ("mpenote", 250), ("mpenote 64.5", 325),
-             ("mpeoff", 430)]]
-    v8 = p.obj("v8 cg.spike.bundle.js", 20, 165, 1, 1)
-    route = p.obj("route tone cents midi status amp", 20, 205, 2, 6)
-    for m in msgs:
-        p.connect(m, 0, v8, 0)
-    p.connect(v8, 0, route, 0)
-
-    # Hz path: exact frequency, ramped gain.
-    unpack = p.obj("unpack f f", 20, 250, 1, 2, ["float", "float"])
-    osc = p.obj("cycle~", 20, 290, 2, 1, ["signal"])
-    ramp = p.obj("line~", 120, 290, 2, 2, ["signal", "bang"])
-    gain = p.obj("*~", 20, 330, 2, 1, ["signal"])
-    p.connect(route, 0, unpack, 0)
-    p.connect(unpack, 0, osc, 0)
-    p.connect(route, 4, ramp, 0)
-    p.connect(osc, 0, gain, 0)
-    p.connect(ramp, 0, gain, 1)
-
-    # MPE path: bytes one at a time into Drift (and out to an external synth).
-    bytes_ = p.obj("iter", 520, 250, 1, 1, ["int"])
-    # One oscillator, no random detune: the tracker has a single clear fundamental.
-    drift = p.obj("abl.device.drift~ @drift 0 @osc2enable 0", 520, 290, 1, 2, ["signal", "signal"])
-    drift_gain = p.obj("*~ 0.3", 520, 330, 2, 1, ["signal"])
-    midiout = p.obj("midiout", 380, 290, 1, 0)
-    p.connect(route, 2, bytes_, 0)
-    p.connect(bytes_, 0, drift, 0)
-    p.connect(bytes_, 0, midiout, 0)
-    p.connect(drift, 0, drift_gain, 0)
-    p.comment("external synth (optional): double-click to pick a port", 300, 315, w=200, h=34, linecount=2)
-    p.note("If the octaves still scatter: right-click Drift > Open Reference. Set its oscillator shape to "
-           "the purest wave, and note the name and default of its note pitch-bend range attribute.",
-           600, 330, 360, 4)
-
-    # Both sources to the speakers and the tracker (only one sounds at a time).
-    dac = p.ui("ezdac~", 20, 420, 45, 45, 2, 0, [])
-    mix = p.obj("+~", 300, 380, 2, 1, ["signal"])
-    tracker = p.obj("fzero~", 300, 420, 1, 3, ["float", "float", "bang"])
-    limit = p.obj("speedlim 500", 300, 455, 2, 1)
-    measured = p.obj("prepend measuredhz", 300, 490, 2, 1)
-    for src in (gain, drift_gain):
-        p.connect(src, 0, dac, 0)
-        p.connect(src, 0, dac, 1)
-    p.connect(gain, 0, mix, 0)
-    p.connect(drift_gain, 0, mix, 1)
-    p.connect(mix, 0, tracker, 0)
-    p.connect(tracker, 0, limit, 0)
-    p.connect(limit, 0, measured, 0)
-    p.connect(measured, 0, v8, 0)
-
-    p.comment("cents-error", 120, 380)
-    cents = p.ui("flonum", 120, 405, 80, 22, 1, 2, ["", "bang"], format=6)
-    p.connect(route, 1, cents, 0)
-    status = p.obj("print output-status", 520, 420, 1, 0)
-    p.connect(route, 3, status, 0)
-    return p
-
-
-def spike_dict():
-    """M0 spike (d): values written into a named dict by the script, read back
-    through Max's own [dict] and [dict.unpack], compared bit for bit."""
-    p = Patch(rect=(60, 60, 760, 420))
-    p.note(GENERATED_NOTE, 20, 10, 700, 1)
-    p.note("SPIKE (d) DICT PRECISION. Click 'dictwrite 256'. The script writes 256 full-precision floats "
-           "into dict cg.events; Max reads them back and returns them. dict-check prints: expected, "
-           "received, exact (1/0), max |difference|.", 20, 35, 700, 3)
-    write = p.msg("dictwrite 256", 20, 110)
-    v8 = p.obj("v8 cg.spike.bundle.js", 20, 150, 1, 1)
-    route = p.obj("route dictready dictcheck status", 20, 190, 2, 4)
-    store = p.obj("dict cg.events", 20, 230, 2, 4)
-    unpack = p.obj("dict.unpack values:", 20, 270, 1, 2)
-    back = p.obj("prepend dictvalues", 20, 310, 2, 1)
-    check = p.obj("print dict-check", 260, 230, 1, 0)
-    p.connect(write, 0, v8, 0)
-    p.connect(v8, 0, route, 0)
-    p.connect(route, 0, store, 0)
-    p.connect(store, 0, unpack, 0)
-    p.connect(unpack, 0, back, 0)
-    p.connect(back, 0, v8, 0)
-    p.connect(route, 1, check, 0)
-    return p
-
-
 GENERATED = {
     "patchers/cg.engine.maxpat": engine,
-    "patchers/cg.spike.a-paths.maxpat": spike_paths,
-    "patchers/cg.spike.b-player.maxpat": spike_player,
-    "patchers/cg.spike.c-output.maxpat": spike_output,
-    "patchers/cg.spike.d-dict.maxpat": spike_dict,
 }
 
 
@@ -367,13 +161,13 @@ GENERATED = {
 def main_patch():
     p = Patch(rect=(40, 40, 760, 440))
     p.note(HAND_NOTE, 20, 10, 700, 2)
-    p.comment("Canon Generator (M0 shell). The spike patches are next to this one: cg.spike.*.maxpat.", 20, 50)
+    p.comment("Canon Generator. Click bang: the engine says hello.", 20, 50)
     bang = p.msg("bang", 20, 85)
     hello = p.obj("v8 cg.hello.bundle.js", 20, 115, 1, 1)
     prt = p.obj("print canon", 20, 150, 1, 0)
     p.connect(bang, 0, hello, 0)
     p.connect(hello, 0, prt, 0)
-    p.comment("Main panel (spike e):", 20, 195)
+    p.comment("Main panel:", 20, 195)
     msg = p.msg("hello", 20, 220)
     panel = p.bpatcher("cg.panel.main.maxpat", 20, 250, 420, 170, 1, 1)
     prt2 = p.obj("print panel", 460, 400, 1, 0)

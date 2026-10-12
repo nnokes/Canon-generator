@@ -1,5 +1,5 @@
 "use strict";
-// The M0 engine modules: RNG, version, tuning conversions, MPE bytes, hello.
+// The engine modules so far: RNG, version, tuning conversions, MPE bytes, hello.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
@@ -43,6 +43,42 @@ test("tuning: EDO steps and cents", () => {
   near(tuning.cents(60, tuning.edoPitch(31, 18, 60)), (18 * 1200) / 31, 1e-9, "31-EDO fifth in cents");
   near(tuning.edoPitch(24, -1, 60), 59.5, 1e-12, "a quarter-tone down");
   assert.throws(() => tuning.edoPitch(0, 1, 60));
+});
+
+test("tuning: foldCents folds period jumps away and keeps the residual", () => {
+  const cases = [
+    [-1239.78, -39.78, -1],
+    [-1200, 0, -1],
+    [6.23, 6.23, 0],
+    [650, -550, 1],
+    [-600, -600, 0],
+    [600, -600, 1],
+    [2400.5, 0.5, 2],
+  ];
+  for (const [input, residual, periods] of cases) {
+    const f = tuning.foldCents(input);
+    near(f.cents, residual, 1e-9, `${input}: residual`);
+    assert.equal(f.periods, periods, `${input}: periods`);
+    assert.ok(f.cents >= -600 && f.cents < 600);
+  }
+  assert.ok(Object.is(tuning.foldCents(-1).periods, 0), "no -0 period");
+  // A Bohlen-Pierce tritave (3:1) is the period there.
+  const tritave = 1200 * Math.log2(3);
+  near(tuning.foldCents(tritave + 3, tritave).cents, 3, 1e-9, "one tritave up");
+  assert.equal(tuning.foldCents(tritave + 3, tritave).periods, 1);
+});
+
+test("tuning: centsSummary gives the right median when a tracker jumps octaves", () => {
+  // Eight readings an octave low and two in place, all within a few cents of the pitch.
+  const s = tuning.centsSummary([-1203, -1198, -1201, -1199, -1204, -1196, -1200, -1202, 1.5, -0.5]);
+  assert.equal(s.n, 10);
+  // Folded: -4 -3 -2 -1 -0.5 0 1 1.5 2 4, so the median is (-0.5 + 0) / 2.
+  near(s.median, -0.25, 1e-9, "median");
+  assert.equal(s.min, -4);
+  assert.equal(s.max, 4);
+  assert.deepEqual(s.periods, { "-1": 8, 0: 2 });
+  assert.equal(tuning.centsSummary([3, -1, 2]).median, 2); // odd count: the middle value
+  assert.deepEqual(tuning.centsSummary([]), { n: 0, median: 0, min: 0, max: 0, periods: {} });
 });
 
 test("hello: deterministic, with the 31-EDO test note five steps above D4", () => {

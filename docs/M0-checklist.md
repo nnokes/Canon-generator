@@ -1,5 +1,9 @@
 # M0: Scaffold and spikes
 
+> **Closed 2026-10-12.** All five spikes are recorded (Results, §3).
+> - (c) passed on the Hz path. Its MPE half moved to M2.
+> - Next: [`M1-checklist.md`](M1-checklist.md).
+
 **Goal:** a repo you can clone and open in Max 9, with the build, tests and CI working, and
 five spikes that settle the risky platform questions before any music code is written.
 
@@ -27,8 +31,16 @@ five spikes that settle the risky platform questions before any music code is wr
     meant nothing. The highest reading, +6 cents, leans towards Drift honouring ±48.
   - Now: the summaries fold each reading to the nearest octave and report the median and the
     number of jumps, and Drift runs one oscillator (`@osc2enable 0`).
-- **To do: pull, then one more (c) MPE run (below). M0 closes after it**, either way (see
-  the decision rule in (c)).
+- Fifth run: (c) MPE sent the zone setup and the note correctly, but **no pitch readings came
+  back**. That's the "unreadable" row of the decision rule. The panel in `canon.maxpat`
+  answered `panel: hello …`.
+- **M0 closed on 2026-10-12** on the Hz path. The MPE pitch check moved to M2 (PLAN §5).
+  - The spike patches, `cg-spike.js` and their tests were removed. They're in git history
+    at commit `1717e91`.
+  - The octave-folding summary moved into `cg-tuning` (`foldCents`, `centsSummary`) for M2's
+    MPE check.
+  - The sections below are the record of how M0 ran, including spike instructions for files
+    that no longer exist.
 
 ---
 
@@ -200,10 +212,10 @@ Optional: in `canon.maxpat`, click `hello` above the panel. `panel: hello …` s
 | Spike | Result | Decision |
 |---|---|---|
 | (a) search path | **First run:** nothing in subfolders or behind relative paths was found (v8 "can't find file", abstraction "No such object", bpatcher "error loading patcher"). **Re-run after flattening: PASS.** `a1-script`, `a2-abstraction` and `a3-bpatcher` all print `hello canon-generator 0.1.0 seed 1 check 627 2 527 981 note 63.935484 328.401454`, the same values the Node tests produce. | **Flatten**: everything Max loads in `patchers/` (PLAN §2.2). Done. |
-| (b) player jitter | **Third run: PASS.** `player-stats: 200 2.298091 2.413542 2.311167` (old format: mean, max, last error), all ≈ 2.3 ms. That is a constant start offset: onset 0 was fired by the mouse click, every other onset by the scheduler. Onset to onset the spread is about ±0.1 ms, with no drift over 45 s. | **Keep design 1** (`[coll]` + `[delay]` in the scheduler thread, PLAN §4.2). Stats now report offset / jitter / sd / drift, and onset 0 goes through `[delay 100]`. |
-| (c) Hz / MPE accuracy | **First run:** `sigmund~: No such object` (not in Max 9). **Third run, Hz: PASS.** After the first batch (which caught the attack, min −9.2), every summary reads +0.13 to +0.24 cents, mean ≈ +0.17: `fzero~`'s own bias. **Click** when audio turned on before `tone` (DC from `[cycle~]` at 0 Hz). **MPE:** no synth was listening. **Fourth run, MPE via Drift: bytes correct, reading inconclusive.** The status lines were right (`note 64 bend 8181 … = note -6.451613 cents`; `note 65 bend 8107 pitch 64.5 = note -50 cents`). The one summary, `cents n 10 mean -968.68 min -1239.78 max 6.23`, only fits most readings sitting about an octave low: `fzero~` jumping octaves on Drift's rich default patch. So its `implied bend range 981.77` meant nothing. The highest reading, +6 cents, leans towards ±48: a ±2 range would have read about +48 cents. | Use `fzero~`. The gain now ramps via `[line~]`; every M2 voice gets a ramp (PLAN §4.3). MPE is measured with Drift inside Max. The summaries now fold octaves and use the median; Drift runs one oscillator. One more run, then the decision rule in (c) closes it. |
+| (b) player jitter | **Third run: PASS.** `player-stats: 200 2.298091 2.413542 2.311167` (old format: mean, max, last error), all ≈ 2.3 ms. That is a constant start offset: onset 0 was fired by the mouse click, every other onset by the scheduler. Onset to onset the spread is about ±0.1 ms, with no drift over 45 s. **Fifth run (an optional confirmation):** `queue loaded: 200 events` and `playing` printed. The progress and stats lines would come over the next ~45 s, and weren't in the paste. The chain is unchanged from the third run apart from the 100 ms start delay, so this doesn't change the result. | **Keep design 1** (`[coll]` + `[delay]` in the scheduler thread, PLAN §4.2). Stats now report offset / jitter / sd / drift, and onset 0 goes through `[delay 100]`. |
+| (c) Hz / MPE accuracy | **First run:** `sigmund~: No such object` (not in Max 9). **Third run, Hz: PASS.** After the first batch (which caught the attack, min −9.2), every summary reads +0.13 to +0.24 cents, mean ≈ +0.17: `fzero~`'s own bias. **Click** when audio turned on before `tone` (DC from `[cycle~]` at 0 Hz). **MPE:** no synth was listening. **Fourth run, MPE via Drift: bytes correct, reading inconclusive.** The status lines were right (`note 64 bend 8181 … = note -6.451613 cents`; `note 65 bend 8107 pitch 64.5 = note -50 cents`). The one summary, `cents n 10 mean -968.68 min -1239.78 max 6.23`, only fits most readings sitting about an octave low: `fzero~` jumping octaves on Drift's rich default patch. So its `implied bend range 981.77` meant nothing. The highest reading, +6 cents, leans towards ±48: a ±2 range would have read about +48 cents. **Fifth run, MPE via Drift with one oscillator (`@osc2enable 0`): no readings.** `mpe zone set: 15 channels, bend 48` and `mpe note ch 2 note 65 bend 8107 pitch 64.5 = note -50 cents` printed, then no `cents` summaries at all. The tracker reported no pitch. Likely causes, not yet told apart: Drift went silent with its second oscillator off, its level fell below what `fzero~` tracks, or audio was off. | Use `fzero~`. The gain now ramps via `[line~]`; every M2 voice gets a ramp (PLAN §4.3). **MPE: unreadable, so by the decision rule M0 closes on the Hz path, and the MPE pitch check moves to M2** with an external MPE synth or a Live 12 instrument. Drift stays a candidate if a listen confirms it sounds. |
 | (d) dict precision | **PASS:** `dict-check: 256 256 1 0`. All 256 doubles came back bit-exact through `[dict]` → `[dict.unpack]` → Max atoms → `[v8]`. | Float event times are safe through dicts and messages; no rounding scheme needed. |
-| (e) hybrid workflow | **PASS.** The hand-built `canon.maxpat` loads its script: `canon: hello canon-generator 0.1.0 seed 1 check 627 2 527 981 note 63.935484 328.401454` (fourth run). A bpatcher of the generated engine loads and answers: spike (a), row 3. "Regenerating never touches a hand-built patch" is an automated test now. | **Keep the hybrid workflow** (PLAN §4.4): generated patches for wiring, hand-built for the main patch and panels, ownership checked on every `npm test` and CI run. |
+| (e) hybrid workflow | **PASS.** The hand-built `canon.maxpat` loads its script: `canon: hello canon-generator 0.1.0 seed 1 check 627 2 527 981 note 63.935484 328.401454` (fourth run). A bpatcher of the generated engine loads and answers: spike (a), row 3. The hand-built panel hosting the generated engine answers too: `panel: hello canon-generator 0.1.0 seed 1 check 627 2 527 981 note 63.935484 328.401454` (fifth run). "Regenerating never touches a hand-built patch" is an automated test now. | **Keep the hybrid workflow** (PLAN §4.4): generated patches for wiring, hand-built for the main patch and panels, ownership checked on every `npm test` and CI run. |
 
 ## 4. Notes and gotchas
 - `[v8]` needs Max 9 itself (or Live 12.2.1 or later, which bundles it).
@@ -212,5 +224,8 @@ Optional: in `canon.maxpat`, click `hello` above the panel. `panel: hello …` s
 - `[v8]` defers incoming messages to the main thread. That's why the player captures
   `[cpuclock]` *before* the onset message reaches the script: deferral can't distort the
   measurement.
-- The spike patches and `code/lib/cg-spike.js` are temporary. Remove them, or move them to
-  `docs/spikes/`, when M0 closes.
+- The spike patches and `code/lib/cg-spike.js` were removed when M0 closed (in git history
+  at commit `1717e91`).
+- **What M0 didn't measure:** how much work `[v8]` can do in one time slice before Max's
+  interface stutters. Spike (b) measured the scheduler, not compute. M3 measures it, when time
+  slicing is first built for the answer finder (PLAN §5).

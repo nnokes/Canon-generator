@@ -5,8 +5,9 @@ electroacoustic music. It ranges from strict Fux-style canons through process ca
 (mensuration, tempo, spiral) to Ligeti-style micropolyphony, in any tuning: equal divisions,
 just intonation, Scala files, and harmonic and inharmonic spectra.
 
-> **Status:** M0 (scaffold and platform spikes). The build, tests and CI work in Node; the spikes
-> run in Max 9. See [`docs/M0-checklist.md`](docs/M0-checklist.md).
+> **Status:** M0 (scaffold and platform spikes) is done; see
+> [`docs/M0-checklist.md`](docs/M0-checklist.md). Next: M1, scale systems
+> ([`docs/M1-checklist.md`](docs/M1-checklist.md)).
 
 ## What it will do
 - **Render** canons with **N voices**. Each voice has its own **delay**, **interval of
@@ -28,8 +29,8 @@ just intonation, Scala files, and harmonic and inharmonic spectra.
   **milestones M0–M11** with exit criteria.
 - [`docs/RESEARCH.md`](docs/RESEARCH.md): annotated research on canons, algorithmic
   counterpoint, tuning and spectral music, each entry mapped to a milestone.
-- [`docs/M0-checklist.md`](docs/M0-checklist.md): the first concrete steps and platform
-  spikes.
+- [`docs/M0-checklist.md`](docs/M0-checklist.md): the scaffold and platform spikes (done).
+- [`docs/M1-checklist.md`](docs/M1-checklist.md): scale systems (next).
 
 ## Development
 ```sh

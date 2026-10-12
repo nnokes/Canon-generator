@@ -1,8 +1,8 @@
 "use strict";
-// M0 spike: proves the same code gives the same answer in Node and in Max.
-// "check" is four seeded random numbers, so any difference between
-// environments shows up at once; "note" is the microtonal test note the
-// output spike plays (31-EDO, five steps above D4).
+// The smoke test: proves the same code gives the same answer in Node and in
+// Max (M0). "check" is four seeded random numbers, so any difference between
+// environments shows up at once; "note" is the microtonal test note M0's
+// output spike played (31-EDO, five steps above D4).
 
 const rng = require("cg-rng");
 const tuning = require("cg-tuning");
