@@ -126,3 +126,28 @@ test("mpe: note-on sends the bend before the note; note-off matches the note", (
   assert.deepEqual(mpe.noteOff(63.935483870967744, 2), [[0x81, expected.note, 0]]);
   assert.throws(() => mpe.noteOn(60, 100, 17));
 });
+
+test("mpe allocate: overlapping notes never share a channel; least recently freed first; overflow to null", () => {
+  // Two overlapping notes, then two that start as the first ends.
+  const events = [{ t: 0, dur: 1 }, { t: 0, dur: 2 }, { t: 1, dur: 1 }, { t: 2, dur: 1 }, { t: 2, dur: 1 }];
+  const channels = mpe.allocate(events);
+  assert.deepEqual(channels, [2, 3, 4, 5, 6], "unused channels first, so a release tail is left alone");
+  for (let i = 0; i < events.length; i++) {
+    for (let j = i + 1; j < events.length; j++) {
+      const overlap = events[j].t < events[i].t + events[i].dur && events[i].t < events[j].t + events[j].dur;
+      if (overlap) assert.notEqual(channels[i], channels[j], `notes ${i} and ${j} overlap`);
+    }
+  }
+  // Once all 15 have been used, the one freed longest ago comes back first.
+  const sweep = Array.from({ length: 16 }, (_, k) => ({ t: k, dur: 1 }));
+  assert.deepEqual(mpe.allocate(sweep), [...Array.from({ length: 15 }, (_, k) => k + 2), 2]);
+  // 17 notes at once: 15 channels, then two to the Hz voices.
+  const chord = Array.from({ length: 17 }, () => ({ t: 0, dur: 1 }));
+  const many = mpe.allocate(chord);
+  assert.deepEqual(many.slice(15), [null, null]);
+  assert.equal(new Set(many.slice(0, 15)).size, 15);
+  // A narrower zone, and the same answer every time.
+  // Two channels: at beat 2 both free at once, and a tie goes to the lower channel.
+  assert.deepEqual(mpe.allocate(events, { first: 2, last: 3 }), [2, 3, 2, 2, 3]);
+  assert.deepEqual(mpe.allocate(events), mpe.allocate(events));
+});

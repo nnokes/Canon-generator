@@ -44,6 +44,7 @@ test("cg.hello answers like the library, in Max's atom order", () => {
 
 const tuning = require("cg-tuning");
 const scales = require("cg-scales");
+const mpe = require("cg-mpe");
 const FIXTURES = path.join(__dirname, "fixtures");
 const select = (out, selector) => out.filter(([, s]) => s === selector).map(([, , ...rest]) => rest);
 const errors = (out) => select(out, "error").map(([message]) => message);
@@ -170,7 +171,7 @@ const rows = (out) => select(out, "coll").filter((r) => r[0] !== "clear");
 test("cg.canon exposes exactly its documented messages", () => {
   assert.deepEqual(loadBundle("cg.canon").handlers(), [
     "delay", "info", "interval", "loadmidi", "loadspec", "midiline", "midimap", "midiquantize", "miditrack",
-    "passes", "preset", "presetmelody", "presets", "register", "render", "savespec", "select", "tempo", "timescale",
+    "output", "passes", "preset", "presetmelody", "presets", "register", "render", "savespec", "select", "tempo", "timescale",
     "transform", "tuning", "tunings",
   ]);
 });
@@ -346,4 +347,80 @@ test("cg.canon: your melody stays across presets; tuning re-maps it; presetmelod
   const kept = bundle.send("presetmelody");
   assert.match(select(kept, "status")[0].join(" "), /came from a file/);
   fs.rmSync(dir, { recursive: true });
+});
+
+// ---------------------------------------------------------------- MPE out and the check (M2 part F)
+
+test("cg.canon: output mpe sends the zone setup, then MPE rows a Max [pipe] can time", () => {
+  const bundle = loadBundle("cg.canon");
+  bundle.send("preset", 0);
+  const out = bundle.send("output", "mpe");
+  assert.deepEqual(errors(out), []);
+  assert.deepEqual(select(out, "midi"), mpe.zoneConfig(), "the lower zone, +/-48, before the notes");
+  const queue = rows(out);
+  const expected = canonEngine.render(library.preset(0)).events;
+  assert.equal(queue.length, expected.length);
+  const channels = mpe.allocate(expected);
+  queue.forEach(([i, , kind, ms, ...bytes], k) => {
+    assert.equal(kind, "mpe", `row ${k}`);
+    assert.equal(bytes.length, 9);
+    const e = expected[k];
+    assert.ok(Math.abs(ms - e.dur * 600) < 1e-9, "the note's length, for [pipe]");
+    assert.deepEqual(bytes, [...mpe.noteOn(e.pitch, e.vel, channels[k]).flat(), ...mpe.noteOff(e.pitch, channels[k]).flat()]);
+  });
+  assert.match(select(out, "status").at(-1).join(" "), /^mpe: 256 notes on 15 channels/);
+  // Back to the Hz voices: no zone setup, plain rows.
+  const hz = bundle.send("output", 0);
+  assert.deepEqual(select(hz, "midi"), []);
+  assert.ok(rows(hz).every((r) => typeof r[2] === "number"));
+  assert.match(errors(bundle.send("output", "osc"))[0], /output must be one of hz mpe/);
+});
+
+test("cg.canon: more than 15 MPE notes at once: the rest go to the Hz voices, and it says so", () => {
+  const os = require("os");
+  const fs = require("fs");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cg-chord-"));
+  const file = path.join(dir, "chord.json");
+  // 17 voices in unison: 17 notes at once.
+  fs.writeFileSync(file, JSON.stringify({
+    name: "17 at once", dux: { source: "list", notes: [{ dur: 1, degree: 0 }] },
+    voices: Array.from({ length: 17 }, (_, k) => ({ name: `v${k}`, interval: k, out: "mpe" })),
+  }));
+  const bundle = loadBundle("cg.canon");
+  const out = bundle.send("loadspec", file);
+  fs.rmSync(dir, { recursive: true });
+  const queue = rows(out);
+  assert.equal(queue.filter((r) => r[2] === "mpe").length, 15);
+  assert.equal(queue.filter((r) => typeof r[2] === "number").length, 2);
+  assert.match(select(out, "status").at(-1).join(" "), /2 beyond 15 at once went to the Hz voices/);
+});
+
+test("cg.mpecheck: zone, a held note, and a summary with the bend range Drift applied", () => {
+  const bundle = loadBundle("cg.mpecheck");
+  assert.deepEqual(bundle.handlers(), ["measuredhz", "note", "off", "zone"]);
+  assert.deepEqual(select(bundle.send("zone"), "midi"), mpe.zoneConfig());
+  const on = bundle.send("note", 64.5);
+  assert.deepEqual(select(on, "midi"), mpe.noteOn(64.5, 100, 2));
+  assert.deepEqual(select(on, "status")[0].slice(0, 9), ["mpe", "note", "ch", 2, "note", 65, "bend", 8107, "pitch"]);
+  // Ten readings: eight an octave low (Drift's rich sound), all at the pitch a
+  // +/-48 synth sounds for this bend. The summary folds the octaves away.
+  const { note, bend } = mpe.bendFor(64.5);
+  const sounded = mpe.pitchOf(note, bend, 48);
+  const summaries = [];
+  for (let i = 0; i < 10; i++) {
+    const out = bundle.send("measuredhz", tuning.midiToHz(sounded - (i < 8 ? 12 : 0)));
+    summaries.push(...select(out, "status"));
+  }
+  assert.equal(summaries.length, 1);
+  const line = summaries[0];
+  assert.deepEqual(line.slice(line.indexOf("periods") + 1, line.indexOf("periods") + 3), ["-1:8", "0:2"]);
+  assert.ok(Math.abs(line[line.indexOf("median") + 1]) < 0.5, "within half a cent");
+  assert.ok(Math.abs(line.at(-1) - 48) < 0.5, `implied bend range ${line.at(-1)}`);
+  // A synth stuck at +/-2 would read near 2.
+  bundle.send("note", 64.5);
+  let stuck = null;
+  for (let i = 0; i < 10; i++) stuck = select(bundle.send("measuredhz", tuning.midiToHz(mpe.pitchOf(note, bend, 2))), "status")[0] || stuck;
+  assert.ok(Math.abs(stuck.at(-1) - 2) < 0.5, `implied bend range ${stuck.at(-1)}`);
+  assert.deepEqual(select(bundle.send("off"), "midi"), mpe.noteOff(64.5, 2));
+  assert.deepEqual(bundle.send("measuredhz", 440), [], "no note: no reading");
 });

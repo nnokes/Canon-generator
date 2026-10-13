@@ -548,10 +548,16 @@ back for sample-accurate *audio* events in the voice bank.
      reading to the nearest period and uses the median: `cg-tuning`'s `foldCents` and
      `centsSummary`.
 2. **`cg.mpe.out`: MPE MIDI.**
-   - one channel per voice (lower zone, channels 2–16)
+   - **As built in M2:**
+     - each *note* gets its own member channel, least recently freed first
+       (`cg-mpe.allocate`); notes beyond 15 at once go to the Hz voices
+     - `[pipe]` delays each note-off by the note's length, so Max times it, not JS
+     - Drift plays the MPE notes inside Max; they also go to `[midiout]`
+     - `cg.check.mpe.maxpat` measures one note
+   - lower zone, channels 2–16
    - pitch bend range ±48 semitones, which Live 12's tuning system expects; resolution is
      96/16384 ≈ 0.59 cents
-   - at most 15 voices per port; denser textures route to MSP
+   - at most 15 notes at once per port; the rest route to MSP
    - **Inside Max, without an external synth:** `abl.device.*` instruments such as
      `abl.device.drift~` take raw MIDI bytes. M0 spike (c) measures whether Drift honours
      per-channel bend and our ±48 RPN; the "implied bend range" line answers it.
@@ -565,6 +571,9 @@ back for sample-accurate *audio* events in the voice bank.
      - **The MPE pitch check moved to M2:** `cg.mpe.out` measured on an external MPE synth
        or a Live 12 instrument. Drift stays a candidate if a listen confirms it sounds with
        one oscillator.
+     - **M2 tries Drift first** (the user's choice), with its second oscillator on, as in
+       M0's first run, which did give readings. If that's unreadable, a Live 12
+       instrument with its audio brought back into Max.
 3. **MIDI file** export, one track per voice (M10).
 4. **MTS-ESP** (stretch).
 

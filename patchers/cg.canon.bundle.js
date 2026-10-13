@@ -1440,84 +1440,19 @@ exports.names = () => PRESETS.map((p) => p.name);
 exports.count = PRESETS.length;
   };
 
-  // ---- cg-file.js
-  factories["cg-file"] = function (exports, module, require) {
-"use strict";
-// Max-only: reads a text file through Max's File object (M1 checks this works
-// in [v8]). The path comes from [opendialog], a full path, so Max's search
-// path doesn't matter (PLAN.md 2.2). Tests swap in a stand-in File.
-
-const MAX_LINE = 4096;
-
-// The file's lines, without line endings. Throws if it can't be opened.
-function readLines(path) {
-  const file = new File(path, "read");
-  if (!file.isopen) throw new Error("can't open " + path);
-  const lines = [];
-  try {
-    while (file.position < file.eof) {
-      const before = file.position;
-      const line = file.readline(MAX_LINE);
-      if (line === null || line === undefined) break;
-      lines.push(String(line).replace(/[\r\n]+$/, ""));
-      if (file.position <= before) break; // never loop on a file that doesn't advance
-    }
-  } finally {
-    file.close();
-  }
-  return lines;
-}
-
-// The file's bytes (0-255), read in chunks. For MIDI files (M2 checks this in Max).
-const CHUNK = 1024;
-function readBytes(path) {
-  const file = new File(path, "read");
-  if (!file.isopen) throw new Error("can't open " + path);
-  const bytes = [];
-  try {
-    file.position = 0;
-    while (file.position < file.eof) {
-      const before = file.position;
-      const chunk = file.readbytes(Math.min(CHUNK, file.eof - file.position));
-      if (!chunk || chunk.length === 0) break;
-      for (let i = 0; i < chunk.length; i++) bytes.push(chunk[i] & 0xff);
-      if (file.position <= before) break; // never loop on a file that doesn't advance
-    }
-  } finally {
-    file.close();
-  }
-  return bytes;
-}
-
-// Writes a text file, replacing what was there. Throws if it can't be opened.
-function writeText(path, text) {
-  const file = new File(path, "write", "TEXT");
-  if (!file.isopen) throw new Error("can't write " + path);
-  try {
-    file.eof = 0; // truncate an existing file
-    file.position = 0;
-    file.writestring(text);
-  } finally {
-    file.close();
-  }
-}
-
-exports.readLines = readLines;
-exports.readBytes = readBytes;
-exports.writeText = writeText;
-  };
-
   // ---- cg-mpe.js
   factories["cg-mpe"] = function (exports, module, require) {
 "use strict";
-// MPE output maths (MIDI Polyphonic Expression, lower zone). Each voice gets
-// its own member channel, and its microtonal offset travels as per-channel
-// pitch bend. The bend range is +/-48 semitones, the value Live 12's tuning
+// MPE output maths (MIDI Polyphonic Expression, lower zone). Each note gets
+// its own member channel (allocate), and its microtonal offset travels as
+// per-channel pitch bend. The bend range is +/-48 semitones, the value Live 12's tuning
 // system expects (PLAN.md 4.3), which gives 96/16384 semitones, about 0.59
 // cents, per bend step.
 //
 // Everything here returns raw MIDI bytes for [midiout]. The engine computes
 // the bytes ahead of time; Max sends them (JS never schedules notes).
+
+const time = require("cg-time");
 
 const DEFAULT_RANGE = 48;
 const CENTER = 8192;
@@ -1590,13 +1525,108 @@ function noteOff(pitch, channel, range = DEFAULT_RANGE) {
   return [[status(0x80, channel), note, 0]];
 }
 
+// Gives each note its own MPE member channel (channels `first`-`last`, 1-16
+// numbering): no two notes that overlap in time share one, so each note's bend
+// is its own. A free channel is chosen least recently freed first, so a new
+// note's bend doesn't land on the release tail of the note just ended. Notes
+// beyond the free channels get null (PLAN.md 4.3: they go to the Hz voices).
+// events: [{ t, dur }] in time order. Returns one channel (or null) per event.
+function allocate(events, { first = 2, last = 16 } = {}) {
+  const freedAt = new Map(); // channel -> when it was freed (-Infinity: never used)
+  for (let ch = first; ch <= last; ch++) freedAt.set(ch, -Infinity);
+  const busy = []; // [{ channel, end }]
+  return events.map((e) => {
+    for (let i = busy.length - 1; i >= 0; i--) {
+      if (!time.lt(e.t, busy[i].end)) {
+        freedAt.set(busy[i].channel, busy[i].end);
+        busy.splice(i, 1);
+      }
+    }
+    let channel = null;
+    for (const [ch, freed] of freedAt) {
+      if (busy.some((b) => b.channel === ch)) continue;
+      if (channel === null || freed < freedAt.get(channel)) channel = ch;
+    }
+    if (channel !== null) busy.push({ channel, end: e.t + e.dur });
+    return channel;
+  });
+}
+
 exports.DEFAULT_RANGE = DEFAULT_RANGE;
+exports.allocate = allocate;
 exports.bendFor = bendFor;
 exports.pitchOf = pitchOf;
 exports.impliedRange = impliedRange;
 exports.zoneConfig = zoneConfig;
 exports.noteOn = noteOn;
 exports.noteOff = noteOff;
+  };
+
+  // ---- cg-file.js
+  factories["cg-file"] = function (exports, module, require) {
+"use strict";
+// Max-only: reads a text file through Max's File object (M1 checks this works
+// in [v8]). The path comes from [opendialog], a full path, so Max's search
+// path doesn't matter (PLAN.md 2.2). Tests swap in a stand-in File.
+
+const MAX_LINE = 4096;
+
+// The file's lines, without line endings. Throws if it can't be opened.
+function readLines(path) {
+  const file = new File(path, "read");
+  if (!file.isopen) throw new Error("can't open " + path);
+  const lines = [];
+  try {
+    while (file.position < file.eof) {
+      const before = file.position;
+      const line = file.readline(MAX_LINE);
+      if (line === null || line === undefined) break;
+      lines.push(String(line).replace(/[\r\n]+$/, ""));
+      if (file.position <= before) break; // never loop on a file that doesn't advance
+    }
+  } finally {
+    file.close();
+  }
+  return lines;
+}
+
+// The file's bytes (0-255), read in chunks. For MIDI files (M2 checks this in Max).
+const CHUNK = 1024;
+function readBytes(path) {
+  const file = new File(path, "read");
+  if (!file.isopen) throw new Error("can't open " + path);
+  const bytes = [];
+  try {
+    file.position = 0;
+    while (file.position < file.eof) {
+      const before = file.position;
+      const chunk = file.readbytes(Math.min(CHUNK, file.eof - file.position));
+      if (!chunk || chunk.length === 0) break;
+      for (let i = 0; i < chunk.length; i++) bytes.push(chunk[i] & 0xff);
+      if (file.position <= before) break; // never loop on a file that doesn't advance
+    }
+  } finally {
+    file.close();
+  }
+  return bytes;
+}
+
+// Writes a text file, replacing what was there. Throws if it can't be opened.
+function writeText(path, text) {
+  const file = new File(path, "write", "TEXT");
+  if (!file.isopen) throw new Error("can't write " + path);
+  try {
+    file.eof = 0; // truncate an existing file
+    file.position = 0;
+    file.writestring(text);
+  } finally {
+    file.close();
+  }
+}
+
+exports.readLines = readLines;
+exports.readBytes = readBytes;
+exports.writeText = writeText;
   };
 
   // ---- cg-io.js
@@ -2006,6 +2036,10 @@ __cg_require.local = 1;
 //   tempo <bpm>                   as render
 //   render                        coll clear, coll <i> <ms to next> <hz> <gain L> <gain R>
 //                                   <total ms> <envelope...>, bpm <tempo>, editor ..., status ...
+//                                 An MPE note's row: coll <i> <ms to next> mpe <ms> <bend + note-on:
+//                                   6 bytes> <note-off: 3 bytes>; with any MPE voice, the zone
+//                                   setup first as midi <bytes> lines
+//   output hz|mpe                 every voice to the Hz voices or to MPE (or 0/1), then as render
 //   select <voice>                editor <i> <name> <delay> <steps> <transform 0-3>
 //                                   <time scale> <register> <passes>
 //   delay|interval|transform|timescale|register|passes <value>
@@ -2031,12 +2065,14 @@ const engine = __cg_require("cg-canon");
 const library = __cg_require("cg-presets");
 const scaleLibrary = __cg_require("cg-scales");
 const tuningLibrary = __cg_require("cg-tuning");
+const mpe = __cg_require("cg-mpe");
 const files = __cg_require("cg-file");
 const io = __cg_require("cg-io");
 
 const TRANSFORMS = ["P", "I", "R", "RI"];
 const LINES = ["top", "bottom", "track"];
 const MAPS = ["exact", "nearest", "degree"];
+const OUTPUTS = ["hz", "mpe"];
 const LEVEL = 0.25; // a note's peak gain at velocity 127, before the partial weights
 
 let spec = library.preset(0);
@@ -2121,6 +2157,16 @@ function tempo(bpm) {
 
 function render() {
   attempt(update);
+}
+
+// Every voice (canon and free) to the Hz voices or to MPE.
+function output(which) {
+  attempt(() => {
+    const out = typeof which === "number" ? OUTPUTS[which] : String(which);
+    if (!OUTPUTS.includes(out)) throw new Error(`output must be one of ${OUTPUTS.join(" ")}, got ${which}`);
+    for (const v of [...canonVoices(), ...(spec.free || [])]) v.out = out;
+    update();
+  });
 }
 
 function select(index) {
@@ -2333,15 +2379,29 @@ function update() {
   const ms = 60000 / rendered.tempo;
   const events = rendered.events;
   const count = rendered.voices.length;
+  // MPE notes each get a member channel; any beyond 15 at once go to the Hz voices.
+  const mpeIndex = events.map((e, i) => (rendered.voices[e.voice].out === "mpe" ? i : -1)).filter((i) => i >= 0);
+  const channels = new Map();
+  mpe.allocate(mpeIndex.map((i) => events[i])).forEach((ch, k) => channels.set(mpeIndex[k], ch));
+  const overflow = [...channels.values()].filter((ch) => ch === null).length;
+  if (mpeIndex.length) for (const bytes of mpe.zoneConfig()) outlet(0, "midi", ...bytes);
   outlet(0, "coll", "clear");
   events.forEach((e, i) => {
     const next = events[i + 1];
+    const delta = next ? (next.t - e.t) * ms : -1;
+    const channel = channels.get(i);
+    if (channel) {
+      const on = mpe.noteOn(e.pitch, e.vel, channel).flat();
+      const off = mpe.noteOff(e.pitch, channel).flat();
+      outlet(0, "coll", i, delta, "mpe", e.dur * ms, ...on, ...off);
+      return;
+    }
     const pan = count > 1 ? e.voice / (count - 1) : 0.5;
     const total = e.dur * ms;
     const attack = Math.min(10, total / 4);
     const release = Math.min(120, total / 3);
     const amp = (LEVEL * e.vel) / 127;
-    outlet(0, "coll", i, next ? (next.t - e.t) * ms : -1, tuningLibrary.midiToHz(e.pitch),
+    outlet(0, "coll", i, delta, tuningLibrary.midiToHz(e.pitch),
       Math.cos((pan * Math.PI) / 2), Math.sin((pan * Math.PI) / 2), total,
       amp, attack, amp, Math.max(0, total - attack - release), 0, release);
   });
@@ -2354,6 +2414,11 @@ function update() {
   if (selected >= canonVoices().length) selected = 0;
   showEditor();
   announce();
+  if (mpeIndex.length) {
+    const used = new Set([...channels.values()].filter((ch) => ch !== null)).size;
+    outlet(0, "status", "mpe:", mpeIndex.length - overflow, "notes on", used, "channels (2-16, bend +/-48)" + (overflow
+      ? ", " + overflow + " beyond 15 at once went to the Hz voices" : ""));
+  }
 }
 update.local = 1;
 

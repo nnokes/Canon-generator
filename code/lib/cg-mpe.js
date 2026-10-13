@@ -1,12 +1,14 @@
 "use strict";
-// MPE output maths (MIDI Polyphonic Expression, lower zone). Each voice gets
-// its own member channel, and its microtonal offset travels as per-channel
-// pitch bend. The bend range is +/-48 semitones, the value Live 12's tuning
+// MPE output maths (MIDI Polyphonic Expression, lower zone). Each note gets
+// its own member channel (allocate), and its microtonal offset travels as
+// per-channel pitch bend. The bend range is +/-48 semitones, the value Live 12's tuning
 // system expects (PLAN.md 4.3), which gives 96/16384 semitones, about 0.59
 // cents, per bend step.
 //
 // Everything here returns raw MIDI bytes for [midiout]. The engine computes
 // the bytes ahead of time; Max sends them (JS never schedules notes).
+
+const time = require("cg-time");
 
 const DEFAULT_RANGE = 48;
 const CENTER = 8192;
@@ -79,7 +81,35 @@ function noteOff(pitch, channel, range = DEFAULT_RANGE) {
   return [[status(0x80, channel), note, 0]];
 }
 
+// Gives each note its own MPE member channel (channels `first`-`last`, 1-16
+// numbering): no two notes that overlap in time share one, so each note's bend
+// is its own. A free channel is chosen least recently freed first, so a new
+// note's bend doesn't land on the release tail of the note just ended. Notes
+// beyond the free channels get null (PLAN.md 4.3: they go to the Hz voices).
+// events: [{ t, dur }] in time order. Returns one channel (or null) per event.
+function allocate(events, { first = 2, last = 16 } = {}) {
+  const freedAt = new Map(); // channel -> when it was freed (-Infinity: never used)
+  for (let ch = first; ch <= last; ch++) freedAt.set(ch, -Infinity);
+  const busy = []; // [{ channel, end }]
+  return events.map((e) => {
+    for (let i = busy.length - 1; i >= 0; i--) {
+      if (!time.lt(e.t, busy[i].end)) {
+        freedAt.set(busy[i].channel, busy[i].end);
+        busy.splice(i, 1);
+      }
+    }
+    let channel = null;
+    for (const [ch, freed] of freedAt) {
+      if (busy.some((b) => b.channel === ch)) continue;
+      if (channel === null || freed < freedAt.get(channel)) channel = ch;
+    }
+    if (channel !== null) busy.push({ channel, end: e.t + e.dur });
+    return channel;
+  });
+}
+
 exports.DEFAULT_RANGE = DEFAULT_RANGE;
+exports.allocate = allocate;
 exports.bendFor = bendFor;
 exports.pitchOf = pitchOf;
 exports.impliedRange = impliedRange;

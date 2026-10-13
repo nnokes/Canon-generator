@@ -15,6 +15,10 @@
 //   tempo <bpm>                   as render
 //   render                        coll clear, coll <i> <ms to next> <hz> <gain L> <gain R>
 //                                   <total ms> <envelope...>, bpm <tempo>, editor ..., status ...
+//                                 An MPE note's row: coll <i> <ms to next> mpe <ms> <bend + note-on:
+//                                   6 bytes> <note-off: 3 bytes>; with any MPE voice, the zone
+//                                   setup first as midi <bytes> lines
+//   output hz|mpe                 every voice to the Hz voices or to MPE (or 0/1), then as render
 //   select <voice>                editor <i> <name> <delay> <steps> <transform 0-3>
 //                                   <time scale> <register> <passes>
 //   delay|interval|transform|timescale|register|passes <value>
@@ -40,12 +44,14 @@ const engine = require("cg-canon");
 const library = require("cg-presets");
 const scaleLibrary = require("cg-scales");
 const tuningLibrary = require("cg-tuning");
+const mpe = require("cg-mpe");
 const files = require("cg-file");
 const io = require("cg-io");
 
 const TRANSFORMS = ["P", "I", "R", "RI"];
 const LINES = ["top", "bottom", "track"];
 const MAPS = ["exact", "nearest", "degree"];
+const OUTPUTS = ["hz", "mpe"];
 const LEVEL = 0.25; // a note's peak gain at velocity 127, before the partial weights
 
 let spec = library.preset(0);
@@ -130,6 +136,16 @@ function tempo(bpm) {
 
 function render() {
   attempt(update);
+}
+
+// Every voice (canon and free) to the Hz voices or to MPE.
+function output(which) {
+  attempt(() => {
+    const out = typeof which === "number" ? OUTPUTS[which] : String(which);
+    if (!OUTPUTS.includes(out)) throw new Error(`output must be one of ${OUTPUTS.join(" ")}, got ${which}`);
+    for (const v of [...canonVoices(), ...(spec.free || [])]) v.out = out;
+    update();
+  });
 }
 
 function select(index) {
@@ -342,15 +358,29 @@ function update() {
   const ms = 60000 / rendered.tempo;
   const events = rendered.events;
   const count = rendered.voices.length;
+  // MPE notes each get a member channel; any beyond 15 at once go to the Hz voices.
+  const mpeIndex = events.map((e, i) => (rendered.voices[e.voice].out === "mpe" ? i : -1)).filter((i) => i >= 0);
+  const channels = new Map();
+  mpe.allocate(mpeIndex.map((i) => events[i])).forEach((ch, k) => channels.set(mpeIndex[k], ch));
+  const overflow = [...channels.values()].filter((ch) => ch === null).length;
+  if (mpeIndex.length) for (const bytes of mpe.zoneConfig()) outlet(0, "midi", ...bytes);
   outlet(0, "coll", "clear");
   events.forEach((e, i) => {
     const next = events[i + 1];
+    const delta = next ? (next.t - e.t) * ms : -1;
+    const channel = channels.get(i);
+    if (channel) {
+      const on = mpe.noteOn(e.pitch, e.vel, channel).flat();
+      const off = mpe.noteOff(e.pitch, channel).flat();
+      outlet(0, "coll", i, delta, "mpe", e.dur * ms, ...on, ...off);
+      return;
+    }
     const pan = count > 1 ? e.voice / (count - 1) : 0.5;
     const total = e.dur * ms;
     const attack = Math.min(10, total / 4);
     const release = Math.min(120, total / 3);
     const amp = (LEVEL * e.vel) / 127;
-    outlet(0, "coll", i, next ? (next.t - e.t) * ms : -1, tuningLibrary.midiToHz(e.pitch),
+    outlet(0, "coll", i, delta, tuningLibrary.midiToHz(e.pitch),
       Math.cos((pan * Math.PI) / 2), Math.sin((pan * Math.PI) / 2), total,
       amp, attack, amp, Math.max(0, total - attack - release), 0, release);
   });
@@ -363,6 +393,11 @@ function update() {
   if (selected >= canonVoices().length) selected = 0;
   showEditor();
   announce();
+  if (mpeIndex.length) {
+    const used = new Set([...channels.values()].filter((ch) => ch !== null)).size;
+    outlet(0, "status", "mpe:", mpeIndex.length - overflow, "notes on", used, "channels (2-16, bend +/-48)" + (overflow
+      ? ", " + overflow + " beyond 15 at once went to the Hz voices" : ""));
+  }
 }
 update.local = 1;
 

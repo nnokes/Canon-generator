@@ -306,18 +306,66 @@ def voice():
     return p
 
 
+def mpe_out():
+    """cg.mpe.out (M2): MPE notes as raw MIDI bytes. In:
+      <dur ms> <bend + note-on: 6 bytes> <note-off: 3 bytes>   a note
+      midi <bytes...>                                          bytes now (the zone setup)
+      panic                                                    all notes off, channels 2-16
+    The note-off is delayed by Max ([pipe], by the note's own length), not JS.
+    Out: the bytes, one at a time, for [midiout] or a synth that takes them."""
+    p = Patch(rect=(140, 140, 640, 440))
+    p.note(GENERATED_NOTE, 20, 10, 600, 1)
+    p.note("cg.mpe.out: a note list 'ms, 6 on-bytes, 3 off-bytes' plays now and [pipe] sends its note-off "
+           "after its length. 'midi bytes' go straight out; 'panic' stops every note.", 20, 40, 600, 2)
+    inlet = p.inlet(20, 85, "notes (ms + 9 bytes), midi <bytes>, panic", 0)
+    route = p.obj("route midi panic", 20, 120, 2, 3)
+    p.connect(inlet, 0, route, 0)
+    out = p.obj("iter", 20, 380, 1, 1, ["int"])
+    p.connect(route, 0, out, 0)
+
+    # panic: clear the pending note-offs, then all notes off on every member channel.
+    halt = p.obj("t b b", 140, 155, 1, 2, ["bang", "bang"])
+    clear = p.msg("clear", 230, 190)
+    off_all = p.msg(" ".join(f"{0xB0 + ch} 123 0" for ch in range(1, 16)), 140, 345, w=330)
+    p.connect(route, 1, halt, 0)
+    p.connect(halt, 1, clear, 0)
+    p.connect(halt, 0, off_all, 0)
+    p.connect(off_all, 0, out, 0)
+
+    # A note: its length to [pipe]'s delay first (right to left), then the bytes.
+    order = p.obj("t l l", 330, 155, 1, 2, ["", ""])
+    length = p.obj("zl slice 1", 430, 190, 2, 2)
+    bytes_ = p.obj("zl slice 1", 330, 190, 2, 2)
+    on_off = p.obj("zl slice 6", 330, 225, 2, 2)
+    later = p.obj("pipe 0 0 0 0", 430, 265, 4, 3, ["int", "int", "int"])
+    again = p.obj("pack i i i", 430, 300, 3, 1)
+    p.connect(route, 2, order, 0)
+    p.connect(order, 1, length, 0)
+    p.connect(length, 0, later, 3)
+    p.connect(order, 0, bytes_, 0)
+    p.connect(bytes_, 1, on_off, 0)
+    p.connect(on_off, 1, later, 0)
+    p.connect(on_off, 0, out, 0)
+    p.connect(clear, 0, later, 0)
+    for k in range(3):
+        p.connect(later, k, again, k)
+    p.connect(again, 0, out, 0)
+    outlet = p.outlet(20, 410, "MIDI bytes, one at a time", 0)
+    p.connect(out, 0, outlet, 0)
+    return p
+
+
 def canon():
-    """cg.canon (M2): the renderer, its player and the voice bank. Inlet:
-    messages (see code/cg.canon.v8.js), plus play and stop. Outlet 0: the
-    engine's other messages (menu, tmenu, bpm, editor, status, error).
-    Outlets 1 and 2: left and right audio."""
-    p = Patch(rect=(80, 80, 760, 600))
+    """cg.canon (M2): the renderer, its player and the voices. Inlet: messages
+    (see code/cg.canon.v8.js), plus play and stop. Outlet 0: the engine's other
+    messages (menu, tmenu, bpm, editor, status, error, melody). Outlets 1 and 2:
+    left and right audio: the [poly~] Hz voices plus Ableton's Drift playing
+    the MPE notes (which also go to [midiout])."""
+    p = Patch(rect=(80, 80, 900, 720))
     p.note(GENERATED_NOTE, 20, 10, 700, 1)
-    p.note("cg.canon: renders a canon spec and plays it. In: preset, tuning, tempo, render, select and the editor "
-           "fields, loadspec, savespec, play, stop. The script fills [coll] with one row per note (the delay to the next "
-           "note first); Max plays it in the scheduler (PLAN 4.2, design 1).", 480, 440, 260, 7)
     inl = p.obj("route play stop", 20, 115, 2, 3)
-    inlet = p.inlet(20, 85, "messages: preset, tuning, tempo, render, select, edits, loadspec, savespec, play, stop", 0)
+    inlet = p.inlet(20, 85, "messages: preset, tuning, tempo, render, select, edits, output, loadmidi, loadspec, "
+                    "savespec, play, stop", 0)
     p.connect(inlet, 0, inl, 0)
     load = p.obj("loadbang", 430, 85, 1, 1, ["bang"])
     order = p.obj("t b b b", 430, 115, 1, 3, ["bang", "bang", "bang"])
@@ -332,7 +380,7 @@ def canon():
     for m in (fill, fill_tunings, first):
         p.connect(m, 0, v8, 0)
     p.connect(inl, 2, v8, 0)
-    route = p.obj("route coll", 230, 220, 2, 2)
+    route = p.obj("route coll midi", 230, 220, 2, 3)
     p.connect(v8, 0, route, 0)
 
     # The player: index -> [coll] row -> play the note, wait the delay, next index.
@@ -346,8 +394,9 @@ def canon():
     head = p.obj("zl slice 1", 230, 355, 2, 2)
     gate = p.obj("if $f1 >= 0. then $f1", 20, 390, 1, 1)
     wait = p.obj("delay", 20, 420, 2, 1, ["bang"])
-    note = p.obj("prepend note", 330, 390, 2, 1)
-    bank = p.obj("poly~ cg.voice~ 32", 330, 420, 1, 2, ["signal", "signal"])
+    kind = p.obj("route mpe", 330, 390, 2, 2)
+    note = p.obj("prepend note", 330, 420, 2, 1)
+    bank = p.obj("poly~ cg.voice~ 32", 330, 455, 1, 2, ["signal", "signal"])
     p.connect(inl, 0, play, 0)
     p.connect(play, 1, zero, 0)
     p.connect(zero, 0, index, 1)
@@ -362,29 +411,103 @@ def canon():
     p.connect(head, 0, gate, 0)
     p.connect(gate, 0, wait, 0)
     p.connect(wait, 0, index, 0)
-    p.connect(head, 1, note, 0)
+    p.connect(head, 1, kind, 0)
+    p.connect(kind, 1, note, 0)
     p.connect(note, 0, bank, 0)
 
-    # stop: halt the chain and fade every voice.
+    # MPE: rows marked "mpe" (and the zone setup) to cg.mpe.out, then to
+    # [midiout] and to Drift inside Max (second oscillator on, no random detune).
+    zone = p.obj("prepend midi", 360, 255, 2, 1)
+    mpe = p.obj("cg.mpe.out", 560, 420, 1, 1, ["int"])
+    p.connect(route, 1, zone, 0)
+    p.connect(zone, 0, mpe, 0)
+    p.connect(kind, 0, mpe, 0)
+    midiout = p.obj("midiout", 560, 460, 1, 0)
+    drift = p.obj("abl.device.drift~ @drift 0", 650, 460, 1, 2, ["signal", "signal"])
+    p.connect(mpe, 0, midiout, 0)
+    p.connect(mpe, 0, drift, 0)
+    drift_left = p.obj("*~ 0.3", 650, 495, 2, 1, ["signal"])
+    drift_right = p.obj("*~ 0.3", 720, 495, 2, 1, ["signal"])
+    p.connect(drift, 0, drift_left, 0)
+    p.connect(drift, 1, drift_right, 0)
+    left = p.obj("+~", 330, 535, 2, 1, ["signal"])
+    right = p.obj("+~", 430, 535, 2, 1, ["signal"])
+    p.connect(bank, 0, left, 0)
+    p.connect(drift_left, 0, left, 1)
+    p.connect(bank, 1, right, 0)
+    p.connect(drift_right, 0, right, 1)
+
+    # stop: halt the chain, fade every Hz voice, and stop every MPE note.
     halt = p.obj("t b b", 160, 115, 1, 2, ["bang", "bang"])
     stop_chain = p.msg("stop", 160, 220)
     stop_voices = p.msg("target 0, stop", 470, 390)
+    panic = p.msg("panic", 600, 390)
     p.connect(inl, 1, halt, 0)
     p.connect(halt, 1, stop_chain, 0)
     p.connect(stop_chain, 0, start, 0)
     p.connect(stop_chain, 0, wait, 0)
     p.connect(halt, 0, stop_voices, 0)
     p.connect(stop_voices, 0, bank, 0)
+    p.connect(halt, 0, panic, 0)
+    p.connect(panic, 0, mpe, 0)
 
     # Outlets left to right: messages, left audio, right audio.
-    out_messages = p.outlet(230, 520, "menu, tmenu, bpm, editor, status, error", 0)
-    out_left = p.outlet(330, 520, "left audio", 1)
-    out_right = p.outlet(430, 520, "right audio", 2)
-    p.connect(route, 1, out_messages, 0)
-    p.connect(bank, 0, out_left, 0)
-    p.connect(bank, 1, out_right, 0)
+    out_messages = p.outlet(230, 580, "menu, tmenu, bpm, editor, status, error, melody", 0)
+    out_left = p.outlet(330, 580, "left audio", 1)
+    out_right = p.outlet(430, 580, "right audio", 2)
+    p.connect(route, 2, out_messages, 0)
+    p.connect(left, 0, out_left, 0)
+    p.connect(right, 0, out_right, 0)
     p.note("A number into [delay]'s left inlet sets the time and starts it. Events at the same time have a "
            "delay of 0. The last row's delay is -1, which [if] stops.", 20, 455, 280, 3)
+    p.note("cg.canon: renders a canon spec and plays it. The script fills [coll] with one row per note (the delay "
+           "to the next note first); Max plays it in the scheduler (PLAN 4.2, design 1). Hz rows go to the "
+           "[poly~] voices; rows marked 'mpe' go to cg.mpe.out, which sends their bytes to [midiout] and Drift.",
+           20, 625, 820, 3)
+    return p
+
+
+def check_mpe():
+    """cg.check.mpe (M2 part F): plays one held MPE note into Ableton's Drift
+    inside Max and measures it with [fzero~], against what was sent. The
+    summary folds octave jumps and gives the bend range Drift applied."""
+    p = Patch(rect=(60, 60, 820, 520))
+    p.note(GENERATED_NOTE, 20, 10, 760, 1)
+    p.note("MPE PITCH CHECK (M2). Turn audio on (speaker). Click 'zone' once, then 'note 64.5' (a quarter-tone above "
+           "E4) and hold it about 15 s: every ~5 s the Max window prints a cents summary, folded to the nearest "
+           "octave, with 'implied bend range'. Pass: the median within +/-5 cents and the range about 48. Then 'off'.",
+           20, 40, 760, 3)
+    msgs = [p.msg(text, x, 100) for text, x in [("zone", 20), ("note 64.5", 80), ("note 60", 170), ("off", 250)]]
+    v8 = p.obj("v8 cg.mpecheck.bundle.js", 20, 140, 1, 1)
+    route = p.obj("route midi cents status", 20, 175, 2, 4)
+    for m in msgs:
+        p.connect(m, 0, v8, 0)
+    p.connect(v8, 0, route, 0)
+    bytes_ = p.obj("iter", 20, 215, 1, 1, ["int"])
+    p.connect(route, 0, bytes_, 0)
+    drift = p.obj("abl.device.drift~ @drift 0", 20, 250, 1, 2, ["signal", "signal"])
+    midiout = p.obj("midiout", 240, 250, 1, 0)
+    p.connect(bytes_, 0, drift, 0)
+    p.connect(bytes_, 0, midiout, 0)
+    left = p.obj("*~ 0.3", 20, 290, 2, 1, ["signal"])
+    right = p.obj("*~ 0.3", 90, 290, 2, 1, ["signal"])
+    p.connect(drift, 0, left, 0)
+    p.connect(drift, 1, right, 0)
+    dac = p.ui("ezdac~", 20, 330, 45, 45, 2, 0, [])
+    p.connect(left, 0, dac, 0)
+    p.connect(right, 0, dac, 1)
+    tracker = p.obj("fzero~", 240, 330, 1, 3, ["float", "float", "bang"])
+    limit = p.obj("speedlim 500", 240, 365, 2, 1)
+    measured = p.obj("prepend measuredhz", 240, 400, 2, 1)
+    p.connect(left, 0, tracker, 0)
+    p.connect(tracker, 0, limit, 0)
+    p.connect(limit, 0, measured, 0)
+    p.connect(measured, 0, v8, 0)
+    p.comment("cents error", 420, 215)
+    cents = p.ui("flonum", 420, 240, 80, 22, 1, 2, ["", "bang"], format=6)
+    status = p.obj("print mpe-check", 520, 240, 1, 0)
+    p.connect(route, 1, cents, 0)
+    p.connect(route, 2, status, 0)
     return p
 
 
@@ -392,7 +515,9 @@ GENERATED = {
     "patchers/cg.engine.maxpat": engine,
     "patchers/cg.tuning.maxpat": tuning,
     "patchers/cg.voice~.maxpat": voice,
+    "patchers/cg.mpe.out.maxpat": mpe_out,
     "patchers/cg.canon.maxpat": canon,
+    "patchers/cg.check.mpe.maxpat": check_mpe,
 }
 
 
@@ -495,6 +620,8 @@ def panel_tuning():
     problem = p.obj("print tuning-error", 440, 500, 1, 0)
     p.connect(route, 4, status, 0)
     p.connect(route, 5, problem, 0)
+    melody = p.obj("print midi_file", 420, 605, 1, 0)
+    p.connect(route, 6, melody, 0)
 
     dac = p.ui("ezdac~", 480, 415, 45, 45, 2, 0, [])
     p.connect(engine, 1, dac, 0)
@@ -503,9 +630,10 @@ def panel_tuning():
 
 
 def panel_canon():
-    """The M2 canon panel: pick a preset and a tuning, play it, load your own
-    melody from a .mid file, and edit one voice at a time."""
-    p = Patch(rect=(60, 60, 820, 750))
+    """The M2 canon panel: pick a preset and a tuning, play it through the Hz
+    voices or MPE, load your own melody from a .mid file (it stays across
+    presets), and edit one voice at a time."""
+    p = Patch(rect=(60, 60, 860, 750))
     p.note(HAND_NOTE, 20, 10, 780, 2)
     p.note("CANONS (M2). Turn audio on (speaker). Pick a preset, then play. The tuning menu plays the same "
            "canon in another scale system. The voice editor changes one voice at a time; every change "
@@ -534,6 +662,12 @@ def panel_canon():
     p.connect(set_tempo, 0, engine, 0)
     p.comment("volume:", 360, 165)
     volume = p.ui("flonum", 420, 165, 50, 22, 1, 2, ["", "bang"], format=6)
+    p.comment("output:", 490, 165)
+    output = p.ui("umenu", 550, 165, 150, 22, 1, 3, ["int", "", ""],
+                  items=["Hz", "voices", ",", "MPE:", "Drift", "+", "MIDI", "out"])
+    set_output = p.obj("prepend output", 710, 165, 2, 1)
+    p.connect(output, 0, set_output, 0)
+    p.connect(set_output, 0, engine, 0)
 
     load_button = p.ui("button", 20, 200, 22, 22, 1, 1, ["bang"])
     p.comment("load a spec...", 46, 201)
@@ -555,7 +689,9 @@ def panel_canon():
     p.comment("load a .mid...", 46, 241)
     midi_dialog = p.obj("opendialog", 150, 240, 1, 2, ["", "bang"])
     midi_load = p.obj("prepend loadmidi", 250, 240, 2, 1)
-    p.comment("your melody becomes every canon's dux", 390, 241)
+    p.comment("your melody, kept across presets", 390, 241)
+    own = p.msg("presetmelody", 720, 240)
+    p.connect(own, 0, engine, 0)
     p.connect(midi_button, 0, midi_dialog, 0)
     p.connect(midi_dialog, 0, midi_load, 0)
     p.connect(midi_load, 0, engine, 0)
@@ -599,7 +735,7 @@ def panel_canon():
         p.connect(send, 0, engine, 0)
 
     # What the engine says: menus, the tempo, the editor's fields, the Max window.
-    route = p.obj("route menu tmenu bpm editor status error", 20, 570, 2, 7)
+    route = p.obj("route menu tmenu bpm editor status error melody", 20, 570, 2, 8)
     p.connect(engine, 0, route, 0)
     p.connect(route, 0, presets, 0)
     p.connect(route, 1, tunings, 0)
@@ -616,6 +752,8 @@ def panel_canon():
     problem = p.obj("print canon-error", 480, 570, 1, 0)
     p.connect(route, 4, status, 0)
     p.connect(route, 5, problem, 0)
+    melody = p.obj("print midi_file", 420, 605, 1, 0)
+    p.connect(route, 6, melody, 0)
 
     # Audio: the volume scales both sides.
     left = p.obj("*~ 0.7", 600, 530, 2, 1, ["signal"])

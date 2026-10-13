@@ -31,9 +31,9 @@ renders and plays; M3 judges.
   ±5 cents, and the implied bend range is about 48.
 
 **Status:**
-- Parts A–E are done; Max sessions 1 and 2 passed.
-- A loaded melody now stays across presets.
-- Next: part F (MPE), then Max session 3.
+- Parts A–F are built: 97 tests.
+- Max sessions 1 and 2 passed.
+- **To do: Max session 3** (end of part F). M2 closes after it.
 
 **In M2 / later:**
 
@@ -242,16 +242,61 @@ Specs can also use `groups` with a `start` time each, so canons can follow one a
    interval, and the 31-EDO spiral gives a spiral. Then save the spec and load it back.
 7. Paste any `canon-error` lines and the `midi` status lines.
 
-## Part F. MPE out: `cg.mpe.out` (generated)
-- [ ] Lower zone: channels 2–16, bend ±48 (`cg-mpe` from M0), one channel per sounding
-  voice. Note-offs are timed by Max, not JS. Voices beyond 15 go to the Hz path.
-- [ ] **The MPE pitch check.** Its audio has to reach `[fzero~]` in Max. In order of effort:
-  1. **Drift inside Max again, with its second oscillator on** (the default). The first M0
-     run *did* give readings that way; they only jumped octaves, and octave folding now
-     handles that.
-  2. An external MPE synth or a Live 12 instrument, its audio brought back into Max: an
-     audio interface input, or a loopback device, into `[adc~]`.
-- [ ] **Max session 2:** a `.mid` melody plays as a canon, and the MPE check.
+## Part F. MPE out: `cg.mpe.out` (generated): built
+- [x] **Channels:** each MPE note gets its own member channel, 2–16
+  (`cg-mpe.allocate`).
+  - No two overlapping notes share one, so each note's bend is its own.
+  - A free channel is chosen least recently freed first, so a new note's bend doesn't
+    land on the release tail of the note just ended.
+  - More than 15 notes at once: the extras go to the Hz voices, and the status line
+    says how many.
+- [x] **The canon wrapper:**
+  - `output hz|mpe` sends every voice one way or the other
+  - an MPE note's `[coll]` row carries its length and its bytes (bend + note-on,
+    note-off)
+  - with any MPE voice, the zone setup (MCM, then RPN 0 = ±48 on channels 2–16) goes out
+    on every render
+- [x] **`cg.mpe.out`** (generated): note-on bytes go out now; **`[pipe]` delays each
+  note-off by the note's own length**, so Max times it, not JS. `panic` (on stop) clears
+  pending note-offs and sends all-notes-off.
+- [x] **`cg.canon`:** `[route mpe]` after the player sends MPE rows to `cg.mpe.out`, then
+  to `[midiout]` and to **Drift inside Max** (`[abl.device.drift~ @drift 0]`, second
+  oscillator on), mixed with the Hz voices.
+- [x] **The MPE pitch check**, `cg.check.mpe.maxpat` (generated) + `cg.mpecheck.v8.js`:
+  - M0's spike (c), rebuilt on the permanent modules
+  - one held note into Drift; `[fzero~]` measures it
+  - every 10 readings, a summary folded to the nearest octave, with the bend range Drift
+    applied
+- [x] **The panel**, regenerated:
+  - an output menu (Hz voices / MPE: Drift + MIDI out)
+  - `presetmelody`
+  - `[print midi_file]`, which prints which melody is in use
+- [ ] **Max session 3** (below)
+
+### Max session 3
+1. If you've saved the canon panel since your last pull, first run
+   `git checkout -- patchers/cg.panel.canon.maxpat`. Then `git pull`.
+2. **Your melody across presets:** open `patchers/cg.panel.canon.maxpat`.
+   - Load `live-clip.mid` (or your own). The Max window prints
+     `midi_file: live-clip.mid`.
+   - Pick other presets: the melody stays, and each change prints
+     `midi_file: live-clip.mid` again.
+   - Click **presetmelody**: `midi_file: preset …`, and the preset's own melody plays.
+3. **Re-map on a tuning change:** with the clip loaded and map = **nearest**, switch the
+   tuning to 31-EDO D Dorian, then to Just major. The melody follows each tuning.
+4. **MPE out:** set output to **MPE: Drift + MIDI out** and play the round. You'll hear
+   it through Drift, and `canon: mpe: 256 notes on 15 channels …` prints. Listen for stuck
+   notes or bends landing on the wrong note. **stop** should silence everything.
+5. **The pitch check:** open `patchers/cg.check.mpe.maxpat` and turn audio on. Click
+   `zone` once, then `note 64.5`, and hold it about 15 s. Paste the 2–3
+   `mpe-check: cents n 10 median … implied bend range …` lines, then click `off`.
+
+   | Folded median | Implied bend range | Meaning |
+   |---|---|---|
+   | within ±5 cents | ≈ 48 | **Pass:** M2's MPE criterion is met. Drift honours our MPE setup. |
+   | ≈ +48 cents | ≈ 2 | Drift kept a ±2 note bend range: it needs that setting changed (a Drift attribute, from its reference). |
+   | none, or scattered | — | Unreadable inside Max: try a Live 12 instrument, its audio brought back into Max. |
+6. Paste anything from `canon-error`, and anything that sounds wrong.
 
 ## Results
 
