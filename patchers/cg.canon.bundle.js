@@ -1997,8 +1997,12 @@ __cg_require.local = 1;
 // Messages                      Outlet 0
 //   presets                       menu clear, menu append <name> ...    the preset chooser
 //   tunings                       tmenu clear, tmenu append <name> ...  the tuning chooser
-//   preset <i>                    menu set <i>, then as render          load a preset
+//   preset <i>                    menu set <i>, then as render          load a preset; a loaded .mid
+//                                                                        stays its melody
+//   presetmelody                  as render, melody preset <name>       forget the .mid: the preset's
+//                                                                        own melody again
 //   tuning <i>                    as render                             the canon in starter system i
+//                                                                        (a loaded .mid is re-mapped)
 //   tempo <bpm>                   as render
 //   render                        coll clear, coll <i> <ms to next> <hz> <gain L> <gain R>
 //                                   <total ms> <envelope...>, bpm <tempo>, editor ..., status ...
@@ -2016,6 +2020,7 @@ __cg_require.local = 1;
 //   savespec <full path>          status saved ...                      the current spec
 //                                 (not "save": [v8] calls a save() function when the patch is saved)
 //   info                          status ...
+// Whenever the melody changes: melody <file> | melody preset <name> | melody spec <name>.
 // Errors come out as: error <message>. Every output starts with a selector.
 
 autowatch = 1;
@@ -2038,6 +2043,7 @@ let spec = library.preset(0);
 let selected = 0;
 let rendered = null;
 let midi = null; // the last .mid file: { name, parsed }
+let presetIndex = 0; // the preset last picked (null after loadspec)
 const midiOptions = { line: "top", map: "exact", quantize: 0, track: -1 };
 
 function presets() {
@@ -2052,18 +2058,56 @@ function tunings() {
 
 function preset(index) {
   attempt(() => {
+    const previous = { spec, presetIndex, selected };
     spec = library.preset(index);
+    presetIndex = index;
     selected = 0;
+    try {
+      if (midi) applyMidi(); // your melody stays; the preset gives the canon's shape
+      else {
+        update();
+        announceMelody();
+      }
+    } catch (e) {
+      ({ spec, presetIndex, selected } = previous);
+      throw e;
+    }
     outlet(0, "menu", "set", index);
+    if (midi) outlet(0, "status", "midi", "kept:", midi.name, "as the dux of", library.names()[index]);
+  });
+}
+
+function presetmelody() {
+  attempt(() => {
+    midi = null;
+    if (presetIndex === null) {
+      outlet(0, "status", "midi", "forgotten, but this spec came from a file: its own melody stays");
+      announceMelody();
+      return;
+    }
+    // The preset's own dux back, keeping the tuning, tempo and voice edits.
+    const original = library.preset(presetIndex);
+    const originals = original.groups || [original];
+    (spec.groups || [spec]).forEach((g, i) => {
+      g.dux = originals[Math.min(i, originals.length - 1)].dux;
+    });
     update();
+    announceMelody();
   });
 }
 
 function tuning(index) {
   attempt(() => {
     scaleLibrary.starter(index); // fails here, not mid-render, if there's no such starter
+    const before = spec.system;
     spec.system = { type: "starter", index }; // groups with their own system keep it
-    update();
+    try {
+      if (midi) applyMidi(); // nearest and degree re-map to the new system
+      else update();
+    } catch (e) {
+      spec.system = before;
+      throw e;
+    }
   });
 }
 
@@ -2157,9 +2201,19 @@ function miditrack(track) {
 
 function loadspec(path) {
   attempt(() => {
-    spec = JSON.parse(files.readLines(String(path)).join("\n"));
+    const loaded = JSON.parse(files.readLines(String(path)).join("\n"));
+    const previous = spec;
+    spec = loaded;
+    try {
+      update();
+    } catch (e) {
+      spec = previous;
+      throw e;
+    }
     selected = 0;
-    update();
+    midi = null; // the spec carries its own melody
+    presetIndex = null;
+    announceMelody();
   });
 }
 
@@ -2225,8 +2279,22 @@ function applyMidi() {
     "dropped", report.dropped + ",", "cut", report.cut + ",", "glides", report.glides + ",", "trimmed", report.trimmed + ",",
     report.tempo ? "tempo " + report.tempo + " bpm" : "no tempo in the file (kept " + spec.tempo + " bpm)");
   for (const warning of midi.parsed.warnings) outlet(0, "status", "midi", "warning:", warning);
+  announceMelody();
 }
 applyMidi.local = 1;
+
+// Which melody the canons use, for the panel's [print midi_file].
+function announceMelody() {
+  if (midi) {
+    outlet(0, "melody", midi.name);
+    return;
+  }
+  const first = (spec.groups || [spec])[0];
+  if (first.dux && first.dux.from) outlet(0, "melody", first.dux.from);
+  else if (presetIndex !== null) outlet(0, "melody", "preset", library.names()[presetIndex]);
+  else outlet(0, "melody", "spec", spec.name || "untitled");
+}
+announceMelody.local = 1;
 
 // The canon voices in order (groups flattened), as the renderer numbers them.
 function canonVoices() {

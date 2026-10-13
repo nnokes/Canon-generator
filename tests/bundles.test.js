@@ -170,8 +170,8 @@ const rows = (out) => select(out, "coll").filter((r) => r[0] !== "clear");
 test("cg.canon exposes exactly its documented messages", () => {
   assert.deepEqual(loadBundle("cg.canon").handlers(), [
     "delay", "info", "interval", "loadmidi", "loadspec", "midiline", "midimap", "midiquantize", "miditrack",
-    "passes", "preset", "presets", "register", "render", "savespec", "select", "tempo", "timescale", "transform",
-    "tuning", "tunings",
+    "passes", "preset", "presetmelody", "presets", "register", "render", "savespec", "select", "tempo", "timescale",
+    "transform", "tuning", "tunings",
   ]);
 });
 
@@ -299,4 +299,51 @@ test("cg.canon: loadmidi puts your melody into every canon, and the options re-r
   assert.match(errors(bundle.send("miditrack", 7))[0], /no notes found/);
   assert.match(select(bundle.send("midiline", 0), "status")[1].join(" "), /line top/, "track 7 was refused; track 1 stayed");
   assert.match(errors(bundle.send("loadmidi", path.join(FIXTURES, "ji-major.scl")))[0], /not a MIDI file/);
+});
+
+test("cg.canon: your melody stays across presets; tuning re-maps it; presetmelody brings the presets' own back", () => {
+  const bundle = loadBundle("cg.canon");
+  const melody = (out) => select(out, "melody");
+  // A preset with no file: the preset's own melody.
+  assert.deepEqual(melody(bundle.send("preset", 0)), [["preset", library.names()[0]]]);
+  assert.deepEqual(melody(bundle.send("loadmidi", path.join(FIXTURES, "live-clip.mid"))), [["live-clip.mid"]]);
+
+  // The ladder keeps the clip: nine canons of 13 notes each, plus the 72-note ground.
+  const ladder = bundle.send("preset", 3);
+  assert.deepEqual(errors(ladder), []);
+  assert.deepEqual(melody(ladder), [["live-clip.mid"]]);
+  assert.equal(rows(ladder).length, 9 * 2 * 13 + 72);
+  assert.deepEqual(select(ladder, "menu"), [["set", 3]]);
+  assert.ok(select(ladder, "status").some((line) => line.join(" ") === `midi kept: live-clip.mid as the dux of ${library.names()[3]}`));
+
+  // map nearest, then a tuning change re-maps: the same clip snapped to 31-EDO D Dorian.
+  bundle.send("preset", 0);
+  bundle.send("midimap", "nearest");
+  const twelve = rows(bundle.send("render")).map((r) => r[2]);
+  const dorian = bundle.send("tuning", 5);
+  assert.deepEqual(melody(dorian), [["live-clip.mid"]]);
+  const d31 = tuning.edo(31, { ref: { step: 0, midi: 62 }, mode: [0, 5, 8, 13, 18, 23, 26] });
+  const firstHz = rows(dorian)[0][2];
+  assert.ok(Math.abs(firstHz - tuning.degreeToHz(d31, tuning.quantize(d31, 60).degree)) < 1e-9, "C4 snapped into 31-EDO D Dorian");
+  assert.notDeepEqual(rows(dorian).map((r) => r[2]), twelve);
+
+  // presetmelody: the round's own melody, in the tuning chosen.
+  const own = bundle.send("presetmelody");
+  assert.deepEqual(melody(own), [["preset", library.names()[0]]]);
+  assert.equal(rows(own).length, 256, "Frere Jacques again: 4 voices x 32 notes x 2 passes");
+  assert.deepEqual(melody(bundle.send("preset", 1)), [["preset", library.names()[1]]], "no file any more");
+
+  // loadspec: the spec's melody; a spec saved with the clip names it.
+  const os = require("os");
+  const fs = require("fs");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cg-melody-"));
+  bundle.send("loadmidi", path.join(FIXTURES, "live-clip.mid"));
+  bundle.send("savespec", path.join(dir, "with-clip.json"));
+  bundle.send("presetmelody"); // the double canon's own melodies (preset 1 is current)
+  bundle.send("savespec", path.join(dir, "double.json"));
+  assert.deepEqual(melody(bundle.send("loadspec", path.join(dir, "with-clip.json"))), [["live-clip.mid"]]);
+  assert.deepEqual(melody(bundle.send("loadspec", path.join(dir, "double.json"))), [["spec", library.names()[1]]]);
+  const kept = bundle.send("presetmelody");
+  assert.match(select(kept, "status")[0].join(" "), /came from a file/);
+  fs.rmSync(dir, { recursive: true });
 });

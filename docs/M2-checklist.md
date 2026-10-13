@@ -31,9 +31,9 @@ renders and plays; M3 judges.
   ±5 cents, and the implied bend range is about 48.
 
 **Status:**
-- Parts A–D are done, and Max session 1 passed.
-- Part E (MIDI import) is built: 90 tests.
-- **To do: Max session 2** (end of part E), then part F (MPE).
+- Parts A–E are done; Max sessions 1 and 2 passed.
+- A loaded melody now stays across presets.
+- Next: part F (MPE), then Max session 3.
 
 **In M2 / later:**
 
@@ -219,7 +219,8 @@ Specs can also use `groups` with a `start` time each, so canons can follow one a
   - a saved spec keeps the notes, so it doesn't need the `.mid`
 - [x] **The panel** (regenerated once, see session 2): "load a .mid…", line and map menus,
   quantize, track (-1 = all). Plus the fixed save button.
-- [ ] **Max session 2** (below)
+- [x] **Max session 2** (below): passed. Two follow-ups are done: a loaded melody now
+  stays across presets, and a tuning change re-maps it.
 
 ### Max session 2
 1. **First, discard your local panel edit** (your added save bang): in the repo folder run
@@ -259,7 +260,7 @@ Specs can also use `groups` with a `start` time each, so canons can follow one a
 | transform property tests | **PASS** (Node, `tests/transform.test.js`): I∘I for all four axes, R∘R, T and back in both domains, time scale and back (irrational too), T∘I∘R | |
 | presets play in Max (session 1) | **PASS:** all five presets played, with no errors. | The `[coll]` + `[delay]` player and the `[poly~]` voice bank stand. |
 | `[v8]` writes a file (session 1) | **PASS:** a spec saved from `[v8]` through `File`. But the panel's save button was hidden: renaming `[prepend load]` to `[prepend loadspec]` widened that box under the button, so the user added their own bang. | Generator fixed. **The patch lint now fails on overlapping boxes** in anything the generator creates; it catches this exact bug. The committed panel is regenerated with part E's controls. |
-| `[v8]` reads raw bytes (Part E) | | |
+| `[v8]` reads raw bytes (Part E) | **PASS** (session 2): your Live clip and the generated fixtures loaded through `File.readbytes` | No `[detonate]` fallback needed |
 | `.mid` fixtures import intact | **PASS** (Node, `tests/midi.test.js`): 12-TET, 31-EDO by pitch bend (to 0.025 c), MPE (±48, a glide), polyphonic (top/bottom/track), your Live clip (13 notes, 16 beats), and bytes written by hand | Pair note-ons and offs into intervals before picking the line (Live's order); the skyline for `top` and `bottom` |
-| a `.mid` melody plays as a canon | | |
+| a `.mid` melody plays as a canon | **PASS** (session 2). Every count in the Max window matched the render: your clip as the round (104 notes, 56 beats), the spiral (182 notes, 114 beats) and the ladder (306 notes, 148 beats); the 31-EDO file at its own 72 bpm (72 notes, 44 beats). Nothing dropped, no errors. **Two follow-ups:** (1) picking a preset brought back its own melody, so you reloaded the `.mid` each time; (2) a tuning change didn't re-map a melody read with `nearest` or `degree`. | **Your melody stays across presets**, and a "preset melody" button brings back the presets' own. A tuning change re-maps a loaded melody. `[print midi_file]` says which melody is in use (from session 3's panel). |
 | MPE pitch (Part F) | | |
