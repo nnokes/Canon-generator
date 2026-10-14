@@ -1,9 +1,9 @@
 "use strict";
 // MPE output maths (MIDI Polyphonic Expression, lower zone). Each note gets
 // its own member channel (allocate), and its microtonal offset travels as
-// per-channel pitch bend. The bend range is +/-48 semitones, the value Live 12's tuning
-// system expects (PLAN.md 4.3), which gives 96/16384 semitones, about 0.59
-// cents, per bend step.
+// per-channel pitch bend. The bend range depends on where the notes go (RANGES):
+// +/-48 semitones for MIDI out, the MPE standard and what Live 12's tuning
+// system expects (PLAN.md 4.3), about 0.59 cents per bend step; +/-2 for Drift.
 //
 // Everything here returns raw MIDI bytes for [midiout]. The engine computes
 // the bytes ahead of time; Max sends them (JS never schedules notes).
@@ -11,6 +11,11 @@
 const time = require("cg-time");
 
 const DEFAULT_RANGE = 48;
+// The bend range each MPE destination applies. Drift ignores the RPN in the
+// zone setup and keeps its own per-note range ("Note PB", 2 by default): M2
+// session 3 measured it. A note's bend stays within +/-50 cents of its key,
+// so +/-2 covers it, in steps of about 0.05 cents.
+const RANGES = { drift: 2, midi: DEFAULT_RANGE };
 const CENTER = 8192;
 const MAX_BEND = 16383;
 
@@ -30,8 +35,9 @@ function pitchOf(note, bend, range = DEFAULT_RANGE) {
 }
 
 // The bend range a synth actually used, from the pitch it sounded for a note
-// sent with `bend`: about 48 if it honoured our setup, 2 if it kept the MIDI
-// default. NaN when the bend is centred (nothing to infer from).
+// sent with `bend`: the range it was sent for if it honoured it, 2 if it kept
+// the MIDI default, about 0 if it ignored the bend. NaN when the bend is
+// centred (nothing to infer from).
 function impliedRange(measuredPitch, note, bend) {
   if (bend === CENTER) return NaN;
   return (measuredPitch - note) / ((bend - CENTER) / CENTER);
@@ -109,6 +115,7 @@ function allocate(events, { first = 2, last = 16 } = {}) {
 }
 
 exports.DEFAULT_RANGE = DEFAULT_RANGE;
+exports.RANGES = RANGES;
 exports.allocate = allocate;
 exports.bendFor = bendFor;
 exports.pitchOf = pitchOf;

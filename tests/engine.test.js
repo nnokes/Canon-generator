@@ -108,6 +108,20 @@ test("mpe: the bend range a synth used can be read back from the pitch it sounde
   assert.ok(Number.isNaN(mpe.impliedRange(60, 60, 8192)));
 });
 
+test("mpe: each destination has its own bend range: Drift +/-2, MIDI out +/-48", () => {
+  assert.deepEqual(mpe.RANGES, { drift: 2, midi: 48 });
+  // At +/-2 a quarter tone is a quarter of the bend: 2048 steps, in steps of
+  // about 0.024 cents.
+  const { note, bend } = mpe.bendFor(64.5, 2);
+  assert.deepEqual({ note, bend }, { note: 65, bend: 6144 });
+  near(mpe.pitchOf(note, bend, 2), 64.5, 1e-12, "exact");
+  near(mpe.impliedRange(64.5, note, bend), 2, 1e-12, "synth honoured +/-2");
+  near(mpe.impliedRange(64.51, note, bend), 2, 0.05, "a cent of noise barely moves it");
+  // The zone setup carries the range in RPN 0 (Drift ignores it; it documents intent).
+  const zone = mpe.zoneConfig({ range: 2 });
+  assert.deepEqual(zone.slice(6, 10), [[0xb1, 101, 0], [0xb1, 100, 0], [0xb1, 6, 2], [0xb1, 38, 0]]);
+});
+
 test("mpe: zone setup is RPN 6 on channel 1, then RPN 0 = 48 on channels 2-16", () => {
   const messages = mpe.zoneConfig();
   assert.equal(messages.length, 6 * 16);

@@ -22,8 +22,8 @@ just intonation, Scala files, and harmonic and inharmonic spectra.
 - **Start from your own melody:** bring a `.mid` file (later, a Live clip) and get a ranked
   set of canons on it, for 2 or more voices. Your melody stays as written unless you switch
   on edits, which suggest the fewest note changes that make a near-miss work.
-- **Sound** them as exact frequencies through an MSP voice bank, or as MPE MIDI (pitch bend
-  ±48, which Live 12's tuning system expects).
+- **Sound** them as exact frequencies through an MSP voice bank, or as MPE MIDI: pitch bend
+  ±48 to MIDI out (what Live 12's tuning system expects), ±2 to Ableton's Drift inside Max.
 
 ## Documents
 - [`PLAN.md`](PLAN.md): decisions, architecture, data model, engine, Max layer, and

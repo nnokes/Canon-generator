@@ -1,10 +1,11 @@
 // [v8] wrapper for the MPE pitch check (M2 part F; see docs/M2-checklist.md).
 // Glue only: cg-mpe builds the bytes, cg-tuning folds and summarizes the
 // readings. It plays one held MPE note into a synth inside Max and compares
-// what [fzero~] hears with what was sent, so the check needs no tuner.
+// what [fzero~] hears with what was sent, so the check needs no tuner. Bends
+// are for Drift's own range, +/-2 (cg-mpe RANGES): Drift ignores the RPN.
 //
 // Messages                 Outlet 0
-//   zone                     midi <bytes> ..., status mpe zone set ...   the lower zone, bend +/-48
+//   zone                     midi <bytes> ..., status mpe zone set ...   the lower zone, bend +/-2
 //   note [pitch]             midi ..., status mpe note ..., target <hz>  a held note on channel 2
 //                                                                        (default 64.5); target is
 //                                                                        the Hz it should sound at
@@ -24,30 +25,31 @@ const mpe = require("cg-mpe");
 const tuning = require("cg-tuning");
 
 const CHANNEL = 2;
+const RANGE = mpe.RANGES.drift;
 const BATCH = 10;
 let sounding = null; // { pitch, note, bend, heard }: heard counts every reading of this note
 let readings = []; // the readings since the last summary
 
 function zone() {
-  for (const bytes of mpe.zoneConfig()) outlet(0, "midi", ...bytes);
-  outlet(0, "status", "mpe", "zone", "set:", "15", "channels,", "bend", mpe.DEFAULT_RANGE);
+  for (const bytes of mpe.zoneConfig({ range: RANGE })) outlet(0, "midi", ...bytes);
+  outlet(0, "status", "mpe", "zone", "set:", "15", "channels,", "bend", RANGE);
 }
 
 function note(pitch) {
   const p = typeof pitch === "number" ? pitch : 64.5;
   if (sounding) off();
-  const { note: key, bend } = mpe.bendFor(p);
+  const { note: key, bend } = mpe.bendFor(p, RANGE);
   sounding = { pitch: p, note: key, bend, heard: 0 };
   readings = [];
-  for (const bytes of mpe.noteOn(p, 100, CHANNEL)) outlet(0, "midi", ...bytes);
+  for (const bytes of mpe.noteOn(p, 100, CHANNEL, RANGE)) outlet(0, "midi", ...bytes);
   outlet(0, "status", "mpe", "note", "ch", CHANNEL, "note", key, "bend", bend, "pitch", p,
     "=", "note", Math.round((p - key) * 1e4) / 100, "cents");
   outlet(0, "target", tuning.midiToHz(p));
 }
 
 // Summarizes what's left before the note stops, even fewer than a batch, and
-// says so plainly when the tracker heard nothing at all (Drift's default
-// sound, M2 session 3).
+// says so plainly when the tracker heard nothing at all (M2 session 3: it was
+// fed a signal too quiet for it).
 function off() {
   if (!sounding) return;
   if (readings.length) summarize();
@@ -55,7 +57,7 @@ function off() {
     outlet(0, "status", "no", "pitch", "readings", "while", "the", "note", "sounded:", "the", "tracker",
       "could", "not", "follow", "this", "sound");
   }
-  for (const bytes of mpe.noteOff(sounding.pitch, CHANNEL)) outlet(0, "midi", ...bytes);
+  for (const bytes of mpe.noteOff(sounding.pitch, CHANNEL, RANGE)) outlet(0, "midi", ...bytes);
   sounding = null;
   readings = [];
   outlet(0, "status", "mpe", "note", "off");

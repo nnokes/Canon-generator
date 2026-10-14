@@ -476,22 +476,24 @@ def canon():
 def check_mpe():
     """cg.check.mpe (M2 part F): plays one held MPE note into Ableton's Drift
     inside Max and measures it with [fzero~], against what was sent. The
-    summary folds octave jumps and gives the bend range Drift applied.
+    summary folds octave jumps and gives the bend range Drift applied. Bends
+    are for Drift's own range, +/-2: it ignores the RPN (M2 session 3).
 
-    [fzero~] heard nothing of Drift's default sound (M2 session 3), so two
-    lowpasses at 1.5x the target strip it toward a sine first (filtering
-    doesn't move a pitch), the tracker's raw Hz is on screen, and a reference
-    sine at the target lets the bend range be checked by ear: a clean unison
-    at +/-48, a ~9 Hz beating at +/-2."""
+    The tracker taps Drift's raw output: after the speaker gain it was too
+    quiet for [fzero~] (session 3, found by the user). Two lowpasses at 1.5x
+    the target strip the sound toward a sine first (filtering doesn't move a
+    pitch), the tracker's raw Hz is on screen, and a reference sine at the
+    target checks it by ear: a clean unison if Drift applies the bend, a
+    ~10 Hz beating (50 cents) if it ignores it."""
     default_hz = 440 * 2 ** ((64.5 - 69) / 12)  # note 64.5, 339.29 Hz
     p = Patch(rect=(60, 60, 860, 600))
     p.note(GENERATED_NOTE, 20, 10, 800, 1)
     p.note("MPE PITCH CHECK (M2). Turn audio on (speaker). Click 'zone' once, then 'note 64.5' (a quarter-tone above "
-           "E4, 339.29 Hz) and hold it about 15 s. 'tracker Hz' shows what [fzero~] hears, after a lowpass; every "
-           "~5 s the Max window prints a cents summary, folded to the nearest octave, with 'implied bend range'. "
-           "Pass: the median within +/-5 cents and the range about 48. 'off' summarizes what's left. No readings at "
-           "all? Hold the note and switch on the reference sine: a clean unison passes by ear; a beating of about "
-           "9 Hz means Drift used +/-2.",
+           "E4, 339.29 Hz; bends are for Drift's own +/-2) and hold it about 15 s. 'tracker Hz' shows what [fzero~] "
+           "hears, after a lowpass; every ~5 s the Max window prints a cents summary, folded to the nearest octave, "
+           "with 'implied bend range'. Pass: the median within +/-5 cents and the range about 2. 'off' summarizes "
+           "what's left. Then hold the note with the reference sine on: a clean unison passes by ear; a beating of "
+           "about 10 Hz means Drift ignores the bend.",
            20, 40, 800, 5)
     msgs = [p.msg(text, x, 135) for text, x in [("zone", 20), ("note 64.5", 80), ("note 60", 170), ("off", 250)]]
     v8 = p.obj("v8 cg.mpecheck.bundle.js", 20, 175, 1, 1)
@@ -518,7 +520,7 @@ def check_mpe():
     lowpass = f"lores~ {round(1.5 * default_hz)} 0"
     low1 = p.obj(lowpass, 240, 365, 3, 1, ["signal"])
     low2 = p.obj(lowpass, 240, 400, 3, 1, ["signal"])
-    p.connect(left, 0, low1, 0)
+    p.connect(drift, 0, low1, 0)  # raw: the speaker gain made it too quiet for [fzero~]
     p.connect(low1, 0, low2, 0)
     p.connect(cutoff, 0, low1, 1)
     p.connect(cutoff, 0, low2, 1)

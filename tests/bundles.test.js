@@ -360,7 +360,7 @@ test("cg.canon: output drift sends the gate, the zone setup, then MPE rows a Max
   assert.ok(order.indexOf("panic") < order.indexOf("mpeto"), "panic to the old destination before the switch");
   assert.ok(order.indexOf("mpeto") < order.indexOf("midi"), "the gate is set before the zone setup goes through it");
   assert.deepEqual(select(out, "mpeto"), [[1]], "1: Drift");
-  assert.deepEqual(select(out, "midi"), mpe.zoneConfig(), "the lower zone, +/-48, before the notes");
+  assert.deepEqual(select(out, "midi"), mpe.zoneConfig({ range: 2 }), "the lower zone, at Drift's +/-2, before the notes");
   const queue = rows(out);
   const expected = canonEngine.render(library.preset(0)).events;
   assert.equal(queue.length, expected.length);
@@ -370,20 +370,29 @@ test("cg.canon: output drift sends the gate, the zone setup, then MPE rows a Max
     assert.equal(bytes.length, 9);
     const e = expected[k];
     assert.ok(Math.abs(ms - e.dur * 600) < 1e-9, "the note's length, for [pipe]");
-    assert.deepEqual(bytes, [...mpe.noteOn(e.pitch, e.vel, channels[k]).flat(), ...mpe.noteOff(e.pitch, channels[k]).flat()]);
+    assert.deepEqual(bytes, [...mpe.noteOn(e.pitch, e.vel, channels[k], 2).flat(), ...mpe.noteOff(e.pitch, channels[k], 2).flat()]);
   });
-  assert.equal(select(out, "status").at(-1).join(" "), "mpe: 256 notes on 15 channels (2-16, bend +/-48) to Drift");
+  assert.equal(select(out, "status").at(-1).join(" "), "mpe: 256 notes on 15 channels (2-16, bend +/-2) to Drift");
 });
 
 test("cg.canon: one MPE destination at a time: Drift, MIDI out, or the Hz voices", () => {
   const bundle = loadBundle("cg.canon");
-  bundle.send("preset", 0);
-  // MIDI out: the same rows, the gate to 2.
+  bundle.send("preset", 4); // the 31-EDO spiral: microtonal, so the bends differ by range
+  const expected = canonEngine.render(library.preset(4)).events;
+  const channels = mpe.allocate(expected);
+  const bytesFor = (range) => expected.map((e, k) =>
+    [...mpe.noteOn(e.pitch, e.vel, channels[k], range).flat(), ...mpe.noteOff(e.pitch, channels[k], range).flat()]);
+  // MIDI out: the gate to 2, and bends for +/-48, the MPE standard.
   const midiOut = bundle.send("output", 2);
   assert.deepEqual(select(midiOut, "mpeto"), [[2]], "2: MIDI out");
-  assert.match(select(midiOut, "status").at(-1).join(" "), /to MIDI out$/);
-  // "mpe" means Drift.
-  assert.deepEqual(select(bundle.send("output", "mpe"), "mpeto"), [[1]]);
+  assert.deepEqual(select(midiOut, "midi"), mpe.zoneConfig({ range: 48 }));
+  assert.deepEqual(rows(midiOut).map(([, , , , ...bytes]) => bytes), bytesFor(48));
+  assert.match(select(midiOut, "status").at(-1).join(" "), /\(2-16, bend \+\/-48\) to MIDI out$/);
+  // "mpe" means Drift: the gate to 1, and bends for Drift's own +/-2.
+  const drift = bundle.send("output", "mpe");
+  assert.deepEqual(select(drift, "mpeto"), [[1]]);
+  assert.deepEqual(rows(drift).map(([, , , , ...bytes]) => bytes), bytesFor(2));
+  assert.notDeepEqual(bytesFor(2), bytesFor(48));
   // The Hz voices: panic for whatever was sounding, no gate, no zone setup, plain rows.
   const hz = bundle.send("output", "hz");
   assert.deepEqual(select(hz, "panic"), [[]]);
@@ -428,14 +437,19 @@ test("cg.canon: more than 15 MPE notes at once: the rest go to the Hz voices, an
 test("cg.mpecheck: zone, a held note, and a summary with the bend range Drift applied", () => {
   const bundle = loadBundle("cg.mpecheck");
   assert.deepEqual(bundle.handlers(), ["measuredhz", "note", "off", "zone"]);
-  assert.deepEqual(select(bundle.send("zone"), "midi"), mpe.zoneConfig());
+  // Bends are for Drift's own +/-2 (it ignores the RPN, M2 session 3).
+  assert.equal(mpe.RANGES.drift, 2);
+  const zone = bundle.send("zone");
+  assert.deepEqual(select(zone, "midi"), mpe.zoneConfig({ range: 2 }));
+  assert.deepEqual(select(zone, "status"), [["mpe", "zone", "set:", "15", "channels,", "bend", 2]]);
   const on = bundle.send("note", 64.5);
-  assert.deepEqual(select(on, "midi"), mpe.noteOn(64.5, 100, 2));
-  assert.deepEqual(select(on, "status")[0].slice(0, 9), ["mpe", "note", "ch", 2, "note", 65, "bend", 8107, "pitch"]);
-  // Ten readings: eight an octave low (Drift's rich sound), all at the pitch a
-  // +/-48 synth sounds for this bend. The summary folds the octaves away.
-  const { note, bend } = mpe.bendFor(64.5);
-  const sounded = mpe.pitchOf(note, bend, 48);
+  assert.deepEqual(select(on, "midi"), mpe.noteOn(64.5, 100, 2, 2));
+  assert.deepEqual(select(on, "status")[0].slice(0, 9), ["mpe", "note", "ch", 2, "note", 65, "bend", 6144, "pitch"]);
+  // Ten readings: eight an octave low (session 3 read all of them low), all at
+  // the pitch a synth honouring +/-2 sounds for this bend. The summary folds
+  // the octaves away.
+  const { note, bend } = mpe.bendFor(64.5, 2);
+  const sounded = mpe.pitchOf(note, bend, 2);
   const summaries = [];
   for (let i = 0; i < 10; i++) {
     const out = bundle.send("measuredhz", tuning.midiToHz(sounded - (i < 8 ? 12 : 0)));
@@ -445,13 +459,16 @@ test("cg.mpecheck: zone, a held note, and a summary with the bend range Drift ap
   const line = summaries[0];
   assert.deepEqual(line.slice(line.indexOf("periods") + 1, line.indexOf("periods") + 3), ["-1:8", "0:2"]);
   assert.ok(Math.abs(line[line.indexOf("median") + 1]) < 0.5, "within half a cent");
-  assert.ok(Math.abs(line.at(-1) - 48) < 0.5, `implied bend range ${line.at(-1)}`);
-  // A synth stuck at +/-2 would read near 2.
+  assert.ok(Math.abs(line.at(-1) - 2) < 0.01, `implied bend range ${line.at(-1)}`);
+  // A synth that ignored the bend sounds the key, 65: +50 cents, range 0.
+  // At +/-2 the bend is 2048 steps from centre, so the two can't be confused
+  // (at +/-48 it was 85, and a cent of noise moved the range by a semitone).
   bundle.send("note", 64.5);
-  let stuck = null;
-  for (let i = 0; i < 10; i++) stuck = select(bundle.send("measuredhz", tuning.midiToHz(mpe.pitchOf(note, bend, 2))), "status")[0] || stuck;
-  assert.ok(Math.abs(stuck.at(-1) - 2) < 0.5, `implied bend range ${stuck.at(-1)}`);
-  assert.deepEqual(select(bundle.send("off"), "midi"), mpe.noteOff(64.5, 2));
+  let ignored = null;
+  for (let i = 0; i < 10; i++) ignored = select(bundle.send("measuredhz", tuning.midiToHz(65)), "status")[0] || ignored;
+  assert.ok(Math.abs(ignored[ignored.indexOf("median") + 1] - 50) < 0.01);
+  assert.ok(Math.abs(ignored.at(-1)) < 0.01, `implied bend range ${ignored.at(-1)}`);
+  assert.deepEqual(select(bundle.send("off"), "midi"), mpe.noteOff(64.5, 2, 2));
   assert.deepEqual(bundle.send("measuredhz", 440), [], "no note: no reading");
 });
 
@@ -461,12 +478,12 @@ test("cg.mpecheck: the target Hz, and what 'off' says about the readings left", 
   assert.deepEqual(select(on, "target"), [[tuning.midiToHz(64.5)]]);
   assert.ok(Math.abs(select(on, "target")[0][0] - 339.286) < 0.001);
   // Four readings, fewer than a batch: 'off' summarizes them before the note stops.
-  const { note, bend } = mpe.bendFor(64.5);
-  for (let i = 0; i < 4; i++) bundle.send("measuredhz", tuning.midiToHz(mpe.pitchOf(note, bend, 48)));
+  const { note, bend } = mpe.bendFor(64.5, 2);
+  for (let i = 0; i < 4; i++) bundle.send("measuredhz", tuning.midiToHz(mpe.pitchOf(note, bend, 2)));
   let out = bundle.send("off");
   let lines = select(out, "status");
   assert.deepEqual(lines[0].slice(0, 3), ["cents", "n", 4]);
-  assert.ok(Math.abs(lines[0].at(-1) - 48) < 0.5, `implied bend range ${lines[0].at(-1)}`);
+  assert.ok(Math.abs(lines[0].at(-1) - 2) < 0.01, `implied bend range ${lines[0].at(-1)}`);
   assert.deepEqual(lines.at(-1), ["mpe", "note", "off"]);
   assert.ok(out.findIndex(([, s]) => s === "status") < out.findIndex(([, s]) => s === "midi"), "summary first");
   // Nothing heard at all: it says so.

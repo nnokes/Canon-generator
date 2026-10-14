@@ -16,7 +16,7 @@ The research behind each design choice is in [`docs/RESEARCH.md`](docs/RESEARCH.
 |---|---|
 | Platform | Max 9 (needed for `[v8]`); Live 12 later |
 | Host order | **Standalone Max first** (M0–M8). The Max for Live adapter comes in M9. The engine stays host-agnostic from day one, so the port only adds an adapter. |
-| Microtonal output | **Hz to MSP synthesis first** (built in M0). **MPE MIDI with ±48 pitch bend second** (proven in M0, finished in M2). MTS-ESP and Live 12 `.scl` tuning are stretch goals. |
+| Microtonal output | **Hz to MSP synthesis first** (built in M0). **MPE MIDI second**, its bend range per destination: ±48 to MIDI out, ±2 to Drift inside Max (proven in M0, finished in M2). MTS-ESP and Live 12 `.scl` tuning are stretch goals. |
 | Patch authoring | **Hybrid.** UI panels and the main patch are built by hand in Max. Wiring-heavy abstractions are generated from code and checked in CI. The two sets live in separate folders, so the generator never touches a hand-built file (§4.4). |
 | Live performance (play the leader, followers answer in real time) | **Stretch goal or future addition.** The engine API keeps it possible (§3.4). |
 | Architecture | Taken from [`nnokes/cento`](https://github.com/nnokes/cento): a pure-JS engine, thin `[v8]` wrappers, and single-file bundles with no `require()` at runtime |
@@ -561,8 +561,12 @@ back for sample-accurate *audio* events in the voice bank.
        Live's delay compensation.
      - `cg.check.mpe.maxpat` measures one note, through Drift only
    - lower zone, channels 2–16
-   - pitch bend range ±48 semitones, which Live 12's tuning system expects; resolution is
-     96/16384 ≈ 0.59 cents
+   - **pitch bend range per destination** (`cg-mpe.RANGES`):
+     - MIDI out: ±48 semitones, the MPE standard and what Live 12's tuning system
+       expects; resolution 96/16384 ≈ 0.59 cents
+     - Drift: ±2, its own per-note range ("Note PB"); it ignores the RPN (M2 session 3).
+       A note's bend stays within ±50 cents of its key, so ±2 covers it, at about
+       0.024 cents.
    - at most 15 notes at once per port; the rest route to MSP
    - **Inside Max, without an external synth:** `abl.device.*` instruments such as
      `abl.device.drift~` take raw MIDI bytes. M0 spike (c) measures whether Drift honours
@@ -586,6 +590,18 @@ back for sample-accurate *audio* events in the voice bank.
        at the target plays to the speakers only: a clean unison means ±48, and a beating
        of about 9 Hz means ±2. If only the ear can confirm it, M2 records it that way, and
        the measured check moves to M9 with a Live 12 instrument.
+     - **M2 session 3, third round: Drift applies ±2.**
+       - The sine beat against Drift.
+       - The user found why `fzero~` had read nothing: it was fed after the `[*~ 0.3]`
+         speaker gain, too quiet for it. Fed Drift's raw output, it read 9 summaries:
+         medians 47–51 cents, all an octave low.
+       - So Drift ignores our RPN and keeps its own "Note PB" range (forum posts: 2 by
+         default).
+       - The implied range scattered from 0.6 to 2.7. At ±48 the bend for 64.5 is only 85
+         steps from centre, so a cent of noise moves the estimate by about a semitone.
+     - **Decision: each destination gets its own range** (above). Drift's bends are
+       computed for ±2. The check taps Drift's raw output and bends for ±2: `note 64.5`
+       then sends bend 6144, so honouring ±2 and ignoring the bend are 50 cents apart.
 3. **MIDI file** export, one track per voice (M10).
 4. **MTS-ESP** (stretch).
 
@@ -621,7 +637,7 @@ Each milestone gets a checklist in `docs/Mx-checklist.md` when work on it starts
 |---|---|---|---|
 | **M0** | Scaffold and spikes | **Closed 2026-10-12.** Port cento's layout, bundler, path check, hooks, simulated `[v8]` tests and CI. `cg.hello` round trip. See [`docs/M0-checklist.md`](docs/M0-checklist.md). (c)'s MPE half moved to M2. | Five spikes recorded:<br>(a) a fresh clone loads its bundles with no preference changes<br>(b) the player's jitter is measured and a design chosen<br>(c) a JS-generated 31-EDO note sounds through the MSP Hz path within ±1 cent, then through MPE at ±48<br>(d) the event dict round-trips JS ↔ Max with floats intact<br>(e) a hand-built panel hosts a generated abstraction, and regenerating it leaves the panel untouched |
 | **M1** | Scale systems | **Closed 2026-10-12.** See [`docs/M1-checklist.md`](docs/M1-checklist.md). `cg.tuning`: every builder (including maximally even), `.scl` parse and write, degree/pitch/Hz conversion, quantize. A Max chooser with an audition keyboard. | Cents-value tests pass for every builder. `.scl` fixtures round-trip. Each system auditions in Max. |
-| **M2** | Canon renderer (process canons, no rules) | `cg.transform` and `cg.canon.render` for N voices: delay, interval (both domains), P/I/R/RI (all four axis kinds: degree, log, partial, linear), segment retrograde and segment permutation, time scale, talea, loop, spiral, endings (including the free coda and the 2–3 \| 1 and 7–6 \| 8 cadences), canon groups (double and triple canons), free voices, and a per-voice answer scale. The dux comes from a list, a random walk or a **`.mid` file** (§3.1): tempo map, pitch bend and MPE, `line`, `quantize`, and `map` (exact, nearest, degree). MPE output finished. | Transform property tests pass. These presets play correctly in Max: a 4-voice round; a double canon in the layout of Palestrina's Ex. 225 (Mann p. 242); a Pärt-style prolation canon on a descending scale at 1:2:4:8; a Goldberg-style ladder of canons at each interval; a spiral canon in 31-EDO.<br>**MIDI import:** these fixtures come in with pitches and times intact: a 12-TET melody; a 31-EDO melody written with pitch bend; a polyphonic file (one line taken, the rest reported); a clip exported from Live. One of them plays as a canon in Max.<br>**MPE pitch (carried over from M0 spike c):** a quarter-tone note (64.5) through `cg.mpe.out` into an external MPE synth or a Live 12 instrument, measured with `fzero~` and `centsSummary`. The folded median is within ±5 cents, and the implied bend range is about 48. |
+| **M2** | Canon renderer (process canons, no rules) | `cg.transform` and `cg.canon.render` for N voices: delay, interval (both domains), P/I/R/RI (all four axis kinds: degree, log, partial, linear), segment retrograde and segment permutation, time scale, talea, loop, spiral, endings (including the free coda and the 2–3 \| 1 and 7–6 \| 8 cadences), canon groups (double and triple canons), free voices, and a per-voice answer scale. The dux comes from a list, a random walk or a **`.mid` file** (§3.1): tempo map, pitch bend and MPE, `line`, `quantize`, and `map` (exact, nearest, degree). MPE output finished. | Transform property tests pass. These presets play correctly in Max: a 4-voice round; a double canon in the layout of Palestrina's Ex. 225 (Mann p. 242); a Pärt-style prolation canon on a descending scale at 1:2:4:8; a Goldberg-style ladder of canons at each interval; a spiral canon in 31-EDO.<br>**MIDI import:** these fixtures come in with pitches and times intact: a 12-TET melody; a 31-EDO melody written with pitch bend; a polyphonic file (one line taken, the rest reported); a clip exported from Live. One of them plays as a canon in Max.<br>**MPE pitch (carried over from M0 spike c):** a quarter-tone note (64.5) through `cg.mpe.out` into an external MPE synth or a Live 12 instrument, measured with `fzero~` and `centsSummary`. The folded median is within ±5 cents, and the implied bend range matches the destination's (±48 for MIDI out; Drift turned out to keep its own ±2, session 3). |
 | **M3** | Analysis and consonance models | `cg.consonance` (all four models), `cg.rules` (`fux-strict` first species, `canon`, `spectral`, `free`), `cg.analyze` with the sounding bass in real registers, Tymoczko metrics, the answer finder (one follower and N-voice sets, with a ranges panel and ranked result lists, §3.6), piano-roll overlays. The first `[v8]` time slicing (§2.4): measure how much work one slice can do before Max's interface stutters, and set the **time-slice budget**. | **Golden tests from the Fux PDF** (Figs. 5–8):<br>• Fig. 5 is clean<br>• Fig. 6 flags the mode error at bar 1 and the hidden fifth from bar 2 to bar 3, as Fux marks them<br>• Figs. 7–8 show the hidden fifths that diminution reveals<br>**Answer-finder golden tests from Mann:** it finds the eight answers Albrechtsberger lists for Ex. 201 (p. 230) and both solutions of the canon for Haydn (Ex. 239–240, p. 261).<br>**Your melody:** a `.mid` melody gives ranked 2-voice and 3-voice lists in Max, and clicking a result auditions it.<br>**Time-slice budget** recorded in the M3 checklist. The finder runs with Max's interface staying responsive.<br>The roughness curve matches Sethares's published shape for a harmonic timbre. |
 | **M4** | Generator: strict first-species canons | `cg.generate` with a left-to-right search, backtracking, beam, seed, node budget, diagnostics. 2 voices, then N; `fux-relaxed` for N > 2. The block method for rounds (§3.5). Time-sliced in `[v8]` with progress. The answer finder's **edits toggle** (`allowEdits`): minimal-edit repair of your melody (§3.6). | Valid 2-voice canons at the octave, fifth and fourth with delays of 1–4 bars. 3–4-voice rounds, built by the block method, with no 6/4 on strong beats and smooth perpetual joins. Same seed, same canon. A 32-note canon finishes without hanging Max, each slice of the search staying within the budget recorded in M3.<br>**Edits toggle golden test:** take a clean canon from the M3 goldens (Mann Ex. 201, or a Fux figure) and change one note so it breaks. The repair finds a one-note fix that passes, and names the rule the change fixed. With the toggle off, the melody is never changed. |
 | **M5** | Rhythm: species 2–5 and florid | A rhythmic grid; passing and neighbour notes; suspensions (4th species); florid mixtures. Rules follow Fux's chapters on the second to fifth species (pp. 41–70). | A 4th-species canon at the 2nd/9th with chains of suspensions. A florid 2-voice canon passes `fux-strict`. |

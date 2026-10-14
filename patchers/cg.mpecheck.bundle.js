@@ -41,9 +41,9 @@ exports.sortEvents = sortEvents;
 "use strict";
 // MPE output maths (MIDI Polyphonic Expression, lower zone). Each note gets
 // its own member channel (allocate), and its microtonal offset travels as
-// per-channel pitch bend. The bend range is +/-48 semitones, the value Live 12's tuning
-// system expects (PLAN.md 4.3), which gives 96/16384 semitones, about 0.59
-// cents, per bend step.
+// per-channel pitch bend. The bend range depends on where the notes go (RANGES):
+// +/-48 semitones for MIDI out, the MPE standard and what Live 12's tuning
+// system expects (PLAN.md 4.3), about 0.59 cents per bend step; +/-2 for Drift.
 //
 // Everything here returns raw MIDI bytes for [midiout]. The engine computes
 // the bytes ahead of time; Max sends them (JS never schedules notes).
@@ -51,6 +51,11 @@ exports.sortEvents = sortEvents;
 const time = require("cg-time");
 
 const DEFAULT_RANGE = 48;
+// The bend range each MPE destination applies. Drift ignores the RPN in the
+// zone setup and keeps its own per-note range ("Note PB", 2 by default): M2
+// session 3 measured it. A note's bend stays within +/-50 cents of its key,
+// so +/-2 covers it, in steps of about 0.05 cents.
+const RANGES = { drift: 2, midi: DEFAULT_RANGE };
 const CENTER = 8192;
 const MAX_BEND = 16383;
 
@@ -70,8 +75,9 @@ function pitchOf(note, bend, range = DEFAULT_RANGE) {
 }
 
 // The bend range a synth actually used, from the pitch it sounded for a note
-// sent with `bend`: about 48 if it honoured our setup, 2 if it kept the MIDI
-// default. NaN when the bend is centred (nothing to infer from).
+// sent with `bend`: the range it was sent for if it honoured it, 2 if it kept
+// the MIDI default, about 0 if it ignored the bend. NaN when the bend is
+// centred (nothing to infer from).
 function impliedRange(measuredPitch, note, bend) {
   if (bend === CENTER) return NaN;
   return (measuredPitch - note) / ((bend - CENTER) / CENTER);
@@ -149,6 +155,7 @@ function allocate(events, { first = 2, last = 16 } = {}) {
 }
 
 exports.DEFAULT_RANGE = DEFAULT_RANGE;
+exports.RANGES = RANGES;
 exports.allocate = allocate;
 exports.bendFor = bendFor;
 exports.pitchOf = pitchOf;
@@ -623,10 +630,11 @@ __cg_require.local = 1;
 // [v8] wrapper for the MPE pitch check (M2 part F; see docs/M2-checklist.md).
 // Glue only: cg-mpe builds the bytes, cg-tuning folds and summarizes the
 // readings. It plays one held MPE note into a synth inside Max and compares
-// what [fzero~] hears with what was sent, so the check needs no tuner.
+// what [fzero~] hears with what was sent, so the check needs no tuner. Bends
+// are for Drift's own range, +/-2 (cg-mpe RANGES): Drift ignores the RPN.
 //
 // Messages                 Outlet 0
-//   zone                     midi <bytes> ..., status mpe zone set ...   the lower zone, bend +/-48
+//   zone                     midi <bytes> ..., status mpe zone set ...   the lower zone, bend +/-2
 //   note [pitch]             midi ..., status mpe note ..., target <hz>  a held note on channel 2
 //                                                                        (default 64.5); target is
 //                                                                        the Hz it should sound at
@@ -646,30 +654,31 @@ const mpe = __cg_require("cg-mpe");
 const tuning = __cg_require("cg-tuning");
 
 const CHANNEL = 2;
+const RANGE = mpe.RANGES.drift;
 const BATCH = 10;
 let sounding = null; // { pitch, note, bend, heard }: heard counts every reading of this note
 let readings = []; // the readings since the last summary
 
 function zone() {
-  for (const bytes of mpe.zoneConfig()) outlet(0, "midi", ...bytes);
-  outlet(0, "status", "mpe", "zone", "set:", "15", "channels,", "bend", mpe.DEFAULT_RANGE);
+  for (const bytes of mpe.zoneConfig({ range: RANGE })) outlet(0, "midi", ...bytes);
+  outlet(0, "status", "mpe", "zone", "set:", "15", "channels,", "bend", RANGE);
 }
 
 function note(pitch) {
   const p = typeof pitch === "number" ? pitch : 64.5;
   if (sounding) off();
-  const { note: key, bend } = mpe.bendFor(p);
+  const { note: key, bend } = mpe.bendFor(p, RANGE);
   sounding = { pitch: p, note: key, bend, heard: 0 };
   readings = [];
-  for (const bytes of mpe.noteOn(p, 100, CHANNEL)) outlet(0, "midi", ...bytes);
+  for (const bytes of mpe.noteOn(p, 100, CHANNEL, RANGE)) outlet(0, "midi", ...bytes);
   outlet(0, "status", "mpe", "note", "ch", CHANNEL, "note", key, "bend", bend, "pitch", p,
     "=", "note", Math.round((p - key) * 1e4) / 100, "cents");
   outlet(0, "target", tuning.midiToHz(p));
 }
 
 // Summarizes what's left before the note stops, even fewer than a batch, and
-// says so plainly when the tracker heard nothing at all (Drift's default
-// sound, M2 session 3).
+// says so plainly when the tracker heard nothing at all (M2 session 3: it was
+// fed a signal too quiet for it).
 function off() {
   if (!sounding) return;
   if (readings.length) summarize();
@@ -677,7 +686,7 @@ function off() {
     outlet(0, "status", "no", "pitch", "readings", "while", "the", "note", "sounded:", "the", "tracker",
       "could", "not", "follow", "this", "sound");
   }
-  for (const bytes of mpe.noteOff(sounding.pitch, CHANNEL)) outlet(0, "midi", ...bytes);
+  for (const bytes of mpe.noteOff(sounding.pitch, CHANNEL, RANGE)) outlet(0, "midi", ...bytes);
   sounding = null;
   readings = [];
   outlet(0, "status", "mpe", "note", "off");

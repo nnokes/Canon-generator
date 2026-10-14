@@ -21,7 +21,9 @@
 //   output hz|drift|midi          every voice to the Hz voices, or MPE to Drift inside Max, or MPE
 //                                   to MIDI out (or 0/1/2; "mpe" means drift). One destination at
 //                                   a time: a change sends panic first (to the old one), then as
-//                                   render, which sends mpeto 1 (Drift) or 2 (MIDI out) for the gate
+//                                   render, which sends mpeto 1 (Drift) or 2 (MIDI out) for the gate.
+//                                   Bends are for each destination's range: Drift +/-2, MIDI out
+//                                   +/-48 (cg-mpe RANGES)
 //   select <voice>                editor <i> <name> <delay> <steps> <transform 0-3>
 //                                   <time scale> <register> <passes>
 //   delay|interval|transform|timescale|register|passes <value>
@@ -372,9 +374,10 @@ function update() {
   mpe.allocate(mpeIndex.map((i) => events[i])).forEach((ch, k) => channels.set(mpeIndex[k], ch));
   const overflow = [...channels.values()].filter((ch) => ch === null).length;
   const to = spec.mpeTo === "midi" ? "midi" : "drift";
+  const range = mpe.RANGES[to]; // Drift keeps its own bend range (cg-mpe)
   if (mpeIndex.length) {
     outlet(0, "mpeto", MPE_TO[to]); // the gate first, so the zone setup reaches the right place
-    for (const bytes of mpe.zoneConfig()) outlet(0, "midi", ...bytes);
+    for (const bytes of mpe.zoneConfig({ range })) outlet(0, "midi", ...bytes);
   }
   outlet(0, "coll", "clear");
   events.forEach((e, i) => {
@@ -382,8 +385,8 @@ function update() {
     const delta = next ? (next.t - e.t) * ms : -1;
     const channel = channels.get(i);
     if (channel) {
-      const on = mpe.noteOn(e.pitch, e.vel, channel).flat();
-      const off = mpe.noteOff(e.pitch, channel).flat();
+      const on = mpe.noteOn(e.pitch, e.vel, channel, range).flat();
+      const off = mpe.noteOff(e.pitch, channel, range).flat();
       outlet(0, "coll", i, delta, "mpe", e.dur * ms, ...on, ...off);
       return;
     }
@@ -407,7 +410,7 @@ function update() {
   announce();
   if (mpeIndex.length) {
     const used = new Set([...channels.values()].filter((ch) => ch !== null)).size;
-    outlet(0, "status", "mpe:", mpeIndex.length - overflow, "notes on", used, "channels (2-16, bend +/-48)",
+    outlet(0, "status", "mpe:", mpeIndex.length - overflow, "notes on", used, `channels (2-16, bend +/-${range})`,
       "to", (to === "midi" ? "MIDI out" : "Drift")
         + (overflow ? ", " + overflow + " beyond 15 at once went to the Hz voices" : ""));
   }

@@ -48,7 +48,7 @@
 			{
 				"box": {
 					"maxclass": "comment",
-					"text": "MPE PITCH CHECK (M2). Turn audio on (speaker). Click 'zone' once, then 'note 64.5' (a quarter-tone above E4, 339.29 Hz) and hold it about 15 s. 'tracker Hz' shows what [fzero~] hears, after a lowpass; every ~5 s the Max window prints a cents summary, folded to the nearest octave, with 'implied bend range'. Pass: the median within +/-5 cents and the range about 48. 'off' summarizes what's left. No readings at all? Hold the note and switch on the reference sine: a clean unison passes by ear; a beating of about 9 Hz means Drift used +/-2.",
+					"text": "MPE PITCH CHECK (M2). Turn audio on (speaker). Click 'zone' once, then 'note 64.5' (a quarter-tone above E4, 339.29 Hz; bends are for Drift's own +/-2) and hold it about 15 s. 'tracker Hz' shows what [fzero~] hears, after a lowpass; every ~5 s the Max window prints a cents summary, folded to the nearest octave, with 'implied bend range'. Pass: the median within +/-5 cents and the range about 2. 'off' summarizes what's left. Then hold the note with the reference sine on: a clean unison passes by ear; a beating of about 10 Hz means Drift ignores the bend.",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"linecount": 5,
@@ -779,7 +779,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-12",
+						"obj-11",
 						0
 					],
 					"destination": [
