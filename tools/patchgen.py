@@ -476,42 +476,85 @@ def canon():
 def check_mpe():
     """cg.check.mpe (M2 part F): plays one held MPE note into Ableton's Drift
     inside Max and measures it with [fzero~], against what was sent. The
-    summary folds octave jumps and gives the bend range Drift applied."""
-    p = Patch(rect=(60, 60, 820, 520))
-    p.note(GENERATED_NOTE, 20, 10, 760, 1)
+    summary folds octave jumps and gives the bend range Drift applied.
+
+    [fzero~] heard nothing of Drift's default sound (M2 session 3), so two
+    lowpasses at 1.5x the target strip it toward a sine first (filtering
+    doesn't move a pitch), the tracker's raw Hz is on screen, and a reference
+    sine at the target lets the bend range be checked by ear: a clean unison
+    at +/-48, a ~9 Hz beating at +/-2."""
+    default_hz = 440 * 2 ** ((64.5 - 69) / 12)  # note 64.5, 339.29 Hz
+    p = Patch(rect=(60, 60, 860, 600))
+    p.note(GENERATED_NOTE, 20, 10, 800, 1)
     p.note("MPE PITCH CHECK (M2). Turn audio on (speaker). Click 'zone' once, then 'note 64.5' (a quarter-tone above "
-           "E4) and hold it about 15 s: every ~5 s the Max window prints a cents summary, folded to the nearest "
-           "octave, with 'implied bend range'. Pass: the median within +/-5 cents and the range about 48. Then 'off'.",
-           20, 40, 760, 3)
-    msgs = [p.msg(text, x, 100) for text, x in [("zone", 20), ("note 64.5", 80), ("note 60", 170), ("off", 250)]]
-    v8 = p.obj("v8 cg.mpecheck.bundle.js", 20, 140, 1, 1)
-    route = p.obj("route midi cents status", 20, 175, 2, 4)
+           "E4, 339.29 Hz) and hold it about 15 s. 'tracker Hz' shows what [fzero~] hears, after a lowpass; every "
+           "~5 s the Max window prints a cents summary, folded to the nearest octave, with 'implied bend range'. "
+           "Pass: the median within +/-5 cents and the range about 48. 'off' summarizes what's left. No readings at "
+           "all? Hold the note and switch on the reference sine: a clean unison passes by ear; a beating of about "
+           "9 Hz means Drift used +/-2.",
+           20, 40, 800, 5)
+    msgs = [p.msg(text, x, 135) for text, x in [("zone", 20), ("note 64.5", 80), ("note 60", 170), ("off", 250)]]
+    v8 = p.obj("v8 cg.mpecheck.bundle.js", 20, 175, 1, 1)
+    route = p.obj("route midi cents status target", 20, 210, 2, 5)
     for m in msgs:
         p.connect(m, 0, v8, 0)
     p.connect(v8, 0, route, 0)
-    bytes_ = p.obj("iter", 20, 215, 1, 1, ["int"])
+    status = p.obj("print mpe-check", 420, 210, 1, 0)
+    p.connect(route, 2, status, 0)
+    bytes_ = p.obj("iter", 20, 250, 1, 1, ["int"])
     p.connect(route, 0, bytes_, 0)
-    drift = p.obj("abl.device.drift~ @drift 0", 20, 250, 1, 2, ["signal", "signal"])
+    drift = p.obj("abl.device.drift~ @drift 0", 20, 285, 1, 2, ["signal", "signal"])
     p.connect(bytes_, 0, drift, 0)
-    left = p.obj("*~ 0.3", 20, 290, 2, 1, ["signal"])
-    right = p.obj("*~ 0.3", 90, 290, 2, 1, ["signal"])
+    left = p.obj("*~ 0.3", 20, 325, 2, 1, ["signal"])
+    right = p.obj("*~ 0.3", 90, 325, 2, 1, ["signal"])
     p.connect(drift, 0, left, 0)
     p.connect(drift, 1, right, 0)
-    dac = p.ui("ezdac~", 20, 330, 45, 45, 2, 0, [])
+    dac = p.ui("ezdac~", 20, 365, 45, 45, 2, 0, [])
     p.connect(left, 0, dac, 0)
     p.connect(right, 0, dac, 1)
-    tracker = p.obj("fzero~", 240, 330, 1, 3, ["float", "float", "bang"])
-    limit = p.obj("speedlim 500", 240, 365, 2, 1)
-    measured = p.obj("prepend measuredhz", 240, 400, 2, 1)
-    p.connect(left, 0, tracker, 0)
+    # The tracker's path: lowpass, track, then the script.
+    cutoff = p.obj("* 1.5", 300, 325, 2, 1)
+    p.connect(route, 3, cutoff, 0)
+    lowpass = f"lores~ {round(1.5 * default_hz)} 0"
+    low1 = p.obj(lowpass, 240, 365, 3, 1, ["signal"])
+    low2 = p.obj(lowpass, 240, 400, 3, 1, ["signal"])
+    p.connect(left, 0, low1, 0)
+    p.connect(low1, 0, low2, 0)
+    p.connect(cutoff, 0, low1, 1)
+    p.connect(cutoff, 0, low2, 1)
+    tracker = p.obj("fzero~", 240, 435, 1, 3, ["float", "float", "bang"])
+    limit = p.obj("speedlim 500", 240, 470, 2, 1)
+    measured = p.obj("prepend measuredhz", 240, 505, 2, 1)
+    p.connect(low2, 0, tracker, 0)
     p.connect(tracker, 0, limit, 0)
     p.connect(limit, 0, measured, 0)
     p.connect(measured, 0, v8, 0)
-    p.comment("cents error", 420, 215)
-    cents = p.ui("flonum", 420, 240, 80, 22, 1, 2, ["", "bang"], format=6)
-    status = p.obj("print mpe-check", 520, 240, 1, 0)
+    # What to compare.
+    p.comment("target Hz", 420, 250)
+    target = p.ui("flonum", 420, 275, 80, 22, 1, 2, ["", "bang"], format=6)
+    p.connect(route, 3, target, 0)
+    p.comment("cents error", 520, 250)
+    cents = p.ui("flonum", 520, 275, 80, 22, 1, 2, ["", "bang"], format=6)
     p.connect(route, 1, cents, 0)
-    p.connect(route, 2, status, 0)
+    p.comment("tracker Hz (raw)", 420, 410)
+    heard = p.ui("flonum", 420, 435, 80, 22, 1, 2, ["", "bang"], format=6)
+    p.connect(tracker, 0, heard, 0)
+    # The reference sine: to the speakers only, never into the tracker.
+    p.comment("reference sine (speakers only)", 620, 250)
+    toggle = p.ui("toggle", 620, 275, 24, 24, 1, 1, ["int"])
+    level = p.obj("* 0.1", 620, 310, 2, 1)
+    ramp = p.msg("$1 50", 620, 345)
+    gain = p.obj("line~", 620, 380, 2, 2, ["signal", "bang"])
+    sine = p.obj(f"cycle~ {default_hz:.2f}", 700, 345, 2, 1, ["signal"])
+    quiet = p.obj("*~", 700, 415, 2, 1, ["signal"])
+    p.connect(toggle, 0, level, 0)
+    p.connect(level, 0, ramp, 0)
+    p.connect(ramp, 0, gain, 0)
+    p.connect(route, 3, sine, 0)
+    p.connect(sine, 0, quiet, 0)
+    p.connect(gain, 0, quiet, 1)
+    p.connect(quiet, 0, dac, 0)
+    p.connect(quiet, 0, dac, 1)
     return p
 
 

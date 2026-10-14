@@ -454,3 +454,32 @@ test("cg.mpecheck: zone, a held note, and a summary with the bend range Drift ap
   assert.deepEqual(select(bundle.send("off"), "midi"), mpe.noteOff(64.5, 2));
   assert.deepEqual(bundle.send("measuredhz", 440), [], "no note: no reading");
 });
+
+test("cg.mpecheck: the target Hz, and what 'off' says about the readings left", () => {
+  const bundle = loadBundle("cg.mpecheck");
+  const on = bundle.send("note", 64.5);
+  assert.deepEqual(select(on, "target"), [[tuning.midiToHz(64.5)]]);
+  assert.ok(Math.abs(select(on, "target")[0][0] - 339.286) < 0.001);
+  // Four readings, fewer than a batch: 'off' summarizes them before the note stops.
+  const { note, bend } = mpe.bendFor(64.5);
+  for (let i = 0; i < 4; i++) bundle.send("measuredhz", tuning.midiToHz(mpe.pitchOf(note, bend, 48)));
+  let out = bundle.send("off");
+  let lines = select(out, "status");
+  assert.deepEqual(lines[0].slice(0, 3), ["cents", "n", 4]);
+  assert.ok(Math.abs(lines[0].at(-1) - 48) < 0.5, `implied bend range ${lines[0].at(-1)}`);
+  assert.deepEqual(lines.at(-1), ["mpe", "note", "off"]);
+  assert.ok(out.findIndex(([, s]) => s === "status") < out.findIndex(([, s]) => s === "midi"), "summary first");
+  // Nothing heard at all: it says so.
+  bundle.send("note", 64.5);
+  bundle.send("measuredhz", 0);
+  lines = select(bundle.send("off"), "status");
+  assert.equal(lines[0].join(" "), "no pitch readings while the note sounded: the tracker could not follow this sound");
+  // Exactly a batch: the summary already printed, so 'off' adds nothing.
+  bundle.send("note", 64.5);
+  for (let i = 0; i < 10; i++) bundle.send("measuredhz", tuning.midiToHz(64.5));
+  assert.deepEqual(select(bundle.send("off"), "status"), [["mpe", "note", "off"]]);
+  // A new note ends the one sounding, with its summary.
+  bundle.send("note", 64.5);
+  bundle.send("measuredhz", tuning.midiToHz(64.5));
+  assert.deepEqual(select(bundle.send("note", 60), "status")[0].slice(0, 3), ["cents", "n", 1]);
+});

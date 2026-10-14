@@ -580,6 +580,12 @@ back for sample-accurate *audio* events in the voice bank.
      - **M2 tries Drift first** (the user's choice), with its second oscillator on, as in
        M0's first run, which did give readings. If that's unreadable, a Live 12
        instrument with its audio brought back into Max.
+     - **M2 session 3: `fzero~` gave no readings at all of Drift's default sound**, a
+       steady tone. So the check now lowpasses Drift (two `[lores~]` at 1.5× the target)
+       before the tracker and shows the tracker's raw Hz. As a fallback, a reference sine
+       at the target plays to the speakers only: a clean unison means ±48, and a beating
+       of about 9 Hz means ±2. If only the ear can confirm it, M2 records it that way, and
+       the measured check moves to M9 with a Live 12 instrument.
 3. **MIDI file** export, one track per voice (M10).
 4. **MTS-ESP** (stretch).
 

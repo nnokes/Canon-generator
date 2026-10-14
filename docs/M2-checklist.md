@@ -31,11 +31,11 @@ renders and plays; M3 judges.
   ±5 cents, and the implied bend range is about 48.
 
 **Status:**
-- Parts A–F are built: 98 tests.
-- Max sessions 1 and 2 passed. Session 3's first round passed the melody steps, and its MPE
-  doubling is fixed.
-- **To do: session 3's second round:** MPE to Drift, and the pitch check. M2 closes after
-  it.
+- Parts A–F are built: 99 tests.
+- Max sessions 1 and 2 passed. Session 3's first and second rounds passed everything except
+  the pitch check: `[fzero~]` gave no readings of Drift's sound.
+- **To do: session 3's third round:** the pitch check again, now with a lowpass before the
+  tracker, its raw Hz on screen, and a reference sine to check by ear. M2 closes after it.
 
 **In M2 / later:**
 
@@ -262,13 +262,21 @@ Specs can also use `groups` with a `start` time each, so canons can follow one a
   note-off by the note's own length**, so Max times it, not JS. `panic` (on stop) clears
   pending note-offs and sends all-notes-off.
 - [x] **`cg.canon`:** `[route mpe]` after the player sends MPE rows to `cg.mpe.out`, then
-  to `[midiout]` and to **Drift inside Max** (`[abl.device.drift~ @drift 0]`, second
-  oscillator on), mixed with the Hz voices.
+  to **Drift inside Max** (`[abl.device.drift~ @drift 0]`, second oscillator on), mixed
+  with the Hz voices, or to the panel's `[midiout]`: one at a time (session 3).
 - [x] **The MPE pitch check**, `cg.check.mpe.maxpat` (generated) + `cg.mpecheck.v8.js`:
   - M0's spike (c), rebuilt on the permanent modules
   - one held note into Drift; `[fzero~]` measures it
   - every 10 readings, a summary folded to the nearest octave, with the bend range Drift
     applied
+  - since session 3 (no readings at all of Drift's default sound):
+    - two `[lores~]` lowpasses at 1.5× the target before `[fzero~]`. They strip Drift's
+      upper partials and modulation toward a sine; filtering doesn't move a pitch.
+    - the tracker's raw Hz on screen ("tracker Hz"), next to "target Hz"
+    - `off` summarizes the readings left, even fewer than 10. With none at all, it says
+      so: `no pitch readings while the note sounded: …`
+    - a **reference sine** at the target, to the speakers only (not into the tracker), for
+      a check by ear
 - [x] **The panel**, regenerated:
   - an output menu: Hz voices / MPE to Drift / MPE to MIDI out. Since session 3 these are
     separate, one destination at a time, and `[midiout]` is in the panel.
@@ -321,6 +329,39 @@ Specs can also use `groups` with a `start` time each, so canons can follow one a
    | none, or scattered | — | Unreadable inside Max: try a Live 12 instrument, its audio brought back into Max. |
 6. Paste anything from `canon-error`, and anything that sounds wrong.
 
+**Second round results:**
+- Steps 2–4 passed. The melody stays across presets and follows the tuning. MPE to Drift
+  plays as one synth, with no drums.
+- **Step 5, the pitch check: no readings.**
+  - The zone and the note went out right: `mpe note ch 2 note 65 bend 8107 pitch 64.5 =
+    note -50 cents`.
+  - You heard a steady tone, but the cents box stayed at 0 and no summary printed.
+  - The wiring was right, and `measuredhz` only ignores a pitch of 0 Hz or below. So
+    `[fzero~]` reported no pitch for Drift's sound at all.
+  - The likely cause: Drift's default patch (two oscillators, modulation) isn't periodic
+    enough for `[fzero~]`. The same chain read a pure sine in M0 and M1. In M0 it got one
+    octave-jumping batch from Drift, then nothing.
+- **Changed** (part F): a lowpass before the tracker, the tracker's raw Hz on screen, a
+  summary on `off`, and a reference sine.
+
+**Third round: the pitch check again**
+1. `git pull`, then open `patchers/cg.check.mpe.maxpat` and turn audio on.
+2. Click `zone`, then `note 64.5`. "target Hz" shows **339.29**. Watch **"tracker Hz"**:
+   about 339.3, or about 169.6 if it locks an octave low (the summary folds that away).
+3. Hold the note about 15 s, then click `off`. Paste every `mpe-check:` line.
+4. **If no summary appeared** ("tracker Hz" stayed at 0, and `off` printed `no pitch
+   readings …`): click `note 64.5` again and switch on the **reference sine**. Listen to
+   the two together:
+   - **A clean unison:** pass by ear. Drift honours the ±48 bend range.
+   - **A beating clash, about 9 Hz** (the two are 48 cents apart): Drift used ±2, and
+     needs its note bend range set.
+
+| What you get | Meaning |
+|---|---|
+| summary lines | The table in step 5 above: median within ±5 cents and a range of about 48 = **pass** |
+| no readings, and a clean unison with the sine | **Pass by ear.** M2's MPE criterion closes, recorded honestly as "by ear: `fzero~` can't follow Drift's default sound". A measured check moves to M9, with a Live 12 instrument. |
+| no readings, and a beating clash | Drift used ±2: find its note bend range setting before M2 closes |
+
 ## Results
 
 | Check | Result | Decision |
@@ -331,4 +372,4 @@ Specs can also use `groups` with a `start` time each, so canons can follow one a
 | `[v8]` reads raw bytes (Part E) | **PASS** (session 2): your Live clip and the generated fixtures loaded through `File.readbytes` | No `[detonate]` fallback needed |
 | `.mid` fixtures import intact | **PASS** (Node, `tests/midi.test.js`): 12-TET, 31-EDO by pitch bend (to 0.025 c), MPE (±48, a glide), polyphonic (top/bottom/track), your Live clip (13 notes, 16 beats), and bytes written by hand | Pair note-ons and offs into intervals before picking the line (Live's order); the skyline for `top` and `bottom` |
 | a `.mid` melody plays as a canon | **PASS** (session 2). Every count in the Max window matched the render: your clip as the round (104 notes, 56 beats), the spiral (182 notes, 114 beats) and the ladder (306 notes, 148 beats); the 31-EDO file at its own 72 bpm (72 notes, 44 beats). Nothing dropped, no errors. **Two follow-ups:** (1) picking a preset brought back its own melody, so you reloaded the `.mid` each time; (2) a tuning change didn't re-map a melody read with `nearest` or `degree`. | **Your melody stays across presets**, and a "preset melody" button brings back the presets' own. A tuning change re-maps a loaded melody. `[print midi_file]` says which melody is in use (from session 3's panel). |
-| MPE pitch (Part F) | | |
+| MPE pitch (Part F) | **Pending.** Session 3, second round: a steady tone, but no readings at all. `[fzero~]` can't follow Drift's default sound. | A lowpass before the tracker, its raw Hz on screen, and a reference sine as the fallback. Re-run: session 3's third round. |
