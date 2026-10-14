@@ -66,11 +66,12 @@
 					"maxclass": "newobj",
 					"text": "cg.canon",
 					"numinlets": 1,
-					"numoutlets": 3,
+					"numoutlets": 4,
 					"outlettype": [
 						"",
 						"signal",
-						"signal"
+						"signal",
+						"int"
 					],
 					"patching_rect": [
 						20.0,
@@ -335,16 +336,21 @@
 						"Hz",
 						"voices",
 						",",
-						"MPE:",
+						"MPE",
+						"to",
 						"Drift",
-						"+",
+						"(inside",
+						"Max)",
+						",",
+						"MPE",
+						"to",
 						"MIDI",
 						"out"
 					],
 					"patching_rect": [
 						550.0,
 						165.0,
-						150.0,
+						170.0,
 						22.0
 					],
 					"id": "obj-18"
@@ -360,7 +366,7 @@
 						""
 					],
 					"patching_rect": [
-						710.0,
+						730.0,
 						165.0,
 						112.0,
 						22.0
@@ -1625,6 +1631,38 @@
 					],
 					"id": "obj-90"
 				}
+			},
+			{
+				"box": {
+					"maxclass": "newobj",
+					"text": "midiout",
+					"numinlets": 1,
+					"numoutlets": 0,
+					"outlettype": [],
+					"patching_rect": [
+						720.0,
+						580.0,
+						63.0,
+						22.0
+					],
+					"id": "obj-91"
+				}
+			},
+			{
+				"box": {
+					"maxclass": "comment",
+					"text": "MIDI out: double-click to choose the port (e.g. an IAC bus into a Live MPE instrument). It's saved with this panel.",
+					"numinlets": 1,
+					"numoutlets": 0,
+					"linecount": 5,
+					"patching_rect": [
+						720.0,
+						610.0,
+						130.0,
+						84.0
+					],
+					"id": "obj-92"
+				}
 			}
 		],
 		"lines": [
@@ -2548,6 +2586,18 @@
 					],
 					"destination": [
 						"obj-41",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-3",
+						3
+					],
+					"destination": [
+						"obj-91",
 						0
 					]
 				}

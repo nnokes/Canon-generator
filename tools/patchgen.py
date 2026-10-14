@@ -360,7 +360,8 @@ def canon():
     (see code/cg.canon.v8.js), plus play and stop. Outlet 0: the engine's other
     messages (menu, tmenu, bpm, editor, status, error, melody). Outlets 1 and 2:
     left and right audio: the [poly~] Hz voices plus Ableton's Drift playing
-    the MPE notes (which also go to [midiout])."""
+    the MPE notes. Outlet 3: the MPE notes as MIDI bytes, for the panel's
+    [midiout]. MPE goes to Drift or to MIDI out, never both ([gate 2])."""
     p = Patch(rect=(80, 80, 900, 720))
     p.note(GENERATED_NOTE, 20, 10, 700, 1)
     inl = p.obj("route play stop", 20, 115, 2, 3)
@@ -380,7 +381,7 @@ def canon():
     for m in (fill, fill_tunings, first):
         p.connect(m, 0, v8, 0)
     p.connect(inl, 2, v8, 0)
-    route = p.obj("route coll midi", 230, 220, 2, 3)
+    route = p.obj("route coll midi mpeto panic", 230, 220, 2, 5)
     p.connect(v8, 0, route, 0)
 
     # The player: index -> [coll] row -> play the note, wait the delay, next index.
@@ -415,17 +416,19 @@ def canon():
     p.connect(kind, 1, note, 0)
     p.connect(note, 0, bank, 0)
 
-    # MPE: rows marked "mpe" (and the zone setup) to cg.mpe.out, then to
-    # [midiout] and to Drift inside Max (second oscillator on, no random detune).
+    # MPE: rows marked "mpe" (and the zone setup) to cg.mpe.out, then through
+    # [gate 2] to one destination: Drift inside Max (second oscillator on, no
+    # random detune), or outlet 3 for the panel's [midiout]. "mpeto" sets it.
     zone = p.obj("prepend midi", 360, 255, 2, 1)
     mpe = p.obj("cg.mpe.out", 560, 420, 1, 1, ["int"])
     p.connect(route, 1, zone, 0)
     p.connect(zone, 0, mpe, 0)
     p.connect(kind, 0, mpe, 0)
-    midiout = p.obj("midiout", 560, 460, 1, 0)
+    where = p.obj("gate 2 1", 560, 460, 2, 2)
+    p.connect(route, 2, where, 0)
+    p.connect(mpe, 0, where, 1)
     drift = p.obj("abl.device.drift~ @drift 0", 650, 460, 1, 2, ["signal", "signal"])
-    p.connect(mpe, 0, midiout, 0)
-    p.connect(mpe, 0, drift, 0)
+    p.connect(where, 0, drift, 0)
     drift_left = p.obj("*~ 0.3", 650, 495, 2, 1, ["signal"])
     drift_right = p.obj("*~ 0.3", 720, 495, 2, 1, ["signal"])
     p.connect(drift, 0, drift_left, 0)
@@ -449,20 +452,23 @@ def canon():
     p.connect(halt, 0, stop_voices, 0)
     p.connect(stop_voices, 0, bank, 0)
     p.connect(halt, 0, panic, 0)
+    p.connect(route, 3, panic, 0)  # the script's panic, before a change of destination
     p.connect(panic, 0, mpe, 0)
 
-    # Outlets left to right: messages, left audio, right audio.
+    # Outlets left to right: messages, left audio, right audio, MPE MIDI bytes.
     out_messages = p.outlet(230, 580, "menu, tmenu, bpm, editor, status, error, melody", 0)
     out_left = p.outlet(330, 580, "left audio", 1)
     out_right = p.outlet(430, 580, "right audio", 2)
-    p.connect(route, 2, out_messages, 0)
+    out_midi = p.outlet(560, 580, "MPE as MIDI bytes, for [midiout]", 3)
+    p.connect(route, 4, out_messages, 0)
+    p.connect(where, 1, out_midi, 0)
     p.connect(left, 0, out_left, 0)
     p.connect(right, 0, out_right, 0)
     p.note("A number into [delay]'s left inlet sets the time and starts it. Events at the same time have a "
            "delay of 0. The last row's delay is -1, which [if] stops.", 20, 455, 280, 3)
     p.note("cg.canon: renders a canon spec and plays it. The script fills [coll] with one row per note (the delay "
            "to the next note first); Max plays it in the scheduler (PLAN 4.2, design 1). Hz rows go to the "
-           "[poly~] voices; rows marked 'mpe' go to cg.mpe.out, which sends their bytes to [midiout] and Drift.",
+           "[poly~] voices; rows marked 'mpe' go to cg.mpe.out, then to Drift or to MIDI out (one at a time).",
            20, 625, 820, 3)
     return p
 
@@ -486,9 +492,7 @@ def check_mpe():
     bytes_ = p.obj("iter", 20, 215, 1, 1, ["int"])
     p.connect(route, 0, bytes_, 0)
     drift = p.obj("abl.device.drift~ @drift 0", 20, 250, 1, 2, ["signal", "signal"])
-    midiout = p.obj("midiout", 240, 250, 1, 0)
     p.connect(bytes_, 0, drift, 0)
-    p.connect(bytes_, 0, midiout, 0)
     left = p.obj("*~ 0.3", 20, 290, 2, 1, ["signal"])
     right = p.obj("*~ 0.3", 90, 290, 2, 1, ["signal"])
     p.connect(drift, 0, left, 0)
@@ -638,7 +642,7 @@ def panel_canon():
     p.note("CANONS (M2). Turn audio on (speaker). Pick a preset, then play. The tuning menu plays the same "
            "canon in another scale system. The voice editor changes one voice at a time; every change "
            "re-renders (stop first if you don't want the change mid-play).", 20, 55, 780, 2)
-    engine = p.obj("cg.canon", 20, 530, 1, 3, ["", "signal", "signal"])
+    engine = p.obj("cg.canon", 20, 530, 1, 4, ["", "signal", "signal", "int"])
 
     p.comment("preset:", 20, 100)
     presets = p.ui("umenu", 80, 100, 360, 22, 1, 3, ["int", "", ""])
@@ -663,9 +667,9 @@ def panel_canon():
     p.comment("volume:", 360, 165)
     volume = p.ui("flonum", 420, 165, 50, 22, 1, 2, ["", "bang"], format=6)
     p.comment("output:", 490, 165)
-    output = p.ui("umenu", 550, 165, 150, 22, 1, 3, ["int", "", ""],
-                  items=["Hz", "voices", ",", "MPE:", "Drift", "+", "MIDI", "out"])
-    set_output = p.obj("prepend output", 710, 165, 2, 1)
+    output = p.ui("umenu", 550, 165, 170, 22, 1, 3, ["int", "", ""],
+                  items=["Hz", "voices", ",", "MPE", "to", "Drift", "(inside", "Max)", ",", "MPE", "to", "MIDI", "out"])
+    set_output = p.obj("prepend output", 730, 165, 2, 1)
     p.connect(output, 0, set_output, 0)
     p.connect(set_output, 0, engine, 0)
 
@@ -773,6 +777,12 @@ def panel_canon():
     p.connect(level, 0, volume, 0)
     p.connect(start, 0, all_tracks, 0)
     p.connect(all_tracks, 0, track, 0)
+
+    # MPE to MIDI out: the port is chosen here, and saved with this panel.
+    midiout = p.obj("midiout", 720, 580, 1, 0)
+    p.connect(engine, 3, midiout, 0)
+    p.note("MIDI out: double-click to choose the port (e.g. an IAC bus into a Live MPE instrument). "
+           "It's saved with this panel.", 720, 610, 130, 5)
     return p
 
 

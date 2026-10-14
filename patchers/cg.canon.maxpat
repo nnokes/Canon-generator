@@ -203,10 +203,12 @@
 			{
 				"box": {
 					"maxclass": "newobj",
-					"text": "route coll midi",
+					"text": "route coll midi mpeto panic",
 					"numinlets": 2,
-					"numoutlets": 3,
+					"numoutlets": 5,
 					"outlettype": [
+						"",
+						"",
 						"",
 						"",
 						""
@@ -214,7 +216,7 @@
 					"patching_rect": [
 						230.0,
 						220.0,
-						119.0,
+						203.0,
 						22.0
 					],
 					"id": "obj-10"
@@ -501,14 +503,17 @@
 			{
 				"box": {
 					"maxclass": "newobj",
-					"text": "midiout",
-					"numinlets": 1,
-					"numoutlets": 0,
-					"outlettype": [],
+					"text": "gate 2 1",
+					"numinlets": 2,
+					"numoutlets": 2,
+					"outlettype": [
+						"",
+						""
+					],
 					"patching_rect": [
 						560.0,
 						460.0,
-						63.0,
+						70.0,
 						22.0
 					],
 					"id": "obj-26"
@@ -728,6 +733,22 @@
 			},
 			{
 				"box": {
+					"maxclass": "outlet",
+					"comment": "MPE as MIDI bytes, for [midiout]",
+					"index": 3,
+					"numinlets": 1,
+					"numoutlets": 0,
+					"patching_rect": [
+						560.0,
+						580.0,
+						30.0,
+						30.0
+					],
+					"id": "obj-39"
+				}
+			},
+			{
+				"box": {
 					"maxclass": "comment",
 					"text": "A number into [delay]'s left inlet sets the time and starts it. Events at the same time have a delay of 0. The last row's delay is -1, which [if] stops.",
 					"numinlets": 1,
@@ -739,13 +760,13 @@
 						280.0,
 						56.0
 					],
-					"id": "obj-39"
+					"id": "obj-40"
 				}
 			},
 			{
 				"box": {
 					"maxclass": "comment",
-					"text": "cg.canon: renders a canon spec and plays it. The script fills [coll] with one row per note (the delay to the next note first); Max plays it in the scheduler (PLAN 4.2, design 1). Hz rows go to the [poly~] voices; rows marked 'mpe' go to cg.mpe.out, which sends their bytes to [midiout] and Drift.",
+					"text": "cg.canon: renders a canon spec and plays it. The script fills [coll] with one row per note (the delay to the next note first); Max plays it in the scheduler (PLAN 4.2, design 1). Hz rows go to the [poly~] voices; rows marked 'mpe' go to cg.mpe.out, then to Drift or to MIDI out (one at a time).",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"linecount": 3,
@@ -755,7 +776,7 @@
 						820.0,
 						56.0
 					],
-					"id": "obj-40"
+					"id": "obj-41"
 				}
 			}
 		],
@@ -1123,8 +1144,8 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-25",
-						0
+						"obj-10",
+						2
 					],
 					"destination": [
 						"obj-26",
@@ -1136,6 +1157,18 @@
 				"patchline": {
 					"source": [
 						"obj-25",
+						0
+					],
+					"destination": [
+						"obj-26",
+						1
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-26",
 						0
 					],
 					"destination": [
@@ -1303,6 +1336,18 @@
 			{
 				"patchline": {
 					"source": [
+						"obj-10",
+						3
+					],
+					"destination": [
+						"obj-35",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
 						"obj-35",
 						0
 					],
@@ -1316,10 +1361,22 @@
 				"patchline": {
 					"source": [
 						"obj-10",
-						2
+						4
 					],
 					"destination": [
 						"obj-36",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-26",
+						1
+					],
+					"destination": [
+						"obj-39",
 						0
 					]
 				}

@@ -2039,7 +2039,10 @@ __cg_require.local = 1;
 //                                 An MPE note's row: coll <i> <ms to next> mpe <ms> <bend + note-on:
 //                                   6 bytes> <note-off: 3 bytes>; with any MPE voice, the zone
 //                                   setup first as midi <bytes> lines
-//   output hz|mpe                 every voice to the Hz voices or to MPE (or 0/1), then as render
+//   output hz|drift|midi          every voice to the Hz voices, or MPE to Drift inside Max, or MPE
+//                                   to MIDI out (or 0/1/2; "mpe" means drift). One destination at
+//                                   a time: a change sends panic first (to the old one), then as
+//                                   render, which sends mpeto 1 (Drift) or 2 (MIDI out) for the gate
 //   select <voice>                editor <i> <name> <delay> <steps> <transform 0-3>
 //                                   <time scale> <register> <passes>
 //   delay|interval|transform|timescale|register|passes <value>
@@ -2072,7 +2075,8 @@ const io = __cg_require("cg-io");
 const TRANSFORMS = ["P", "I", "R", "RI"];
 const LINES = ["top", "bottom", "track"];
 const MAPS = ["exact", "nearest", "degree"];
-const OUTPUTS = ["hz", "mpe"];
+const OUTPUTS = ["hz", "drift", "midi"];
+const MPE_TO = { drift: 1, midi: 2 }; // the patch's [gate 2] outlets
 const LEVEL = 0.25; // a note's peak gain at velocity 127, before the partial weights
 
 let spec = library.preset(0);
@@ -2159,12 +2163,16 @@ function render() {
   attempt(update);
 }
 
-// Every voice (canon and free) to the Hz voices or to MPE.
+// Every voice (canon and free) to the Hz voices, or MPE to one destination.
+// The destination is kept in the spec (mpeTo), so a saved spec remembers it.
 function output(which) {
   attempt(() => {
-    const out = typeof which === "number" ? OUTPUTS[which] : String(which);
-    if (!OUTPUTS.includes(out)) throw new Error(`output must be one of ${OUTPUTS.join(" ")}, got ${which}`);
-    for (const v of [...canonVoices(), ...(spec.free || [])]) v.out = out;
+    let to = typeof which === "number" ? OUTPUTS[which] : String(which);
+    if (to === "mpe") to = "drift";
+    if (!OUTPUTS.includes(to)) throw new Error(`output must be one of ${OUTPUTS.join(" ")}, got ${which}`);
+    outlet(0, "panic"); // stop what's sounding on the old destination before switching
+    for (const v of [...canonVoices(), ...(spec.free || [])]) v.out = to === "hz" ? "hz" : "mpe";
+    if (to !== "hz") spec.mpeTo = to;
     update();
   });
 }
@@ -2384,7 +2392,11 @@ function update() {
   const channels = new Map();
   mpe.allocate(mpeIndex.map((i) => events[i])).forEach((ch, k) => channels.set(mpeIndex[k], ch));
   const overflow = [...channels.values()].filter((ch) => ch === null).length;
-  if (mpeIndex.length) for (const bytes of mpe.zoneConfig()) outlet(0, "midi", ...bytes);
+  const to = spec.mpeTo === "midi" ? "midi" : "drift";
+  if (mpeIndex.length) {
+    outlet(0, "mpeto", MPE_TO[to]); // the gate first, so the zone setup reaches the right place
+    for (const bytes of mpe.zoneConfig()) outlet(0, "midi", ...bytes);
+  }
   outlet(0, "coll", "clear");
   events.forEach((e, i) => {
     const next = events[i + 1];
@@ -2416,8 +2428,9 @@ function update() {
   announce();
   if (mpeIndex.length) {
     const used = new Set([...channels.values()].filter((ch) => ch !== null)).size;
-    outlet(0, "status", "mpe:", mpeIndex.length - overflow, "notes on", used, "channels (2-16, bend +/-48)" + (overflow
-      ? ", " + overflow + " beyond 15 at once went to the Hz voices" : ""));
+    outlet(0, "status", "mpe:", mpeIndex.length - overflow, "notes on", used, "channels (2-16, bend +/-48)",
+      "to", (to === "midi" ? "MIDI out" : "Drift")
+        + (overflow ? ", " + overflow + " beyond 15 at once went to the Hz voices" : ""));
   }
 }
 update.local = 1;

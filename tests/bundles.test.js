@@ -351,29 +351,59 @@ test("cg.canon: your melody stays across presets; tuning re-maps it; presetmelod
 
 // ---------------------------------------------------------------- MPE out and the check (M2 part F)
 
-test("cg.canon: output mpe sends the zone setup, then MPE rows a Max [pipe] can time", () => {
+test("cg.canon: output drift sends the gate, the zone setup, then MPE rows a Max [pipe] can time", () => {
   const bundle = loadBundle("cg.canon");
   bundle.send("preset", 0);
-  const out = bundle.send("output", "mpe");
+  const out = bundle.send("output", "drift");
   assert.deepEqual(errors(out), []);
+  const order = out.map(([, selector]) => selector);
+  assert.ok(order.indexOf("panic") < order.indexOf("mpeto"), "panic to the old destination before the switch");
+  assert.ok(order.indexOf("mpeto") < order.indexOf("midi"), "the gate is set before the zone setup goes through it");
+  assert.deepEqual(select(out, "mpeto"), [[1]], "1: Drift");
   assert.deepEqual(select(out, "midi"), mpe.zoneConfig(), "the lower zone, +/-48, before the notes");
   const queue = rows(out);
   const expected = canonEngine.render(library.preset(0)).events;
   assert.equal(queue.length, expected.length);
   const channels = mpe.allocate(expected);
-  queue.forEach(([i, , kind, ms, ...bytes], k) => {
+  queue.forEach(([, , kind, ms, ...bytes], k) => {
     assert.equal(kind, "mpe", `row ${k}`);
     assert.equal(bytes.length, 9);
     const e = expected[k];
     assert.ok(Math.abs(ms - e.dur * 600) < 1e-9, "the note's length, for [pipe]");
     assert.deepEqual(bytes, [...mpe.noteOn(e.pitch, e.vel, channels[k]).flat(), ...mpe.noteOff(e.pitch, channels[k]).flat()]);
   });
-  assert.match(select(out, "status").at(-1).join(" "), /^mpe: 256 notes on 15 channels/);
-  // Back to the Hz voices: no zone setup, plain rows.
-  const hz = bundle.send("output", 0);
+  assert.equal(select(out, "status").at(-1).join(" "), "mpe: 256 notes on 15 channels (2-16, bend +/-48) to Drift");
+});
+
+test("cg.canon: one MPE destination at a time: Drift, MIDI out, or the Hz voices", () => {
+  const bundle = loadBundle("cg.canon");
+  bundle.send("preset", 0);
+  // MIDI out: the same rows, the gate to 2.
+  const midiOut = bundle.send("output", 2);
+  assert.deepEqual(select(midiOut, "mpeto"), [[2]], "2: MIDI out");
+  assert.match(select(midiOut, "status").at(-1).join(" "), /to MIDI out$/);
+  // "mpe" means Drift.
+  assert.deepEqual(select(bundle.send("output", "mpe"), "mpeto"), [[1]]);
+  // The Hz voices: panic for whatever was sounding, no gate, no zone setup, plain rows.
+  const hz = bundle.send("output", "hz");
+  assert.deepEqual(select(hz, "panic"), [[]]);
+  assert.deepEqual(select(hz, "mpeto"), []);
   assert.deepEqual(select(hz, "midi"), []);
   assert.ok(rows(hz).every((r) => typeof r[2] === "number"));
-  assert.match(errors(bundle.send("output", "osc"))[0], /output must be one of hz mpe/);
+  // A bad value is refused, before any panic.
+  const bad = bundle.send("output", "osc");
+  assert.match(errors(bad)[0], /output must be one of hz drift midi/);
+  assert.deepEqual(select(bad, "panic"), []);
+  // The destination is kept in a saved spec.
+  const os = require("os");
+  const fs = require("fs");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cg-mpeto-"));
+  bundle.send("output", "midi");
+  bundle.send("savespec", path.join(dir, "midi.json"));
+  bundle.send("output", "hz");
+  const loaded = bundle.send("loadspec", path.join(dir, "midi.json"));
+  fs.rmSync(dir, { recursive: true });
+  assert.deepEqual(select(loaded, "mpeto"), [[2]]);
 });
 
 test("cg.canon: more than 15 MPE notes at once: the rest go to the Hz voices, and it says so", () => {

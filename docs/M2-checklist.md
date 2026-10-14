@@ -31,9 +31,11 @@ renders and plays; M3 judges.
   ±5 cents, and the implied bend range is about 48.
 
 **Status:**
-- Parts A–F are built: 97 tests.
-- Max sessions 1 and 2 passed.
-- **To do: Max session 3** (end of part F). M2 closes after it.
+- Parts A–F are built: 98 tests.
+- Max sessions 1 and 2 passed. Session 3's first round passed the melody steps, and its MPE
+  doubling is fixed.
+- **To do: session 3's second round:** MPE to Drift, and the pitch check. M2 closes after
+  it.
 
 **In M2 / later:**
 
@@ -268,14 +270,30 @@ Specs can also use `groups` with a `start` time each, so canons can follow one a
   - every 10 readings, a summary folded to the nearest octave, with the bend range Drift
     applied
 - [x] **The panel**, regenerated:
-  - an output menu (Hz voices / MPE: Drift + MIDI out)
+  - an output menu: Hz voices / MPE to Drift / MPE to MIDI out. Since session 3 these are
+    separate, one destination at a time, and `[midiout]` is in the panel.
   - `presetmelody`
   - `[print midi_file]`, which prints which melody is in use
 - [ ] **Max session 3** (below)
 
 ### Max session 3
-1. If you've saved the canon panel since your last pull, first run
-   `git checkout -- patchers/cg.panel.canon.maxpat`. Then `git pull`.
+**First round (done):**
+- Steps 2 and 3 passed: the melody stays across presets, and it follows the tuning.
+- **MPE out was doubled.** The MPE bytes went to Drift *and* to an unconfigured
+  `[midiout]`, whose default port was a General MIDI synth.
+  - On a GM synth, channel 10 is the drum kit, and the allocator uses channels 2–16, so
+    some notes played as percussion.
+  - That synth renders after Max's own audio, so it trailed Drift.
+- **Fixed:**
+  - MPE now goes to **one** destination: Drift (inside Max) or MIDI out. A change of
+    destination sends all-notes-off to the old one first.
+  - `[midiout]` is now in your panel: double-click it to choose the port, and it's saved
+    with the panel.
+  - The check patch measures Drift only.
+
+**Second round:**
+1. Run `git checkout -- patchers/cg.panel.canon.maxpat` (the panel is regenerated once
+   more), then `git pull`.
 2. **Your melody across presets:** open `patchers/cg.panel.canon.maxpat`.
    - Load `live-clip.mid` (or your own). The Max window prints
      `midi_file: live-clip.mid`.
@@ -284,9 +302,14 @@ Specs can also use `groups` with a `start` time each, so canons can follow one a
    - Click **presetmelody**: `midi_file: preset …`, and the preset's own melody plays.
 3. **Re-map on a tuning change:** with the clip loaded and map = **nearest**, switch the
    tuning to 31-EDO D Dorian, then to Just major. The melody follows each tuning.
-4. **MPE out:** set output to **MPE: Drift + MIDI out** and play the round. You'll hear
-   it through Drift, and `canon: mpe: 256 notes on 15 channels …` prints. Listen for stuck
-   notes or bends landing on the wrong note. **stop** should silence everything.
+4. **MPE out:** set output to **MPE to Drift (inside Max)** and play the round.
+   - One synth only, with no drums. `canon: mpe: 256 notes on 15 channels … to Drift`
+     prints.
+   - Listen for stuck notes or bends landing on the wrong note. **stop** should silence
+     everything.
+
+   Optional: double-click the panel's `[midiout]`, pick an IAC bus into a Live MPE
+   instrument, and set output to **MPE to MIDI out**.
 5. **The pitch check:** open `patchers/cg.check.mpe.maxpat` and turn audio on. Click
    `zone` once, then `note 64.5`, and hold it about 15 s. Paste the 2–3
    `mpe-check: cents n 10 median … implied bend range …` lines, then click `off`.

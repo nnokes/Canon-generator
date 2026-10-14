@@ -552,8 +552,14 @@ back for sample-accurate *audio* events in the voice bank.
      - each *note* gets its own member channel, least recently freed first
        (`cg-mpe.allocate`); notes beyond 15 at once go to the Hz voices
      - `[pipe]` delays each note-off by the note's length, so Max times it, not JS
-     - Drift plays the MPE notes inside Max; they also go to `[midiout]`
-     - `cg.check.mpe.maxpat` measures one note
+     - **one MPE destination at a time:** Drift inside Max, or MIDI out through the
+       panel's `[midiout]`, whose port is chosen there and saved with the panel. M2's
+       first build sent to both, and an unconfigured `[midiout]` reached the Mac's General
+       MIDI synth (channel 10 = drums). GM synths aren't MPE targets.
+     - **latency:** an external synth sounds later than Max's own audio, by its own
+       latency. That only matters when mixing it with Max's voices; M9 (Live) relies on
+       Live's delay compensation.
+     - `cg.check.mpe.maxpat` measures one note, through Drift only
    - lower zone, channels 2–16
    - pitch bend range ±48 semitones, which Live 12's tuning system expects; resolution is
      96/16384 ≈ 0.59 cents
