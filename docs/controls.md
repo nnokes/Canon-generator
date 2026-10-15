@@ -51,7 +51,7 @@ comes from (PLAN.md §3.3).
 |---|---|---|
 | `dissonance` | Every slice is consonant. A **fourth over the sounding bass** is a dissonance; between upper voices it isn't. | Fux pp. 20–21, 27 |
 | `dissonance-treatment` | A dissonance must be one of two things: **(1)** a passing or neighbour note, stepping in and out, not on a strong beat; or **(2)** a suspension, held from a consonance and resolving down by step. A fourth over the bass with 3+ voices is reported as `six-four`. | ours, after Fux's 2nd–4th species (pp. 41–64) and Albrechtsberger's canons |
-| `six-four` | A 6/4 against the actual sounding bass. It's "bad particularly in the first or in the last measure or on any strong beat". Reported by `dissonance-treatment`. | Mann pp. 228, 236–237 |
+| `six-four` | A 6/4 against the actual sounding bass, "bad particularly in the first or in the last measure or on any strong beat". Reported by `dissonance-treatment`: hard there, soft (its weight) on a weak beat inside the piece. | Mann pp. 228, 236–237 |
 | `parallel-perfect` | Parallel (or similar, by octave displacement) motion between two perfect consonances of the same class: consecutive fifths, octaves, unisons. | Fux p. 22 |
 | `hidden-perfect` | Similar motion into a perfect consonance from a different interval. It's forbidden because filling in the leap (diminution) would reveal consecutive fifths or octaves (Figs. 7–8). | Fux pp. 22, 32–33 |
 | `begin-perfect` | The first slice with two or more voices has only perfect consonances over the bass. | Fux p. 28 |
@@ -67,6 +67,11 @@ comes from (PLAN.md §3.3).
 | `entry-rest` | A voice coming back after a rest shorter than `beats` (1). "Let voices rest alternately, so that rests set up the entrances." | Mann pp. 216–217 |
 | `phrase-seventh` | A phrase (a run of notes between rests) starting a 7th or 9th from the end of the phrase before. Checked in heptatonic modes. | Mann p. 217 |
 | `roughness-ceiling` | The model's score above `ceiling` (0.6) in a slice, or above `windowCeiling` (0.4) on average over a window. | PLAN §3.3, the `spectral` profile |
+
+**Screening part of a texture:** when the answer finder checks part of an N-voice canon
+(a follower against the dux, or two followers), every pair is judged as upper voices, so
+a fourth is consonant. Another voice may sound below them. The whole set is then judged
+against its real bass (`fourthsFree` in `cg-analyze`).
 
 **Rules reported elsewhere:**
 - The **invertibility** of a canon's intervals (x ↔ period − x; Mann pp. 231–232) is

@@ -1,0 +1,25 @@
+{
+  "source": "Albrechtsberger, in Mann, The Study of Fugue (1958), pp. 228-231: Ex. 201 (two-part canon at the unison, 'Virgam virtutis tuae'), and its hidden answers, Exs. 205-211",
+  "transcription": "The dux as Exs. 205-211 give it (bars 1-6, ending G4 F4; Ex. 201 itself ends F5 | F5 E5 F5 as a concluded unison canon). B flat major: degree 0 = B flat 3 (MIDI 58), so 11 = F5. Durations in beats, quarter = 1, bar = 4 (cut time). Read from the scan by eye, against Exs. 205-211, which copy it at each interval.",
+  "system": { "type": "edo", "divisions": 12, "mode": [0, 2, 4, 5, 7, 9, 11], "ref": { "step": 0, "midi": 58 } },
+  "meter": { "beats": 4, "strong": [0] },
+  "dux": { "source": "list", "notes": [
+    { "degree": 11, "dur": 2 }, { "degree": 10, "dur": 1 }, { "degree": 10, "dur": 1 },
+    { "degree": 9, "dur": 1 }, { "degree": 9, "dur": 1 }, { "degree": 8, "dur": 2 },
+    { "degree": 7, "dur": 0.5 }, { "degree": 4, "dur": 0.5 }, { "degree": 7, "dur": 2 }, { "degree": 6, "dur": 1 },
+    { "degree": 9, "dur": 1.5 }, { "degree": 9, "dur": 0.5 }, { "degree": 8, "dur": 1 }, { "degree": 8, "dur": 1 },
+    { "degree": 7, "dur": 2 }, { "degree": 6, "dur": 1 }, { "degree": 6, "dur": 1 },
+    { "degree": 5, "dur": 2 }, { "degree": 4, "dur": 2 }
+  ] },
+  "answers": [
+    { "example": "Ex. 201", "name": "unison", "steps": 0, "delay": 4 },
+    { "example": "Ex. 205", "name": "upper 2nd", "steps": 1, "delay": 2 },
+    { "example": "Ex. 206", "name": "lower 3rd", "steps": -2, "delay": 8 },
+    { "example": "Ex. 207", "name": "upper 6th", "steps": 5, "delay": 8 },
+    { "example": "Ex. 208", "name": "lower 7th", "steps": -6, "delay": 2 },
+    { "example": "Ex. 209", "name": "upper octave", "steps": 7, "delay": 4 },
+    { "example": "Ex. 209", "name": "lower octave", "steps": -7, "delay": 4 },
+    { "example": "Ex. 210", "name": "lower 9th", "steps": -8, "delay": 6 },
+    { "example": "Ex. 211", "name": "lower 10th", "steps": -9, "delay": 8 }
+  ]
+}

@@ -22,6 +22,8 @@
 //   pcTolerance  cents within which two pitch classes count as one (default 15)
 //   vlNorm       taxicab (default), euclidean or chebyshev
 //   final        the mode's final as a pitch (fux rules); default: voice 0's last note
+//   fourthsFree  judge every pair as upper voices (a fourth is consonant): for
+//                screening part of a texture whose real bass isn't there yet
 
 const tuning = require("cg-tuning");
 const scales = require("cg-scales");
@@ -66,7 +68,7 @@ function classifier(model) {
 
 // Every onset time, with what sounds there. A sweep: events enter at their
 // onset and leave at their end.
-function buildSlices(events, model, meter) {
+function buildSlices(events, model, meter, fourthsFree = false) {
   const sorted = time.sortEvents(events.filter((e) => e.dur > 0));
   const classify = classifier(model);
   const slices = [];
@@ -89,7 +91,7 @@ function buildSlices(events, model, meter) {
         const low = notes[i];
         const high = notes[j];
         const cents = (high.pitch - low.pitch) * 100;
-        pairs.push({ low: low.voice, high: high.voice, cents, withBass: i === 0, ...classify(cents, low.pitch) });
+        pairs.push({ low: low.voice, high: high.voice, cents, withBass: i === 0 && !fourthsFree, ...classify(cents, low.pitch) });
       }
     }
     slices.push({ t, ...position(t, meter), notes, bass: bass.voice, above, pairs });
@@ -355,7 +357,7 @@ function analyze(rendered, options = {}) {
   const model = modelFor(options, system);
   const period = system.period_cents || 1200;
   const tolerance = options.pcTolerance === undefined ? 15 : options.pcTolerance;
-  const slices = buildSlices(events, model, meter);
+  const slices = buildSlices(events, model, meter, options.fourthsFree);
   const motion = [];
   for (let i = 1; i < slices.length; i++) motion.push({ from: i - 1, to: i, moves: motionBetween(slices[i - 1], slices[i]) });
   const length = events.reduce((m, e) => Math.max(m, e.t + e.dur), 0);

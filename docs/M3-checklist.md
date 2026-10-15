@@ -138,10 +138,51 @@ canons hidden in it, for two voices or for N.
     - each filled-in version: `parallel-perfect` at the same place, the fifths that the
       filling reveals
 
-## Part D. The answer finder: `cg-finder` (engine)
-- [ ] A generator over the ranges, with a node budget and progress
-- [ ] One follower: a ranked list. N voices: pairs, a clique search, then the whole set.
-- [ ] Mann golden tests: Ex. 201's eight answers, and the canon for Haydn
+## Part D. The answer finder: `cg-finder` (engine): done
+- [x] **A generator over the ranges:**
+  - settings: intervals (scale steps or exact cents) × delays × transforms × time scales
+  - it yields progress (phase, done, total, best so far), stops at a node budget (renders
+    plus analyses), and returns the ranked results
+  - `find` runs it to the end; `specFor(result)` gives a spec ready to play
+- [x] **One follower:**
+  - ranked by hard violations, then cost
+  - each result shows its violations (rule, bar, beat, voices)
+  - each result shows its **answer distortion**: the cents between the degree answer and
+    the exact one, measured at the dux's first note
+  - each result shows its **inversion** at the period (x ↔ 7 − x in a 7-note mode; Mann
+    pp. 231–232)
+- [x] **N voices:**
+  1. each follower against the dux
+  2. each pair of passing followers against each other, rendered without the dux
+  3. a clique search for sets where every pair passes. Entries are one after another by
+     default (`distinctDelays`).
+  4. each set analyzed whole, against its real sounding bass
+- [x] **Two findings:**
+  - **Fourths need the whole texture.** Steps 1–2 screen with fourths consonant, because
+    another voice may sound below. Otherwise solution 1 of the canon for Haydn is lost:
+    its alto sits a fourth below the dux, over the tenor and bass.
+  - **A 6/4 is hard only where Mann says it's bad** ("in the first or in the last measure
+    or on any strong beat", p. 228), and soft elsewhere. Solution 1 has one, on a weak
+    beat, in the repeat.
+- [x] **`perpetual`:** every voice loops `passes` times, cut at the leader's end, so a
+  perpetual canon is judged in its steady state.
+- [x] **Mann golden tests** (`tests/fixtures/mann/`):
+  - **Ex. 201** (the dux as Exs. 205–211 give it):
+    - all eight hidden answers pass: upper 2nd after ½ bar, lower 3rd after 2, upper 6th
+      after 2, lower 7th after ½, both octaves after 1, lower 9th after 1½, lower 10th
+      after 2. So does the unison.
+    - of the 152 settings tried (19 intervals × 8 delays), only 12 pass. The other three
+      are octave equivalents: the upper 9th after ½ bar (Ex. 205 an octave up), and the
+      lower 2nd and upper 7th after 1½ bars (Ex. 210 one and two octaves up).
+    - the lower 9th costs a soft melodic tritone: the leap Albrechtsberger avoids with
+      the E♮ in Ex. 210
+  - **Ex. 239–240** (the canon for Haydn, 4 voices, perpetual):
+    - both solutions pass and are found: lower 5th + lower octave + lower 12th (Ex.
+      239/241), and upper 4th + lower octave + lower 5th (Ex. 240)
+    - of the 36 sets, the 15 that pass all enter at the fifth below (or fourth above) and
+      the octave, in some register
+    - **check:** I read bars 9–12 of the melody from an unclear scan (D5 | B4 G4 B4 | C5
+      E5 | D5); please compare them with p. 261 (session 1)
 
 ## Part E. Max: the finder panel and time slicing
 - [ ] `cg.finder.v8.js`, time-sliced from a `Task`
@@ -159,5 +200,6 @@ canons hidden in it, for two voices or for N.
 
 | Check | Result | Decision |
 |---|---|---|
+| answer finder (Part D) | **PASS** (Node, `tests/finder.test.js`): Ex. 201 gives all eight of Albrechtsberger's answers (plus the unison), and only their octave equivalents besides; Ex. 239–240 gives both solutions | Fourths screened as upper voices until the whole set; a 6/4 hard only on strong beats and in the first and last bars (Mann p. 228) |
 | Fux golden tests (Part C) | **PASS** (Node, `tests/analyze.test.js`): Fig. 5 clean; Fig. 6 exactly the mode error at bar 1 and the hidden fifth from bar 2 to 3, clean once corrected; Figs. 7–8 hidden fifths in direct motion, parallel fifths once filled in | Rules as `docs/controls.md` lists them |
 | roughness curve (Part A) | **PASS** (Node, `tests/consonance.test.js`): minima at 6/5, 5/4, 4/3, 3/2, 5/3, 2/1 within 2 cents (plus 7/6, 7/5, 7/4), fifth and octave smoother than the third, seconds roughest | Sethares's shape for a harmonic timbre |

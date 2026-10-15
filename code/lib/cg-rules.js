@@ -37,6 +37,13 @@ function noteOf(slice, voice) {
 
 const multi = (slices) => slices.filter((s) => s.notes.length > 1);
 
+// Whether time t falls on a strong beat of the meter.
+function analyzePosition(c, t) {
+  const bar = Math.floor(t / c.meter.beats + time.EPS);
+  const beat = t - bar * c.meter.beats;
+  return { strong: c.meter.strong.some((x) => time.eq(beat, x)) };
+}
+
 // The folded class of an interval (cents within the period), for "same interval" tests.
 function folded(cents, period) {
   const value = ((Math.abs(cents) % period) + period) % period;
@@ -77,6 +84,9 @@ RULES.dissonance = (c) => {
 // sounding is reported as a 6/4 (Mann pp. 228, 236-237).
 RULES["dissonance-treatment"] = (c) => {
   const out = [];
+  const sounding = multi(c.slices);
+  const firstBar = sounding.length ? sounding[0].bar : 0;
+  const lastBar = sounding.length ? sounding[sounding.length - 1].bar : 0;
   c.slices.forEach((s, si) => {
     const prev = si > 0 ? c.slices[si - 1] : null;
     for (const p of s.pairs) {
@@ -84,11 +94,12 @@ RULES["dissonance-treatment"] = (c) => {
       const ok = [p.low, p.high].some((v) => {
         const n = noteOf(s, v);
         const { prev: before, next: after } = neighbours(c.byVoice, n.event);
-        if (n.onset) {
-          // Passing or neighbour: by step in and out, not on a strong beat.
-          return !s.strong && touches(before, n.event) && touches(n.event, after)
-            && isStep(c.system, before, n.event) && isStep(c.system, n.event, after);
-        }
+        // Passing or neighbour: by step in and out, struck off the strong beats. It
+        // stays one for as long as it sounds, even if another voice moves meanwhile.
+        const struck = analyzePosition(c, n.event.t);
+        if (!struck.strong && touches(before, n.event) && touches(n.event, after)
+          && isStep(c.system, before, n.event) && isStep(c.system, n.event, after)) return true;
+        if (n.onset) return false;
         // Held over: prepared (consonant in the slice before), resolving down by step.
         if (!prev) return false;
         const other = v === p.low ? p.high : p.low;
@@ -98,7 +109,14 @@ RULES["dissonance-treatment"] = (c) => {
       });
       if (ok) continue;
       const sixFour = p.fourth && p.withBass && s.notes.length > 2;
-      out.push(violation(sixFour ? "six-four" : "dissonance", s, [p.low, p.high], `${Math.round(p.cents)} cents`));
+      if (!sixFour) {
+        out.push(violation("dissonance", s, [p.low, p.high], `${Math.round(p.cents)} cents`));
+        continue;
+      }
+      // A 6/4 is "bad particularly in the first or in the last measure or on any
+      // strong beat" (Mann p. 228): there it's hard, elsewhere a soft cost.
+      const edge = s.bar === firstBar || s.bar === lastBar;
+      out.push(violation("six-four", s, [p.low, p.high], `${Math.round(p.cents)} cents`, s.strong || edge ? {} : { soft: true }));
     }
   });
   return out;
@@ -453,8 +471,11 @@ function judge(context, profile) {
   for (const [id, r] of Object.entries(rules)) {
     const found = RULES[id](c, r);
     for (const v of found) {
-      // A rule may report a more specific id (dissonance-treatment -> six-four).
-      violations.push({ ...v, hard: r.hard, cost: r.hard ? 0 : r.weight, from: v.from });
+      // A rule may report a more specific id (dissonance-treatment -> six-four),
+      // and mark a violation soft where its source says it's only a fault in places.
+      const { soft, ...rest } = v;
+      const hardHere = r.hard && !soft;
+      violations.push({ ...rest, hard: hardHere, cost: hardHere ? 0 : r.weight });
     }
   }
   violations.sort((a, b) => a.t - b.t || a.rule.localeCompare(b.rule));
