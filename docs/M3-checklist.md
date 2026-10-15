@@ -25,7 +25,8 @@ canons hidden in it, for two voices or for N.
 - **The roughness curve** matches Sethares's published shape for a harmonic timbre.
 
 **Status:**
-- Started 2026-10-15. Parts A–E come first, then Max session 1, then part F.
+- Started 2026-10-15. Parts A–E are built: 136 tests.
+- **Next: Max session 1** (below), then part F (the piano roll).
 - Carried in from M2: the MPE pitch check at Drift's ±2 (session 1, step 1).
 
 ---
@@ -184,14 +185,80 @@ canons hidden in it, for two voices or for N.
     - **check:** I read bars 9–12 of the melody from an unclear scan (D5 | B4 G4 B4 | C5
       E5 | D5); please compare them with p. 261 (session 1)
 
-## Part E. Max: the finder panel and time slicing
-- [ ] `cg.finder.v8.js`, time-sliced from a `Task`
-- [ ] The canon wrapper writes `cg.spec`, and a picked result plays through the canon
-  panel (`usespec`)
-- [ ] `cg.panel.finder.maxpat` (hand-built, created once)
+## Part E. Max: the finder panel and time slicing: built
+- [x] **`code/cg.finder.v8.js`:**
+  - one inlet and one outlet
+  - it reads the melody, scale system and meter from the dict **`cg.spec`**, which the
+    canon wrapper now writes on every render
+  - it runs the search from a **`Task`**: each tick works for `slicems` milliseconds
+    (default 20), then yields to Max
+  - outputs: `progress`, a ranked `results` list (for a umenu), `done <results> <ms>
+    <slices> <ms per slice>`, `status`, `error`
+  - settings: `voices`, `intervals`, `delays`, `transforms`, `timescales`, `profile`,
+    `perpetual`, `budget`
+- [x] **Audition:**
+  - `pick <i>` writes the result's spec to the dict `cg.audition` and sends `usespec
+    cg.audition` through `[s cg.canon.in]`
+  - the generated `cg.canon` has the matching `[r cg.canon.in]`, and the wrapper a new
+    `usespec`
+  - so a result plays through the canon panel's own player, and your canon panel isn't
+    touched. A loaded `.mid` stays loaded.
+- [x] **`cg.finder.maxpat`** (generated): the `[v8]`, the audition send, and one outlet.
+- [x] **`cg.panel.finder.maxpat`** (hand-built, created once):
+  - voices, the interval and delay ranges, a profile menu, perpetual, the time slice
+  - run / stop / info
+  - the results menu (click to audition) and a progress line; `[print finder]` for the
+    rest
+- [x] **Tests:**
+  - the `[v8]` simulation has a `Task` now, driven tick by tick
+  - the finder's message list, and bad values reported, not thrown
+  - `cg.spec` is written on every render
+  - a search on the round runs in many 1 ms slices and lists all 30 settings; the
+    round's own answer (unison after two bars) is clean
+  - a pick plays in the canon through `usespec`
+  - stop leaves nothing running
 
 ## Max session 1
-(Written when part E is done.)
+**First:** your local edit to the generated MPE check patch has to go. In the repo folder
+run `git checkout -- patchers/cg.check.mpe.maxpat`, then `git pull`. Nothing else you
+edited is regenerated: the new finder panel is new, and your canon panel is untouched.
+
+1. **The MPE pitch check at ±2** (from M2):
+   - open `patchers/cg.check.mpe.maxpat` and turn audio on
+   - click `zone`: it prints `bend 2`
+   - click `note 64.5`: it prints `note 65 bend 6144`. Hold it about 15 s, then `off`;
+     paste every `mpe-check:` line.
+   - hold the note again with the **reference sine** on: a unison, or a beating?
+   - in the canon panel, set output to **MPE to Drift** and play the 31-EDO spiral. The
+     status says `bend +/-2) to Drift`, and the tuning should sound as it does on the Hz
+     voices.
+
+   | What you get | Meaning |
+   |---|---|
+   | median within ±5 cents, range about 2, a unison with the sine | **Pass**: M2's MPE criterion is met |
+   | median about +50, range about 0, a beating | Drift ignores per-note bend inside Max; we decide then |
+   | anything else | paste it |
+2. **The finder, 2 voices:**
+   - open `patchers/cg.panel.canon.maxpat` **and** `patchers/cg.panel.finder.maxpat`
+   - in the canon panel, load your `.mid` (or keep the round)
+   - in the finder: voices 2, intervals −9 to 9, delays 1 to 8 step 1, profile canon. Click
+     **run**.
+   - the Max window prints `finder: <n> clean of 152 tried in <ms> ms, <slices> slices
+     of 20 ms`, and the results menu fills
+   - pick a result: the canon panel loads it (`melody ...` prints). Click **play** there.
+     Try a few, clean and not.
+3. **The finder, 3 voices:**
+   - voices 3, delays 2 to 8 step 2, then run: the results are sets of two followers
+   - play the best two or three
+4. **The time-slice budget:**
+   - set time slice to 5 and run a 3-voice search
+   - while it runs, play the canon panel and drag a number box
+   - repeat with 10, 20, 50, 100 and 200
+   - report the largest value at which the interface and the audio stay smooth, and the
+     `done` line (its last number is the measured ms per slice)
+5. **Check my transcription:** compare bars 9–12 of the canon for Haydn
+   (`tests/fixtures/mann/ex239.json`: D5 | B4 G4 B4 | C5 E5 | D5) with Mann p. 261.
+6. Paste anything from `finder` or `canon-error`, and anything that sounds wrong.
 
 ## Part F. The piano roll (after session 1)
 - [ ] `[v8ui]`: voice colours, violation markers and the dissonance curve

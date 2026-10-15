@@ -365,7 +365,9 @@ def canon():
     messages (menu, tmenu, bpm, editor, status, error, melody). Outlets 1 and 2:
     left and right audio: the [poly~] Hz voices plus Ableton's Drift playing
     the MPE notes. Outlet 3: the MPE notes as MIDI bytes, for the panel's
-    [midiout]. MPE goes to Drift or to MIDI out, never both ([gate 2])."""
+    [midiout]. MPE goes to Drift or to MIDI out, never both ([gate 2]).
+    [r cg.canon.in] takes messages from elsewhere: the answer finder sends
+    usespec cg.audition to play the result you pick (M3)."""
     p = Patch(rect=(80, 80, 900, 720))
     p.note(GENERATED_NOTE, 20, 10, 700, 1)
     inl = p.obj("route play stop", 20, 115, 2, 3)
@@ -385,6 +387,9 @@ def canon():
     for m in (fill, fill_tunings, first):
         p.connect(m, 0, v8, 0)
     p.connect(inl, 2, v8, 0)
+    # The answer finder's picks arrive here: usespec cg.audition (M3).
+    audition = p.obj("r cg.canon.in", 230, 150, 1, 1)
+    p.connect(audition, 0, v8, 0)
     route = p.obj("route coll midi mpeto panic", 230, 220, 2, 5)
     p.connect(v8, 0, route, 0)
 
@@ -564,6 +569,31 @@ def check_mpe():
     return p
 
 
+def finder():
+    """cg.finder (M3): the answer finder. Inlet: messages (see
+    code/cg.finder.v8.js). It reads the melody from the dict cg.spec, which the
+    canon panel writes, and searches in time slices. A picked result goes to the
+    canon panel as usespec cg.audition, through [s cg.canon.in]. Outlet: results
+    (for a umenu), progress, done, status and error."""
+    p = Patch(rect=(80, 80, 640, 330))
+    p.note(GENERATED_NOTE, 20, 10, 560, 1)
+    inlet = p.inlet(20, 50, "messages: run, stop, voices, intervals, delays, transforms, timescales, profile, "
+                    "perpetual, slicems, budget, pick, info", 0)
+    v8 = p.obj("v8 cg.finder.bundle.js", 20, 95, 1, 1)
+    route = p.obj("route audition", 20, 130, 2, 2)
+    usespec = p.obj("prepend usespec", 20, 170, 2, 1)
+    send = p.obj("s cg.canon.in", 20, 205, 1, 0)
+    out = p.outlet(250, 250, "results (for a umenu), progress, done, status, error", 0)
+    p.connect(inlet, 0, v8, 0)
+    p.connect(v8, 0, route, 0)
+    p.connect(route, 0, usespec, 0)
+    p.connect(usespec, 0, send, 0)
+    p.connect(route, 1, out, 0)
+    p.note("A picked result plays through the canon panel's own player: keep the canon panel open.",
+           250, 95, 330, 2)
+    return p
+
+
 GENERATED = {
     "patchers/cg.engine.maxpat": engine,
     "patchers/cg.tuning.maxpat": tuning,
@@ -571,6 +601,7 @@ GENERATED = {
     "patchers/cg.mpe.out.maxpat": mpe_out,
     "patchers/cg.canon.maxpat": canon,
     "patchers/cg.check.mpe.maxpat": check_mpe,
+    "patchers/cg.finder.maxpat": finder,
 }
 
 
@@ -835,11 +866,94 @@ def panel_canon():
     return p
 
 
+def panel_finder():
+    """The M3 answer finder panel: search your melody for the canons hidden in
+    it, and click a result to hear it through the canon panel."""
+    p = Patch(rect=(80, 80, 820, 560))
+    p.note(HAND_NOTE, 20, 10, 760, 2)
+    p.note("ANSWER FINDER (M3). Open the canon panel too: the finder searches the melody it plays (a preset's, "
+           "or your .mid), and a result you pick plays there. Set the ranges, then run. Clean = no hard faults; "
+           "cost = soft faults. Voices 3+ search sets of followers that all work together.", 20, 55, 760, 3)
+    engine = p.obj("cg.finder", 20, 470, 1, 1)
+
+    p.comment("voices:", 20, 115)
+    voices = p.ui("number", 90, 115, 50, 22, 1, 2, ["", "bang"], minimum=2, maximum=6)
+    set_voices = p.obj("prepend voices", 150, 115, 2, 1)
+    p.connect(voices, 0, set_voices, 0)
+    p.connect(set_voices, 0, engine, 0)
+
+    p.comment("intervals (steps) from:", 20, 150)
+    iv_from = p.ui("number", 190, 150, 50, 22, 1, 2, ["", "bang"])
+    p.comment("to:", 250, 150)
+    iv_to = p.ui("number", 285, 150, 50, 22, 1, 2, ["", "bang"])
+    iv_pack = p.obj("pak -9 9", 350, 150, 2, 1)
+    set_iv = p.obj("prepend intervals", 430, 150, 2, 1)
+    p.connect(iv_from, 0, iv_pack, 0)
+    p.connect(iv_to, 0, iv_pack, 1)
+    p.connect(iv_pack, 0, set_iv, 0)
+    p.connect(set_iv, 0, engine, 0)
+
+    p.comment("delays (beats) from:", 20, 185)
+    d_from = p.ui("flonum", 170, 185, 50, 22, 1, 2, ["", "bang"], format=6)
+    p.comment("to:", 230, 185)
+    d_to = p.ui("flonum", 260, 185, 50, 22, 1, 2, ["", "bang"], format=6)
+    p.comment("step:", 315, 185)
+    d_step = p.ui("flonum", 360, 185, 50, 22, 1, 2, ["", "bang"], format=6)
+    d_pack = p.obj("pak 1. 8. 1.", 430, 185, 3, 1)
+    set_d = p.obj("prepend delays", 540, 185, 2, 1)
+    p.connect(d_from, 0, d_pack, 0)
+    p.connect(d_to, 0, d_pack, 1)
+    p.connect(d_step, 0, d_pack, 2)
+    p.connect(d_pack, 0, set_d, 0)
+    p.connect(set_d, 0, engine, 0)
+
+    p.comment("profile:", 20, 220)
+    profile = p.ui("umenu", 90, 220, 140, 22, 1, 3, ["int", "", ""],
+                   items=["canon", ",", "florid", ",", "fux-strict", ",", "spectral", ",", "free"])
+    set_profile = p.obj("prepend profile", 250, 220, 2, 1)
+    p.connect(profile, 1, set_profile, 0)
+    p.connect(set_profile, 0, engine, 0)
+    p.comment("perpetual:", 400, 220)
+    perpetual = p.ui("toggle", 480, 220, 22, 22, 1, 1, ["int"])
+    set_perpetual = p.obj("prepend perpetual", 515, 220, 2, 1)
+    p.connect(perpetual, 0, set_perpetual, 0)
+    p.connect(set_perpetual, 0, engine, 0)
+
+    p.comment("time slice (ms):", 20, 255)
+    slice_ms = p.ui("number", 140, 255, 50, 22, 1, 2, ["", "bang"], minimum=1)
+    set_slice = p.obj("prepend slicems", 200, 255, 2, 1)
+    p.connect(slice_ms, 0, set_slice, 0)
+    p.connect(set_slice, 0, engine, 0)
+    run = p.msg("run", 330, 255)
+    stop = p.msg("stop", 370, 255)
+    info = p.msg("info", 420, 255)
+    for m in (run, stop, info):
+        p.connect(m, 0, engine, 0)
+
+    p.comment("results (click one to hear it):", 20, 295)
+    results = p.ui("umenu", 20, 320, 600, 22, 1, 3, ["int", "", ""])
+    pick = p.obj("prepend pick", 640, 320, 2, 1)
+    p.connect(results, 0, pick, 0)
+    p.connect(pick, 0, engine, 0)
+    p.comment("progress:", 20, 360)
+    progress = p.msg("", 90, 360, w=530)
+    route = p.obj("route results progress", 20, 505, 2, 3)
+    show = p.obj("prepend set", 200, 540, 2, 1)
+    report = p.obj("print finder", 360, 540, 1, 0)
+    p.connect(engine, 0, route, 0)
+    p.connect(route, 0, results, 0)
+    p.connect(route, 1, show, 0)
+    p.connect(show, 0, progress, 0)
+    p.connect(route, 2, report, 0)
+    return p
+
+
 HAND = {
     "patchers/canon.maxpat": main_patch,
     "patchers/cg.panel.main.maxpat": panel_main,
     "patchers/cg.panel.tuning.maxpat": panel_tuning,
     "patchers/cg.panel.canon.maxpat": panel_canon,
+    "patchers/cg.panel.finder.maxpat": panel_finder,
 }
 
 

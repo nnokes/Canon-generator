@@ -35,6 +35,8 @@
 //   midiquantize <beats>          ... on that grid (0: off)
 //   miditrack <n>                 ... from track n only (-1: all tracks)
 //   loadspec <full path>          as render                             a spec (JSON)
+//   usespec <dict name>           as render                             a spec from a dict (the
+//                                                                        answer finder's pick)
 //   savespec <full path>          status saved ...                      the current spec
 //                                 (not "save": [v8] calls a save() function when the patch is saved)
 //   info                          status ...
@@ -252,6 +254,26 @@ function loadspec(path) {
   });
 }
 
+// A spec from a named dict: the answer finder's pick (cg.audition), played as it
+// is. A loaded .mid stays loaded, so a preset or tuning change still re-maps it.
+function usespec(name) {
+  attempt(() => {
+    const loaded = JSON.parse(new Dict(String(name)).stringify());
+    if (!loaded || (!loaded.dux && !loaded.groups)) throw new Error(`usespec: no canon spec in the dict ${name}`);
+    const previous = { spec, presetIndex, selected };
+    spec = loaded;
+    try {
+      update();
+    } catch (e) {
+      ({ spec, presetIndex, selected } = previous);
+      throw e;
+    }
+    selected = 0;
+    presetIndex = null;
+    announceMelody();
+  });
+}
+
 function savespec(path) {
   attempt(() => {
     files.writeText(String(path), JSON.stringify(spec, null, 2) + "\n");
@@ -362,7 +384,7 @@ function edit(change) {
 }
 edit.local = 1;
 
-// Render, refill the player's queue, write cg.events, update the editor.
+// Render, refill the player's queue, write cg.events and cg.spec, update the editor.
 function update() {
   rendered = engine.render(spec);
   const ms = 60000 / rendered.tempo;
@@ -399,6 +421,7 @@ function update() {
       Math.cos((pan * Math.PI) / 2), Math.sin((pan * Math.PI) / 2), total,
       amp, attack, amp, Math.max(0, total - attack - release), 0, release);
   });
+  new Dict("cg.spec").parse(JSON.stringify(spec)); // for the answer finder
   const dict = new Dict("cg.events");
   dict.parse(JSON.stringify({
     name: rendered.name, tempo: rendered.tempo, voices: rendered.voices,

@@ -172,7 +172,7 @@ test("cg.canon exposes exactly its documented messages", () => {
   assert.deepEqual(loadBundle("cg.canon").handlers(), [
     "delay", "info", "interval", "loadmidi", "loadspec", "midiline", "midimap", "midiquantize", "miditrack",
     "output", "passes", "preset", "presetmelody", "presets", "register", "render", "savespec", "select", "tempo", "timescale",
-    "transform", "tuning", "tunings",
+    "transform", "tuning", "tunings", "usespec",
   ]);
 });
 
@@ -499,4 +499,72 @@ test("cg.mpecheck: the target Hz, and what 'off' says about the readings left", 
   bundle.send("note", 64.5);
   bundle.send("measuredhz", tuning.midiToHz(64.5));
   assert.deepEqual(select(bundle.send("note", 60), "status")[0].slice(0, 3), ["cents", "n", 1]);
+});
+
+// ---------------------------------------------------------------- the answer finder (M3 part E)
+
+test("cg.finder exposes exactly its documented messages", () => {
+  assert.deepEqual(loadBundle("cg.finder").handlers(), [
+    "budget", "delays", "info", "intervals", "perpetual", "pick", "profile", "run", "slicems", "stop",
+    "timescales", "transforms", "voices",
+  ]);
+});
+
+test("cg.canon writes its spec to the dict cg.spec on every render, for the finder", () => {
+  const bundle = loadBundle("cg.canon");
+  bundle.send("preset", 0);
+  const written = JSON.parse(new SimDict("cg.spec").stringify());
+  assert.deepEqual(written.dux, library.preset(0).dux);
+  bundle.send("tempo", 77);
+  assert.equal(JSON.parse(new SimDict("cg.spec").stringify()).tempo, 77);
+});
+
+test("cg.finder: searches the canon panel's melody in time slices, lists results, and a pick plays in the canon", () => {
+  const canonBundle = loadBundle("cg.canon");
+  canonBundle.send("preset", 0); // the round: Frere Jacques
+  const bundle = loadBundle("cg.finder");
+  bundle.send("intervals", -7, 7);
+  bundle.send("delays", 4, 8, 4);
+  bundle.send("slicems", 1);
+  const started = bundle.send("run");
+  assert.deepEqual(errors(started), []);
+  assert.deepEqual(select(started, "results"), [["clear"]]);
+  const { out, ticks } = bundle.tick();
+  assert.ok(ticks > 1, `a 1 ms slice yields to Max between steps (${ticks} ticks)`);
+  const listed = select(out, "results").filter((r) => r[0] === "append");
+  assert.equal(listed.length, 30, "every setting (15 intervals x 2 delays), ranked");
+  assert.match(listed[0][1], /^1\. /);
+  const done = select(out, "done")[0];
+  assert.equal(done[0], listed.length);
+  const status = select(out, "status").at(-1);
+  assert.ok(!status.includes(",") && !status.includes(";"), "no bare separator atoms");
+  assert.match(status.join(" "), /clean of 30 tried/);
+  // The round's own answer, the unison after two bars, is clean.
+  assert.ok(listed.some((r) => /unison, after 8 \(clean/.test(r[1])), listed.map((r) => r[1]).join("\n"));
+  // Pick one: the spec goes to cg.audition, and the canon plays it.
+  const picked = bundle.send("pick", 0);
+  assert.deepEqual(select(picked, "audition"), [["cg.audition"]]);
+  const spec = JSON.parse(new SimDict("cg.audition").stringify());
+  assert.equal(spec.voices.length, 2);
+  const played = canonBundle.send("usespec", "cg.audition");
+  assert.deepEqual(errors(played), []);
+  assert.equal(rows(played).length, canonEngine.render(spec).events.length);
+  assert.deepEqual(select(played, "melody"), [["spec", spec.name]]);
+});
+
+test("cg.finder: stop, bad values, and no melody are reported, not thrown", () => {
+  const bundle = loadBundle("cg.finder");
+  assert.match(errors(bundle.send("voices", 9))[0], /voices must be a whole number from 2 to 6/);
+  assert.match(errors(bundle.send("transforms", "X"))[0], /transforms: one of P I R RI/);
+  assert.match(errors(bundle.send("profile", "baroque"))[0], /unknown rule profile baroque/);
+  assert.match(errors(bundle.send("delays", 4, 2))[0], /delays: to must be at least from/);
+  assert.match(errors(bundle.send("pick", 3))[0], /no result 3: run the finder first/);
+  new SimDict("cg.spec").clear();
+  assert.match(errors(bundle.send("run"))[0], /no melody yet: open the canon panel/);
+  loadBundle("cg.canon").send("preset", 0);
+  bundle.send("run");
+  assert.deepEqual(select(bundle.send("stop"), "status"), [["stopped"]]);
+  assert.equal(bundle.tick().ticks, 0, "nothing left running");
+  const info = select(bundle.send("info"), "status")[0].join(" ");
+  assert.match(info, /^finder: 2 voices, intervals -9 to 9 steps/);
 });

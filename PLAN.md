@@ -516,6 +516,10 @@ lower 10th), and how his canon for Haydn has two solutions.
   - a canon-spec editor: a voice table with delay, interval, transform, time scale and output
   - buttons: render, generate, analyze
   - a piano roll in `[v8ui]` with voice colors, violation markers and the dissonance curve
+- As built (M2–M3), the main patch is split into panels, one per job:
+  `cg.panel.tuning`, `cg.panel.canon`, and `cg.panel.finder` (the answer finder, M3). The
+  finder reads the canon panel's spec from the dict `cg.spec`, and plays a picked result
+  through the canon panel (`[s cg.canon.in]`, `usespec`).
 - `cg.engine` (generated) hosts the `[v8]` wrappers and named dicts:
   - `cg.spec`: the canon spec
   - `cg.events`: the rendered events

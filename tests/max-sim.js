@@ -12,7 +12,7 @@ const ROOT = path.resolve(__dirname, "..");
 
 // Max calls a script's global functions by message name, except functions
 // marked with .local = 1.
-const MAX_GLOBALS = new Set(["outlet", "post", "error", "Dict", "File", "console"]);
+const MAX_GLOBALS = new Set(["outlet", "post", "error", "Dict", "File", "Task", "console"]);
 
 // Stand-in for Max's File: isopen, position, eof (the length; setting it
 // truncates), readline(maxchars) without the line ending, readbytes(count),
@@ -92,16 +92,48 @@ class SimDict {
   }
 }
 
+// Stand-in for Max's Task: a function Max's scheduler calls every `interval` ms
+// after repeat(), until cancel(). Here the test drives it: tick() runs one call
+// of every running task (see loadBundle's tick).
+class SimTask {
+  constructor(fn, object, ...args) {
+    this.fn = fn;
+    this.object = object;
+    this.args = args;
+    this.interval = 0;
+    this.running = false;
+    this.calls = 0;
+  }
+  repeat() {
+    this.running = true;
+  }
+  execute() {
+    this.calls++;
+    this.fn.apply(this.object, this.args);
+  }
+  cancel() {
+    this.running = false;
+  }
+}
+
 function loadBundle(name) {
   const file = path.join(ROOT, "patchers", name + ".bundle.js");
   const sent = [];
   const posted = []; // what the script printed in the Max window
+  const tasks = [];
+  class BundleTask extends SimTask {
+    constructor(...args) {
+      super(...args);
+      tasks.push(this);
+    }
+  }
   const context = {
     outlet: (index, ...atoms) => sent.push([index, ...atoms.flat()]),
     post: (...atoms) => posted.push(atoms.join(" ")),
     error: () => {},
     Dict: SimDict,
     File: SimFile,
+    Task: BundleTask,
     console,
   };
   vm.createContext(context);
@@ -118,6 +150,17 @@ function loadBundle(name) {
       sent.length = 0;
       context[message](...args);
       return sent.slice();
+    },
+    // Runs the script's Tasks as Max's scheduler would, up to `limit` ticks or
+    // until none is running; returns what came out of the outlets meanwhile.
+    tick(limit = 10000) {
+      sent.length = 0;
+      let ticks = 0;
+      while (ticks < limit && tasks.some((t) => t.running)) {
+        for (const t of tasks) if (t.running) t.execute();
+        ticks++;
+      }
+      return { out: sent.slice(), ticks };
     },
     // The global functions Max would accept as messages.
     handlers() {
