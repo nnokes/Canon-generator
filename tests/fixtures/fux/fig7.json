@@ -1,0 +1,24 @@
+{
+  "source": "Fux, The Study of Counterpoint (trans. Mann, 1965), p. 32, Fig. 7: why direct motion into a perfect consonance is forbidden",
+  "transcription": "Sounding pitches as MIDI numbers, durations in beats. Left: a third to a fifth in direct motion (figures 3 5). Right, 'Resolution': the lower voice's leap filled in (diminution), which shows the fifths: F-B flat, then E-A (figures 5 5).",
+  "system": { "type": "edo", "divisions": 12, "mode": [0, 2, 4, 5, 7, 9, 11] },
+  "meter": { "beats": 8 },
+  "examples": [
+    {
+      "name": "direct",
+      "voices": [
+        { "name": "upper", "notes": [[65, 4], [64, 4]] },
+        { "name": "lower", "notes": [[62, 4], [57, 4]] }
+      ],
+      "expect": [{ "rule": "hidden-perfect", "t": 4 }]
+    },
+    {
+      "name": "resolution",
+      "voices": [
+        { "name": "upper", "notes": [[65, 4], [64, 4]] },
+        { "name": "lower", "notes": [[62, 2], [60, 1], [58, 1], [57, 4]] }
+      ],
+      "expect": [{ "rule": "parallel-perfect", "t": 4 }]
+    }
+  ]
+}

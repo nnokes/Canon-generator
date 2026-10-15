@@ -286,8 +286,9 @@ Wrappers are named `code/cg.<name>.v8.js` and bundle to `patchers/cg.<name>.bund
 | `cg.canon` | Turns a spec into events; loops and spirals; endings; convergence-point solver (M6); incremental `start`/`step`/`finish` API | M2 / M6 |
 | `cg.presets` | Canon specs as code, built into the bundle (§2.2) | M2 |
 | `cg.consonance` | Pluggable consonance models (below) | M3 |
-| `cg.rules` | Rule profiles: hard and soft rules with weights | M3 |
-| `cg.analyze` | Vertical slices across N voices, using the sounding bass in real registers; motion classification; violations; dissonance curve; Tymoczko metrics; answer finder for one follower and N-voice sets (§3.6) | M3 |
+| `cg.rules` | Rule profiles: hard and soft rules with weights (`fux-strict`, `florid`, `canon`, `spectral`, `free`; `docs/controls.md`) | M3 |
+| `cg.analyze` | Vertical slices across N voices, using the sounding bass in real registers; motion classification; violations; dissonance curve; Tymoczko metrics | M3 |
+| `cg.finder` | The answer finder for one follower and N-voice sets (§3.6), on `cg.analyze` | M3 |
 | `cg.generate` | Searches for a dux (§3.5), including the minimal-edit repair behind the answer finder's edits toggle (§3.6) | M4 |
 | `cg.io` | Spec JSON, MIDI file import (M2) and export, MusicXML with microtonal accidentals | M2 / M10 |
 
@@ -341,6 +342,11 @@ cost). Every rule is listed in `docs/controls.md` with its source.
 - **`micropoly`** (Ligeti mode): no simultaneous attacks across voices, which Levy describes
   for *Lux aeterna*. The pitch band unfolds step by step. A maximum band width applies.
 - **`free`**: no rules. The analyzer still reports.
+- **`florid`** (added in M3): the dissonance treatment of species 2–4 (passing and
+  neighbour notes off the strong beats, prepared suspensions resolving down by step),
+  brought forward from M5. The answer finder judges Albrechtsberger's florid canons with
+  it; `canon` layers on top of it. Its melodic rules are soft, because a follower inherits
+  the dux's melody.
 
 ### 3.4 Rendering and the incremental API
 `cg.canon.render(spec)` → `{ voices: [{ events: [...] }], meta }`. Internally, rendering is a

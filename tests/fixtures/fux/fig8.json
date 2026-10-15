@@ -1,0 +1,40 @@
+{
+  "source": "Fux, The Study of Counterpoint (trans. Mann, 1965), p. 33, Fig. 8: an octave into a fifth in direct motion, descending and ascending",
+  "transcription": "Sounding pitches as MIDI numbers, durations in beats. Each pair: whole notes (figures 8 5), then the leap filled in with quarter notes, which shows two fifths in a row (figures 5 5).",
+  "system": { "type": "edo", "divisions": 12, "mode": [0, 2, 4, 5, 7, 9, 11] },
+  "meter": { "beats": 8 },
+  "examples": [
+    {
+      "name": "descending, direct",
+      "voices": [
+        { "name": "upper", "notes": [[74, 4], [67, 4]] },
+        { "name": "lower", "notes": [[62, 4], [60, 4]] }
+      ],
+      "expect": [{ "rule": "hidden-perfect", "t": 4 }]
+    },
+    {
+      "name": "descending, filled in",
+      "voices": [
+        { "name": "upper", "notes": [[74, 1], [72, 1], [71, 1], [69, 1], [67, 4]] },
+        { "name": "lower", "notes": [[62, 4], [60, 4]] }
+      ],
+      "expect": [{ "rule": "parallel-perfect", "t": 4 }]
+    },
+    {
+      "name": "ascending, direct",
+      "voices": [
+        { "name": "upper", "notes": [[72, 4], [74, 4]] },
+        { "name": "lower", "notes": [[60, 4], [67, 4]] }
+      ],
+      "expect": [{ "rule": "hidden-perfect", "t": 4 }]
+    },
+    {
+      "name": "ascending, filled in",
+      "voices": [
+        { "name": "upper", "notes": [[72, 4], [74, 4]] },
+        { "name": "lower", "notes": [[60, 1], [62, 1], [64, 1], [65, 1], [67, 4]] }
+      ],
+      "expect": [{ "rule": "parallel-perfect", "t": 4 }]
+    }
+  ]
+}

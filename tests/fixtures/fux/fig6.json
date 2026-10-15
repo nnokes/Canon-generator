@@ -1,0 +1,16 @@
+{
+  "source": "Fux, The Study of Counterpoint (trans. Mann, 1965), pp. 31-32, Fig. 6: first species, counterpoint below, as Joseph wrote it, with the two mistakes Aloys marks",
+  "transcription": "Sounding pitches as MIDI numbers (the counterpoint's treble-8 clef sounds an octave down), durations in beats. Fux's figures: 5 3 5 6 10 10 10 5 3 3 1. Bar 1 starts on G (out of the mode); bar 2 to 3 goes from a third to a fifth in direct motion (a hidden fifth). Fux's corrections: D an octave below at bar 1, and the low D held into bar 2 (a tenth), so bar 3 is reached by contrary motion.",
+  "system": { "type": "edo", "divisions": 12, "mode": [0, 2, 4, 5, 7, 9, 11] },
+  "meter": { "beats": 4 },
+  "voices": [
+    { "name": "cantus firmus", "notes": [[62, 4], [65, 4], [64, 4], [62, 4], [67, 4], [65, 4], [69, 4], [67, 4], [65, 4], [64, 4], [62, 4]] },
+    { "name": "counterpoint", "notes": [[55, 4], [62, 4], [57, 4], [53, 4], [52, 4], [50, 4], [53, 4], [60, 4], [62, 4], [61, 4], [62, 4]] }
+  ],
+  "corrected": { "voice": 1, "notes": [[50, 4], [50, 4], [57, 4], [53, 4], [52, 4], [50, 4], [53, 4], [60, 4], [62, 4], [61, 4], [62, 4]] },
+  "expect": {
+    "profile": "fux-strict",
+    "hard": [{ "rule": "mode-final", "bar": 1 }, { "rule": "hidden-perfect", "bar": 3, "fromBar": 2 }],
+    "correctedHard": []
+  }
+}

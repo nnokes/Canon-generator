@@ -82,21 +82,61 @@ canons hidden in it, for two voices or for N.
   minima at 6/5, 5/4, 4/3, 3/2, 5/3 and 2/1, within 2 cents, at 220, 261.63 and 500 Hz.
   The septimal 7/6, 7/5 and 7/4 are minima too, as expected with a 7th partial.
 
-## Part B. The analyzer core: `cg-analyze` (engine)
-- [ ] `meter` in the spec: a strong beat is a bar start
-- [ ] Slices at every onset:
-  - the sounding bass is the lowest pitch, in real registers (Mann p. 228)
-  - each slice has its intervals above the bass and between every pair
-- [ ] Motion per voice pair: parallel, similar, contrary or oblique
-- [ ] The Tymoczko metrics (PLAN §3.6)
-- [ ] The report: slices, violations (rule, bar, beat, voices, hard or soft), metrics and
-  score
+## Part B. The analyzer core: `cg-analyze` (engine): done
+- [x] **`meter`** in the spec, `{ beats, strong }`, default `{ beats: 4, strong: [0] }`.
+  `render` passes it through. Every slice knows its bar (from 1), its beat (from 0), and
+  whether that beat is strong.
+- [x] **Slices** at every onset, built in one sweep:
+  - held notes sound on into later slices
+  - the **sounding bass** is the lowest pitch, in real registers. A canon voice written as
+    the bass but sung above puts its fourth over the real bass, and that's a 6/4 (Mann
+    p. 228).
+  - each slice has its intervals above the bass and between every pair, classed by the
+    model, with `withBass` marking the pairs that include the bass
+- [x] **Motion** per voice pair, between consecutive slices: parallel, similar, contrary,
+  oblique, or none. Crossings are marked.
+- [x] **The Tymoczko metrics** (PLAN §3.6):
+  - conjunct motion, in scale steps and in cents
+  - the dissonance curve (the model's score above the bass, per slice)
+  - harmonic consistency: chord types under octave, order and transposition, compared
+    only between slices of the same size
+  - macroharmony: size per window, circulation rate, consistency
+  - centricity (ours): duration-weighted, with the bass and phrase ends counted double
+  - evenness (ours): cents from each slice to the nearest even chord
+  - voice-leading size under `vlNorm` (taxicab, euclidean, chebyshev)
+  - entries and exits counted apart
+  - boundary events: unisons and crossings
+- [x] **The report:** `{ model, profile, meter, slices, motion, metrics, violations, hard,
+  cost }`
 
-## Part C. Rule profiles and the Fux golden tests: `cg-rules`
-- [ ] `fux-strict` (first species), `florid` (dissonance treatment for florid canons),
-  `canon`, `spectral`, `free`
-- [ ] `docs/controls.md`: every rule, with its source
-- [ ] Fixtures `tests/fixtures/fux/`: Figs. 5–8
+## Part C. Rule profiles and the Fux golden tests: `cg-rules`: done
+- [x] **Profiles:** `fux-strict` (first species), `florid`, `canon` (florid plus
+  Albrechtsberger's rules), `spectral`, `free`. Your own profile can name a base, override
+  rules, remove them, or keep `only` some.
+- [x] **`florid` is new** (not in the plan): passing and neighbour notes off the strong
+  beats, prepared suspensions resolving down by step, and a 6/4 against the sounding bass
+  reported as `six-four`.
+  - The answer finder has to judge Albrechtsberger's canons, which are florid. Fux's
+    other species arrive in M5; this brings their dissonance treatment forward.
+  - Melodic faults are soft in `florid`: a follower inherits the dux's melody.
+- [x] **Carrying the rules to other tunings (ours):**
+  - augmented/diminished = a k-step size that occurs once in the mode's k-step spectrum.
+    In the diatonic scale it flags exactly the tritone (F–B up, B–F down).
+  - leap limits are in cents
+- [x] **`docs/controls.md`:** every rule, with its source and the profiles that use it.
+- [x] **Fux golden tests** (`tests/fixtures/fux/`, each fixture citing its page and
+  figure):
+  - **Fig. 5:** no hard violations. The only soft costs are the two interior fifths (bars 4
+    and 6).
+  - **Fig. 6:** exactly two hard violations, as Fux marks them:
+    - `mode-final` at bar 1 (G, a fifth from the final D)
+    - `hidden-perfect` from bar 2 to bar 3 (a third to a fifth, similar motion)
+
+    With Aloys's corrections (D an octave below, held into a tenth) it's clean.
+  - **Figs. 7–8:**
+    - each whole-note version: `hidden-perfect` (3→5, then 8→5 descending and ascending)
+    - each filled-in version: `parallel-perfect` at the same place, the fifths that the
+      filling reveals
 
 ## Part D. The answer finder: `cg-finder` (engine)
 - [ ] A generator over the ranges, with a node budget and progress
@@ -119,4 +159,5 @@ canons hidden in it, for two voices or for N.
 
 | Check | Result | Decision |
 |---|---|---|
+| Fux golden tests (Part C) | **PASS** (Node, `tests/analyze.test.js`): Fig. 5 clean; Fig. 6 exactly the mode error at bar 1 and the hidden fifth from bar 2 to 3, clean once corrected; Figs. 7–8 hidden fifths in direct motion, parallel fifths once filled in | Rules as `docs/controls.md` lists them |
 | roughness curve (Part A) | **PASS** (Node, `tests/consonance.test.js`): minima at 6/5, 5/4, 4/3, 3/2, 5/3, 2/1 within 2 cents (plus 7/6, 7/5, 7/4), fifth and octave smoother than the third, seconds roughest | Sethares's shape for a harmonic timbre |

@@ -1,0 +1,11 @@
+{
+  "source": "Fux, The Study of Counterpoint (trans. Mann, 1965), p. 29, Fig. 5: first species, counterpoint above the cantus firmus",
+  "transcription": "Sounding pitches as MIDI numbers, durations in beats (a whole note is 4). The cantus firmus is Fux's Dorian cantus (Fig. 4). Fux's interval figures under the counterpoint: 5 3 3 5 3 5 3 3 6 6 8.",
+  "system": { "type": "edo", "divisions": 12, "mode": [0, 2, 4, 5, 7, 9, 11] },
+  "meter": { "beats": 4 },
+  "voices": [
+    { "name": "cantus firmus", "notes": [[62, 4], [65, 4], [64, 4], [62, 4], [67, 4], [65, 4], [69, 4], [67, 4], [65, 4], [64, 4], [62, 4]] },
+    { "name": "counterpoint", "notes": [[69, 4], [69, 4], [67, 4], [69, 4], [71, 4], [72, 4], [72, 4], [71, 4], [74, 4], [73, 4], [74, 4]] }
+  ],
+  "expect": { "profile": "fux-strict", "hard": [] }
+}

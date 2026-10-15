@@ -873,6 +873,7 @@ exports.create = create;
 //
 // A spec:
 //   name, tempo (beats per minute, for the player)
+//   meter    { beats, strong }: a bar's length and its strong beats (the analyzer's)
 //   system   the scale system (cg-scales fromSpec); 12-EDO on C4 if left out
 //   dux      { source: "list", notes: [...] } or { source: "walk", ... }
 //   voices   [{ ... }], one per voice; the first is usually the dux itself
@@ -1023,7 +1024,7 @@ function compile(spec) {
       voices: [compileVoice(voice, fs, ending, 0, index++, label)],
     });
   });
-  return { name: spec.name || "canon", tempo: spec.tempo || 60, ending, groups };
+  return { name: spec.name || "canon", tempo: spec.tempo || 60, meter: spec.meter, ending, groups };
 }
 
 // ---------------------------------------------------------------- the dux
@@ -1225,6 +1226,7 @@ function assemble(plan, events) {
   return {
     name: plan.name,
     tempo: plan.tempo,
+    meter: plan.meter,
     voices: plan.groups.flatMap((g) => g.voices.map((cv) => ({
       name: cv.name, group: g.name, kind: g.kind, out: cv.out, system: cv.system.name,
     }))),
