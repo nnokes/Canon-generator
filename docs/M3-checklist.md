@@ -43,19 +43,44 @@ canons hidden in it, for two voices or for N.
     isn't in the excerpt. So the end of the Haydn melody is read from Ex. 239's second
     line, and that fixture is marked for you to check against the book (session 1).
 
-## Part A. Consonance models: `cg-consonance` (engine)
-- [ ] One interface. `fromSpec(spec.consonance, system)` returns a model, and
-  `model.classify(cents)` returns `{ cls, fourth, score }`:
+## Part A. Consonance models: `cg-consonance` (engine): done
+- [x] **One interface:**
+  - `fromSpec(spec.consonance, system)` returns a model, and `model.classify(cents,
+    { lowHz })` returns `{ cls, fourth, score, ratio }`
   - `cls` is perfect, imperfect or dissonant
-  - intervals are folded to the system's period first
-  - the default model is `fux12` for 12-EDO and `ratio` otherwise
-- [ ] `fux12`: Fux's table. The fourth is flagged on its own: it's dissonant against the
-  bass and consonant between upper voices.
-- [ ] `ratio`: the nearest simple ratio, scored by Tenney height log₂(n·d), with
-  thresholds per system
-- [ ] `roughness`: Sethares (after Plomp and Levelt), using the voice bank's own partials
-- [ ] `table`: your own table per scale system
-- [ ] Golden: Sethares's minima for a harmonic timbre (1/1, 6/5, 5/4, 4/3, 3/2, 5/3, 2/1)
+  - intervals are folded to the system's period first, except by `roughness`, which hears
+    the actual interval in its register
+  - the default model is `fux12` for 12-EDO, and `ratio` for everything else
+- [x] **The fourth** is flagged on its own (`fourth: true`, `cls` dissonant). It's
+  dissonant against the bass (Fux p. 21) and consonant between upper voices; the rules
+  decide which applies.
+- [x] **`fux12`:** Fux's table, snapped to the nearest semitone within 15 cents. Off-grid
+  intervals are dissonant.
+- [x] **`ratio`:**
+  - the **simplest** ratio within 20 cents, not the nearest: with numbers up to 16,
+    something complex is always near
+  - scored by Tenney height log₂(n·d): perfect ≤ 2.6 (1/1, 2/1, 3/2), imperfect ≤ 5.4
+  - the prime limit is 5, or a JI system's own largest prime. Systems that don't repeat at
+    the octave start at 7, because Bohlen–Pierce is built on 3:5:7.
+  - it agrees with Fux's table on every 12-EDO class up to two octaves, including the
+    tritone (no simple 5-limit ratio) and the minor seventh (9/5 sits just over the
+    threshold)
+  - in 31-EDO: thirds (5/4, 6/5) and sixths (5/3, 8/5) are imperfect, and the neutral
+    third is dissonant
+- [x] **`roughness`:**
+  - Sethares's `dissmeasure` (2005): D* 0.24, S1 0.0207, S2 18.96, A1 −3.51, A2 −5.75,
+    summed over every pair of partials of both tones
+  - the timbre is the voice bank's own partials, `DEFAULT_PARTIALS` = 0.48 0.24 0.16
+    0.12; a test checks the generated `cg.voice~` plays the same weights
+  - classes are thresholds (0.12, 0.45) on roughness, normalized over one period at the
+    bass's frequency, so a low third really is rougher
+  - it measures sensation, not Fux's classes. With 4 partials at middle C, the minor third
+    reads rough. It's for the `spectral` profile.
+- [x] **`table`:** your own entries `{ cents, cls }`; the nearest within the tolerance
+  wins.
+- [x] **Golden (Sethares):** a 7-partial harmonic timbre (amplitudes 0.88ᵏ) has local
+  minima at 6/5, 5/4, 4/3, 3/2, 5/3 and 2/1, within 2 cents, at 220, 261.63 and 500 Hz.
+  The septimal 7/6, 7/5 and 7/4 are minima too, as expected with a 7th partial.
 
 ## Part B. The analyzer core: `cg-analyze` (engine)
 - [ ] `meter` in the spec: a strong beat is a bar start
@@ -94,3 +119,4 @@ canons hidden in it, for two voices or for N.
 
 | Check | Result | Decision |
 |---|---|---|
+| roughness curve (Part A) | **PASS** (Node, `tests/consonance.test.js`): minima at 6/5, 5/4, 4/3, 3/2, 5/3, 2/1 within 2 cents (plus 7/6, 7/5, 7/4), fifth and octave smoother than the third, seconds roughest | Sethares's shape for a harmonic timbre |
