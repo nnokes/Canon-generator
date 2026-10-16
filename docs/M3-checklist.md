@@ -248,6 +248,22 @@ edited is regenerated: the new finder panel is new, and your canon panel is unto
    - The partial summary at `off` (5 readings): median −2.36.
    - Drift applies ±2 per note, and the quarter tone sounds within a cent. The reference
      sine and the spiral are optional now.
+   **First round of steps 2-3 (2026-10-16), with your Live clip:**
+   - **The finder runs in Max**, and `Task` works in `[v8]`:
+     - 2 voices: `2 clean of 152 tried in 93 ms, 4 slices of 20 ms` (21 ms per slice)
+     - 3 voices: `0 clean of 3 sets tried in 61 ms`
+   - **Bug, fixed:** between runs the finder said `no melody yet: open the canon panel`
+     although the panel was open, until you reloaded the `.mid`.
+     - The cause: Max frees a named dict when its last reference goes, and every wrapper
+       wrote or read its dicts through temporary `Dict` objects, which V8 collects
+       whenever it likes. `cg.spec` vanished between runs; reloading re-rendered and
+       wrote it again.
+     - The fix: every wrapper holds its dicts for its whole life (`cg.spec`, `cg.events`,
+       `cg.audition`). A test fails if a wrapper ever creates a temporary dict again.
+   - **Clearer for 3+ voices:** a second status line says how many followers passed against
+     the dux alone and how many pairs of them work together. `0 clean of 0 sets` meant no
+     two passing followers worked together, but it didn't say so.
+
 2. **The finder, 2 voices:**
    - open `patchers/cg.panel.canon.maxpat` **and** `patchers/cg.panel.finder.maxpat`
    - in the canon panel, load your `.mid` (or keep the round)

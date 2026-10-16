@@ -217,6 +217,8 @@ function* search(input) {
   return {
     voices: options.voices, results: sets.slice(0, options.keep), followers: singles.slice(0, options.keep),
     tried: sets.length, used, complete: budgetLeft(),
+    followersTried: singles.length, passingFollowers: passing.length,
+    pairsOk: [...ok.values()].filter(Boolean).length,
   };
 }
 

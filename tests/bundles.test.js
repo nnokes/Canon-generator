@@ -568,3 +568,32 @@ test("cg.finder: stop, bad values, and no melody are reported, not thrown", () =
   const info = select(bundle.send("info"), "status")[0].join(" ");
   assert.match(info, /^finder: 2 voices, intervals -9 to 9 steps/);
 });
+
+// Max frees a named dict when its last reference goes, and V8 collects a
+// temporary Dict whenever it likes, so a dict written through `new Dict(name)`
+// inside a function can vanish before anyone reads it (M3 session 1: the finder
+// lost cg.spec until the .mid was reloaded). Every wrapper holds its dicts for
+// its whole life: top-level constants, or kept in a map.
+test("every [v8] wrapper holds its named dicts for its whole life", () => {
+  const code = path.join(__dirname, "..", "code");
+  for (const file of fs.readdirSync(code).filter((f) => /\.v8(ui)?\.js$/.test(f))) {
+    const lines = fs.readFileSync(path.join(code, file), "utf8").split("\n");
+    lines.forEach((line, i) => {
+      if (!line.includes("new Dict(") || line.trim().startsWith("//")) return;
+      const held = /^const \w+ = new Dict\("[^"]+"\);/.test(line) || /held\.set\(/.test(line);
+      assert.ok(held, `${file}:${i + 1}: a temporary Dict can be freed: ${line.trim()}`);
+    });
+  }
+});
+
+test("cg.finder: with 3+ voices it says how many followers and pairs got through", () => {
+  loadBundle("cg.canon").send("preset", 0);
+  const bundle = loadBundle("cg.finder");
+  bundle.send("voices", 3);
+  bundle.send("intervals", -7, 0);
+  bundle.send("delays", 4, 8, 4);
+  bundle.send("run");
+  const lines = select(bundle.tick().out, "status").map((s) => s.join(" "));
+  assert.match(lines[0], /^finder: \d+ clean of \d+ sets tried in/);
+  assert.match(lines[1], /^finder: \d+ of 16 followers pass against the dux alone, \d+ pairs of them work together$/);
+});

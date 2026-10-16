@@ -125,6 +125,9 @@ docs/             RESEARCH.md, Mx-checklist.md, controls.md
   short time slices from a `Task` and emits `progress` as it goes.
 - Randomness always comes from a **seeded RNG** (mulberry32, as in cento), so the same seed
   gives the same canon.
+- **Named dicts are held for the script's whole life** (top-level constants). Max frees a
+  named dict when its last reference goes, and V8 collects a temporary `Dict` whenever it
+  likes; M3 session 1 lost `cg.spec` that way. A test enforces it.
 
 ### 2.5 Files to port from cento (same author, MIT)
 - `tools/build.js` (the bundler, renamed to the `cg.` prefix)

@@ -2692,6 +2692,8 @@ function* search(input) {
   return {
     voices: options.voices, results: sets.slice(0, options.keep), followers: singles.slice(0, options.keep),
     tried: sets.length, used, complete: budgetLeft(),
+    followersTried: singles.length, passingFollowers: passing.length,
+    pairsOk: [...ok.values()].filter(Boolean).length,
   };
 }
 
@@ -2786,6 +2788,12 @@ let results = [];
 let lastOptions = null;
 const task = new Task(tick);
 task.interval = 1;
+// Named dicts live only while something holds them: Max frees one when its last
+// reference goes, and V8 collects a temporary Dict whenever it likes (M3 session
+// 1: cg.spec vanished between finder runs until the .mid was reloaded). So every
+// dict is held for the script's whole life.
+const specDict = new Dict("cg.spec"); // written by the canon wrapper
+const auditionDict = new Dict("cg.audition"); // a picked result, read by the canon wrapper
 
 function attempt(action) {
   try {
@@ -2804,7 +2812,7 @@ number.local = 1;
 
 // The melody and its world, from the canon wrapper's dict.
 function current() {
-  const text = new Dict("cg.spec").stringify();
+  const text = specDict.stringify();
   const spec = text ? JSON.parse(text) : null;
   if (!spec || (!spec.dux && !spec.groups)) throw new Error("no melody yet: open the canon panel (it writes cg.spec)");
   const group = spec.groups ? spec.groups[0] : spec;
@@ -2867,8 +2875,14 @@ function finish(value) {
   const passing = results.filter((r) => r.hard === 0).length;
   outlet(0, "done", results.length, ms, search.slices, round(search.busy / Math.max(1, search.slices)));
   // No bare "," or ";" atoms: Max would read them as message separators.
-  outlet(0, "status", "finder:", passing, "clean of", value.tried, "tried" + (value.complete ? "" : " (stopped at the budget)"),
+  const what = value.voices > 2 ? "sets tried" : "tried";
+  outlet(0, "status", "finder:", passing, "clean of", value.tried, what + (value.complete ? "" : " (stopped at the budget)"),
     "in", ms, "ms,", search.slices, "slices of", slice, "ms");
+  if (value.voices > 2) {
+    // Sets are built only from followers that pass against the dux alone.
+    outlet(0, "status", "finder:", value.passingFollowers, "of", value.followersTried,
+      "followers pass against the dux alone,", value.pairsOk, "pairs of them work together");
+  }
   search = null;
 }
 finish.local = 1;
@@ -2946,7 +2960,7 @@ function pick(index) {
     const r = results[index];
     if (!r || !lastOptions) throw new Error(`no result ${index}: run the finder first`);
     const spec = finder.specFor(lastOptions, r);
-    new Dict("cg.audition").parse(JSON.stringify(spec));
+    auditionDict.parse(JSON.stringify(spec));
     outlet(0, "audition", "cg.audition");
     outlet(0, "status", "audition:", r.label);
   });

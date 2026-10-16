@@ -2090,6 +2090,19 @@ const LINES = ["top", "bottom", "track"];
 const MAPS = ["exact", "nearest", "degree"];
 const OUTPUTS = ["hz", "drift", "midi"];
 const MPE_TO = { drift: 1, midi: 2 }; // the patch's [gate 2] outlets
+
+// Named dicts live only while something holds them: Max frees one when its last
+// reference goes, and V8 collects a temporary Dict whenever it likes (M3 session
+// 1: cg.spec vanished between finder runs until the .mid was reloaded). So every
+// dict is held for the script's whole life.
+const specDict = new Dict("cg.spec"); // the current spec, for the answer finder
+const eventsDict = new Dict("cg.events"); // the rendered events
+const held = new Map(); // dicts read by name (usespec)
+function heldDict(name) {
+  if (!held.has(name)) held.set(name, new Dict(name));
+  return held.get(name);
+}
+heldDict.local = 1;
 const LEVEL = 0.25; // a note's peak gain at velocity 127, before the partial weights
 
 let spec = library.preset(0);
@@ -2288,7 +2301,8 @@ function loadspec(path) {
 // is. A loaded .mid stays loaded, so a preset or tuning change still re-maps it.
 function usespec(name) {
   attempt(() => {
-    const loaded = JSON.parse(new Dict(String(name)).stringify());
+    const text = heldDict(String(name)).stringify();
+    const loaded = text ? JSON.parse(text) : null;
     if (!loaded || (!loaded.dux && !loaded.groups)) throw new Error(`usespec: no canon spec in the dict ${name}`);
     const previous = { spec, presetIndex, selected };
     spec = loaded;
@@ -2451,9 +2465,8 @@ function update() {
       Math.cos((pan * Math.PI) / 2), Math.sin((pan * Math.PI) / 2), total,
       amp, attack, amp, Math.max(0, total - attack - release), 0, release);
   });
-  new Dict("cg.spec").parse(JSON.stringify(spec)); // for the answer finder
-  const dict = new Dict("cg.events");
-  dict.parse(JSON.stringify({
+  specDict.parse(JSON.stringify(spec));
+  eventsDict.parse(JSON.stringify({
     name: rendered.name, tempo: rendered.tempo, voices: rendered.voices,
     events: events.map((e) => [e.t, e.dur, e.pitch, e.vel, e.voice]),
   }));
