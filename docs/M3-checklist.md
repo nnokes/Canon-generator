@@ -26,8 +26,9 @@ canons hidden in it, for two voices or for N.
 
 **Status:**
 - Started 2026-10-15. Parts A–E are built: 136 tests.
-- **Next: Max session 1** (below), then part F (the piano roll).
-- Carried in from M2: the MPE pitch check at Drift's ±2 (session 1, step 1).
+- **Max session 1** (below): step 1, the MPE pitch check carried in from M2, **passed**
+  (median +0.23 cents, implied bend range 1.99).
+- **Next:** session 1's steps 2–5, then part F (the piano roll).
 
 ---
 
@@ -238,6 +239,15 @@ edited is regenerated: the new finder panel is new, and your canon panel is unto
    | median within ±5 cents, range about 2, a unison with the sine | **Pass**: M2's MPE criterion is met |
    | median about +50, range about 0, a beating | Drift ignores per-note bend inside Max; we decide then |
    | anything else | paste it |
+
+   **Result: pass** (2026-10-16).
+   - `bend 2`, then `note 65 bend 6144`.
+   - 9 full summaries: median +0.23 cents in 7, +0.97 and +1.71 in the other two; min
+     −4.2, max +5.8; every reading an octave low (folded).
+   - Implied bend range 1.99 (1.93 to 2.09).
+   - The partial summary at `off` (5 readings): median −2.36.
+   - Drift applies ±2 per note, and the quarter tone sounds within a cent. The reference
+     sine and the spiral are optional now.
 2. **The finder, 2 voices:**
    - open `patchers/cg.panel.canon.maxpat` **and** `patchers/cg.panel.finder.maxpat`
    - in the canon panel, load your `.mid` (or keep the round)
@@ -267,6 +277,7 @@ edited is regenerated: the new finder panel is new, and your canon panel is unto
 
 | Check | Result | Decision |
 |---|---|---|
+| MPE pitch at Drift's ±2 (from M2; session 1, step 1) | **PASS:** median +0.23 cents (7 of 9 summaries; the others +0.97 and +1.71), min −4.2, max +5.8, all an octave low and folded; implied bend range 1.99 (1.93–2.09) | M2's last exit criterion is met. MPE to Drift bends for ±2; MIDI out stays ±48. |
 | answer finder (Part D) | **PASS** (Node, `tests/finder.test.js`): Ex. 201 gives all eight of Albrechtsberger's answers (plus the unison), and only their octave equivalents besides; Ex. 239–240 gives both solutions | Fourths screened as upper voices until the whole set; a 6/4 hard only on strong beats and in the first and last bars (Mann p. 228) |
 | Fux golden tests (Part C) | **PASS** (Node, `tests/analyze.test.js`): Fig. 5 clean; Fig. 6 exactly the mode error at bar 1 and the hidden fifth from bar 2 to 3, clean once corrected; Figs. 7–8 hidden fifths in direct motion, parallel fifths once filled in | Rules as `docs/controls.md` lists them |
 | roughness curve (Part A) | **PASS** (Node, `tests/consonance.test.js`): minima at 6/5, 5/4, 4/3, 3/2, 5/3, 2/1 within 2 cents (plus 7/6, 7/5, 7/4), fifth and octave smoother than the third, seconds roughest | Sethares's shape for a harmonic timbre |

@@ -32,13 +32,13 @@ renders and plays; M3 judges.
   - **Amended in session 3:** the plan said "about 48". Drift turned out to keep its own
     ±2, so MPE to Drift bends for ±2, and MIDI out keeps ±48.
 
-**Status: closed 2026-10-15**, with one measurement carried into M3.
+**Status: closed 2026-10-15; every exit criterion met.**
 - Parts A–F are built: 100 tests.
 - Max sessions 1 and 2 passed. Session 3 passed everything except the pitch check.
 - Its third round measured Drift at last: it applies ±2, not our ±48. So each MPE
   destination now gets its own bend range.
-- **Carried into M3:** the pitch check at ±2 (the fourth round below). You paused it and
-  moved it to M3's first Max session. Every other exit criterion is met (Results).
+- **The pitch check at ±2** (the fourth round below) moved to M3's first Max session,
+  where it **passed** on 2026-10-16: median +0.23 cents, implied bend range 1.99.
 - Next: [`M3-checklist.md`](M3-checklist.md).
 
 **In M2 / later:**
@@ -431,4 +431,4 @@ repeated)
 | `[v8]` reads raw bytes (Part E) | **PASS** (session 2): your Live clip and the generated fixtures loaded through `File.readbytes` | No `[detonate]` fallback needed |
 | `.mid` fixtures import intact | **PASS** (Node, `tests/midi.test.js`): 12-TET, 31-EDO by pitch bend (to 0.025 c), MPE (±48, a glide), polyphonic (top/bottom/track), your Live clip (13 notes, 16 beats), and bytes written by hand | Pair note-ons and offs into intervals before picking the line (Live's order); the skyline for `top` and `bottom` |
 | a `.mid` melody plays as a canon | **PASS** (session 2). Every count in the Max window matched the render: your clip as the round (104 notes, 56 beats), the spiral (182 notes, 114 beats) and the ladder (306 notes, 148 beats); the 31-EDO file at its own 72 bpm (72 notes, 44 beats). Nothing dropped, no errors. **Two follow-ups:** (1) picking a preset brought back its own melody, so you reloaded the `.mid` each time; (2) a tuning change didn't re-map a melody read with `nearest` or `degree`. | **Your melody stays across presets**, and a "preset melody" button brings back the presets' own. A tuning change re-maps a loaded melody. `[print midi_file]` says which melody is in use (from session 3's panel). |
-| MPE pitch (Part F) | **Moved to M3 session 1.** Session 3, second round: a steady tone, but no readings at all. Third round: the speaker gain had made the signal too quiet for `[fzero~]`. Fed Drift's raw output, it read medians of 47–51 cents (all an octave low): **Drift applies ±2, not our ±48.** | **Each destination gets its own bend range:** Drift ±2, MIDI out ±48 (`cg-mpe.RANGES`). The tracker taps Drift's raw output. Re-run at ±2: session 3's fourth round. |
+| MPE pitch (Part F) | **PASS** (measured in M3 session 1, 2026-10-16): `zone` set ±2, and `note 64.5` sent note 65, bend 6144. 9 full summaries of 10 readings: median +0.23 cents in 7 of them, +0.97 and +1.71 in the other two; min −4.2, max +5.8; every reading an octave low, folded away. Implied bend range 1.99 (1.93 to 2.09). The last partial summary (5 readings, at `off`): median −2.36. Before that, session 3, second round: a steady tone, but no readings at all. Third round: the speaker gain had made the signal too quiet for `[fzero~]`. Fed Drift's raw output, it read medians of 47–51 cents (all an octave low): **Drift applies ±2, not our ±48.** | **Each destination gets its own bend range:** Drift ±2, MIDI out ±48 (`cg-mpe.RANGES`). The tracker taps Drift's raw output. At ±2, Drift sounds the quarter tone within a cent: microtones to Drift work. |
