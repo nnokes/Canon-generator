@@ -183,22 +183,70 @@ test("the generator lays out every patch without overlapping boxes", () => {
     const created = fs.readdirSync(path.join(sandbox, "patchers")).filter((f) => f.endsWith(".maxpat")).sort();
     assert.deepEqual(created, [...lists.generated, ...lists.hand].map((f) => path.basename(f)).sort());
     const problems = [];
-    for (const file of created) {
-      const patch = JSON.parse(fs.readFileSync(path.join(sandbox, "patchers", file), "utf8")).patcher;
-      const boxes = patch.boxes.map(({ box }) => box);
+    const overlaps = (file, view, boxes, rect) => {
       boxes.forEach((a, i) => {
         for (const b of boxes.slice(i + 1)) {
-          const [ax, ay, aw, ah] = a.patching_rect;
-          const [bx, by, bw, bh] = b.patching_rect;
+          const [ax, ay, aw, ah] = rect(a);
+          const [bx, by, bw, bh] = rect(b);
           if (ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah) {
             const label = (box) => `[${(box.text || box.maxclass).slice(0, 30)}]`;
-            problems.push(`${file}: ${label(a)} overlaps ${label(b)}`);
+            problems.push(`${file} (${view}): ${label(a)} overlaps ${label(b)}`);
           }
         }
       });
+    };
+    for (const file of created) {
+      const patch = JSON.parse(fs.readFileSync(path.join(sandbox, "patchers", file), "utf8")).patcher;
+      const boxes = patch.boxes.map(({ box }) => box);
+      overlaps(file, "patching", boxes, (box) => box.patching_rect);
+      // A panel that opens in presentation mode must be clear there too.
+      overlaps(file, "presentation", boxes.filter((box) => box.presentation), (box) => box.presentation_rect);
     }
     assert.deepEqual(problems, []);
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------- the answer finder's wiring (M3)
+
+function wiring(file) {
+  const patcher = readPatcher(file);
+  const boxes = new Map(patcher.boxes.map(({ box }) => [box.id, box]));
+  const byText = (text) => [...boxes.values()].find((b) => b.text === text);
+  const from = (box, outlet) => patcher.lines
+    .filter(({ patchline }) => patchline.source[0] === box.id && (outlet === undefined || patchline.source[1] === outlet))
+    .map(({ patchline }) => boxes.get(patchline.destination[0]));
+  return { patcher, boxes, byText, from };
+}
+
+test("cg.canon: messages from [r cg.canon.in] go where the inlet's go, so play and stop work from the finder", () => {
+  const { byText, from } = wiring("patchers/cg.canon.maxpat");
+  assert.deepEqual(from(byText("r cg.canon.in")).map((b) => b.text), ["route play stop"]);
+});
+
+test("cg.finder: a pick plays at once: stop, then usespec, then play, to the canon", () => {
+  const { byText, from } = wiring("patchers/cg.finder.maxpat");
+  assert.deepEqual(from(byText("v8 cg.finder.bundle.js")).map((b) => b.text), ["deferlow"]);
+  assert.deepEqual(from(byText("loadbang")).map((b) => b.text), ["settings"], "the panel's boxes get the real values");
+  const order = byText("t b l b");
+  // [t] fires right to left: outlet 2 first.
+  assert.deepEqual([2, 1, 0].map((o) => from(order, o)[0].text), ["stop", "prepend usespec", "play"]);
+  for (const o of [0, 1, 2]) assert.deepEqual(from(from(order, o)[0]).map((b) => b.text), ["s cg.canon.in"]);
+});
+
+test("the finder panel opens in presentation mode, with each setting wired both ways", () => {
+  const { patcher, byText, from } = wiring("patchers/cg.panel.finder.maxpat");
+  assert.equal(patcher.openinpresentation, 1);
+  const shows = byText("route voices intervalfrom intervalto delayfrom delayto delaystep profile perpetual slicems");
+  assert.ok(shows, "show <name> sets each control");
+  const names = shows.text.split(/\s+/).slice(1);
+  names.forEach((name, i) => {
+    const setter = from(shows, i)[0];
+    const control = from(setter)[0];
+    assert.ok(control.presentation, `${name}: its control is in the presentation`);
+    const sends = from(control).map((b) => b.text);
+    assert.ok(sends.includes(`prepend ${name}`), `${name}: the control sends its own message`);
+  });
+  assert.ok(from(byText("route results progress error show"), 0)[0].maxclass === "umenu", "results fill the menu");
 });

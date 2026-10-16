@@ -505,8 +505,8 @@ test("cg.mpecheck: the target Hz, and what 'off' says about the readings left", 
 
 test("cg.finder exposes exactly its documented messages", () => {
   assert.deepEqual(loadBundle("cg.finder").handlers(), [
-    "budget", "delays", "info", "intervals", "perpetual", "pick", "profile", "run", "slicems", "stop",
-    "timescales", "transforms", "voices",
+    "budget", "delayfrom", "delays", "delaystep", "delayto", "info", "intervalfrom", "intervals", "intervalto",
+    "perpetual", "pick", "profile", "run", "settings", "slicems", "stop", "timescales", "transforms", "voices",
   ]);
 });
 
@@ -531,16 +531,20 @@ test("cg.finder: searches the canon panel's melody in time slices, lists results
   assert.deepEqual(select(started, "results"), [["clear"]]);
   const { out, ticks } = bundle.tick();
   assert.ok(ticks > 1, `a 1 ms slice yields to Max between steps (${ticks} ticks)`);
-  const listed = select(out, "results").filter((r) => r[0] === "append");
+  const shown = select(out, "results");
+  const listed = shown.filter((r) => r[0] === "append");
   assert.equal(listed.length, 30, "every setting (15 intervals x 2 delays), ranked");
   assert.match(listed[0][1], /^1\. /);
+  assert.ok(listed.every((r) => !/[,;]/.test(r[1])), "no commas or semicolons: Max splits menu items on them");
+  assert.deepEqual(shown.at(-1), ["set", 0], "the menu shows the top result, without playing it");
+  assert.match(select(out, "progress").at(-1).join(" "), /^done: \d+ clean of 30 in \d+ ms$/);
   const done = select(out, "done")[0];
   assert.equal(done[0], listed.length);
   const status = select(out, "status").at(-1);
   assert.ok(!status.includes(",") && !status.includes(";"), "no bare separator atoms");
   assert.match(status.join(" "), /clean of 30 tried/);
   // The round's own answer, the unison after two bars, is clean.
-  assert.ok(listed.some((r) => /unison, after 8 \(clean/.test(r[1])), listed.map((r) => r[1]).join("\n"));
+  assert.ok(listed.some((r) => /unison \/ after 8: clean/.test(r[1])), listed.map((r) => r[1]).join("\n"));
   // Pick one: the spec goes to cg.audition, and the canon plays it.
   const picked = bundle.send("pick", 0);
   assert.deepEqual(select(picked, "audition"), [["cg.audition"]]);
@@ -554,16 +558,31 @@ test("cg.finder: searches the canon panel's melody in time slices, lists results
 
 test("cg.finder: stop, bad values, and no melody are reported, not thrown", () => {
   const bundle = loadBundle("cg.finder");
-  assert.match(errors(bundle.send("voices", 9))[0], /voices must be a whole number from 2 to 6/);
+  // A refused value is reported, and the box snaps back to what the finder holds.
+  const refused = bundle.send("voices", 9);
+  assert.match(errors(refused)[0], /voices: a whole number from 2 to 6/);
+  assert.deepEqual(select(refused, "show"), [["voices", 2]]);
   assert.match(errors(bundle.send("transforms", "X"))[0], /transforms: one of P I R RI/);
-  assert.match(errors(bundle.send("profile", "baroque"))[0], /unknown rule profile baroque/);
-  assert.match(errors(bundle.send("delays", 4, 2))[0], /delays: to must be at least from/);
+  const unknown = bundle.send("profile", "baroque");
+  assert.match(errors(unknown)[0], /unknown rule profile baroque/);
+  assert.deepEqual(select(unknown, "show"), [["profile", "canon"]]);
   assert.match(errors(bundle.send("pick", 3))[0], /no result 3: run the finder first/);
+  // Ranges are checked at run, not while you drag a box through them.
+  loadBundle("cg.canon").send("preset", 0);
+  assert.deepEqual(errors(bundle.send("delayfrom", 4)), []);
+  assert.deepEqual(errors(bundle.send("delayto", 2)), [], "4 to 2 is fine while you're still editing");
+  assert.match(errors(bundle.send("run"))[0], /delays: to \(2\) is below from \(4\)/);
+  bundle.send("delays", 1, 8, 1);
+  bundle.send("intervals", 3, -3);
+  assert.match(errors(bundle.send("run"))[0], /intervals: to \(-3\) is below from \(3\)/);
+  bundle.send("intervals", -9, 9);
   new SimDict("cg.spec").clear();
   assert.match(errors(bundle.send("run"))[0], /no melody yet: open the canon panel/);
   loadBundle("cg.canon").send("preset", 0);
   bundle.send("run");
-  assert.deepEqual(select(bundle.send("stop"), "status"), [["stopped"]]);
+  const stopped = bundle.send("stop");
+  assert.deepEqual(select(stopped, "status"), [["stopped"]]);
+  assert.deepEqual(select(stopped, "progress"), [["stopped"]]);
   assert.equal(bundle.tick().ticks, 0, "nothing left running");
   const info = select(bundle.send("info"), "status")[0].join(" ");
   assert.match(info, /^finder: 2 voices, intervals -9 to 9 steps/);
@@ -584,6 +603,30 @@ test("every [v8] wrapper holds its named dicts for its whole life", () => {
       assert.ok(held, `${file}:${i + 1}: a temporary Dict can be freed: ${line.trim()}`);
     });
   }
+});
+
+test("cg.finder: settings shows every box's value, and each setting echoes what it holds", () => {
+  const bundle = loadBundle("cg.finder");
+  assert.deepEqual(select(bundle.send("settings"), "show"), [
+    ["voices", 2], ["intervalfrom", -9], ["intervalto", 9], ["delayfrom", 1], ["delayto", 8], ["delaystep", 1],
+    ["profile", "canon"], ["perpetual", 0], ["slicems", 20],
+  ]);
+  assert.deepEqual(select(bundle.send("delaystep", 0.5), "show"), [["delaystep", 0.5]]);
+  assert.deepEqual(select(bundle.send("delaystep", 0), "show"), [["delaystep", 0.5]], "0 is refused: it snaps back");
+  assert.deepEqual(select(bundle.send("perpetual", 1), "show"), [["perpetual", 1]]);
+  assert.deepEqual(select(bundle.send("profile", "florid"), "show"), [["profile", "florid"]]);
+});
+
+test("cg.finder: a run that finds nothing says so in the menu", () => {
+  loadBundle("cg.canon").send("preset", 0);
+  const bundle = loadBundle("cg.finder");
+  bundle.send("voices", 3);
+  bundle.send("intervals", 1, 1); // one interval: no two followers can enter one after another at it and fit
+  bundle.send("delays", 4, 4);
+  bundle.send("run");
+  const shown = select(bundle.tick().out, "results");
+  assert.deepEqual(shown.slice(-2), [["append", "(none found: see the status line)"], ["set", 0]]);
+  assert.match(errors(bundle.send("pick", 0))[0], /no result 0: the last run found 0/);
 });
 
 test("cg.finder: with 3+ voices it says how many followers and pairs got through", () => {

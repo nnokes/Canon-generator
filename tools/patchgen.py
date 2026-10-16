@@ -113,6 +113,14 @@ class Patch:
         }
         return self._add(self._place(box, x, y, w, h))
 
+    def present(self, *ids):
+        """Show these boxes in presentation mode, where they sit in the patch."""
+        for b in self.boxes:
+            if b["box"]["id"] in ids:
+                b["box"]["presentation"] = 1
+                b["box"]["presentation_rect"] = list(b["box"]["patching_rect"])
+        return ids
+
     def connect(self, src, outlet, dst, inlet):
         self.lines.append({"patchline": {"source": [src, outlet], "destination": [dst, inlet]}})
 
@@ -366,8 +374,8 @@ def canon():
     left and right audio: the [poly~] Hz voices plus Ableton's Drift playing
     the MPE notes. Outlet 3: the MPE notes as MIDI bytes, for the panel's
     [midiout]. MPE goes to Drift or to MIDI out, never both ([gate 2]).
-    [r cg.canon.in] takes messages from elsewhere: the answer finder sends
-    usespec cg.audition to play the result you pick (M3)."""
+    [r cg.canon.in] takes the same messages as the inlet, from elsewhere: the
+    answer finder sends stop, usespec cg.audition, then play (M3)."""
     p = Patch(rect=(80, 80, 900, 720))
     p.note(GENERATED_NOTE, 20, 10, 700, 1)
     inl = p.obj("route play stop", 20, 115, 2, 3)
@@ -387,9 +395,10 @@ def canon():
     for m in (fill, fill_tunings, first):
         p.connect(m, 0, v8, 0)
     p.connect(inl, 2, v8, 0)
-    # The answer finder's picks arrive here: usespec cg.audition (M3).
+    # Messages from elsewhere (the answer finder: stop, usespec cg.audition, play)
+    # go where the inlet's go, so play and stop work too (M3).
     audition = p.obj("r cg.canon.in", 230, 150, 1, 1)
-    p.connect(audition, 0, v8, 0)
+    p.connect(audition, 0, inl, 0)
     route = p.obj("route coll midi mpeto panic", 230, 220, 2, 5)
     p.connect(v8, 0, route, 0)
 
@@ -572,25 +581,41 @@ def check_mpe():
 def finder():
     """cg.finder (M3): the answer finder. Inlet: messages (see
     code/cg.finder.v8.js). It reads the melody from the dict cg.spec, which the
-    canon panel writes, and searches in time slices. A picked result goes to the
-    canon panel as usespec cg.audition, through [s cg.canon.in]. Outlet: results
-    (for a umenu), progress, done, status and error."""
-    p = Patch(rect=(80, 80, 640, 330))
-    p.note(GENERATED_NOTE, 20, 10, 560, 1)
-    inlet = p.inlet(20, 50, "messages: run, stop, voices, intervals, delays, transforms, timescales, profile, "
-                    "perpetual, slicems, budget, pick, info", 0)
-    v8 = p.obj("v8 cg.finder.bundle.js", 20, 95, 1, 1)
-    route = p.obj("route audition", 20, 130, 2, 2)
-    usespec = p.obj("prepend usespec", 20, 170, 2, 1)
-    send = p.obj("s cg.canon.in", 20, 205, 1, 0)
-    out = p.outlet(250, 250, "results (for a umenu), progress, done, status, error", 0)
+    canon panel writes, and searches in time slices. At load it sends its
+    settings out (show ...), so the panel's boxes show them. A picked result
+    plays at once: stop, usespec cg.audition, then play, to the canon panel
+    through [s cg.canon.in]. Everything goes out through [deferlow]: the search's
+    results come from a Task, and the screen is updated on Max's main thread, in
+    order. Outlet: results (for a umenu), progress, show, done, status, error."""
+    p = Patch(rect=(80, 80, 680, 380))
+    p.note(GENERATED_NOTE, 20, 10, 600, 1)
+    inlet = p.inlet(20, 50, "messages: run, stop, settings, voices, intervalfrom, intervalto, delayfrom, delayto, "
+                    "delaystep, profile, perpetual, slicems, pick, info", 0)
+    load = p.obj("loadbang", 110, 50, 1, 1, ["bang"])
+    ask = p.msg("settings", 110, 80)
+    v8 = p.obj("v8 cg.finder.bundle.js", 20, 115, 1, 1)
+    later = p.obj("deferlow", 20, 150, 1, 1)
+    route = p.obj("route audition", 20, 185, 2, 2)
+    order = p.obj("t b l b", 20, 220, 1, 3, ["bang", "", "bang"])
+    play = p.msg("play", 20, 255)
+    usespec = p.obj("prepend usespec", 70, 255, 2, 1)
+    stop = p.msg("stop", 190, 255)
+    send = p.obj("s cg.canon.in", 20, 300, 1, 0)
+    out = p.outlet(330, 300, "results (for a umenu), progress, show, done, status, error", 0)
     p.connect(inlet, 0, v8, 0)
-    p.connect(v8, 0, route, 0)
-    p.connect(route, 0, usespec, 0)
-    p.connect(usespec, 0, send, 0)
+    p.connect(load, 0, ask, 0)
+    p.connect(ask, 0, v8, 0)
+    p.connect(v8, 0, later, 0)
+    p.connect(later, 0, route, 0)
+    p.connect(route, 0, order, 0)
+    p.connect(order, 2, stop, 0)  # right to left: stop first,
+    p.connect(order, 1, usespec, 0)  # then load the pick,
+    p.connect(order, 0, play, 0)  # then play it
+    for m in (stop, usespec, play):
+        p.connect(m, 0, send, 0)
     p.connect(route, 1, out, 0)
     p.note("A picked result plays through the canon panel's own player: keep the canon panel open.",
-           250, 95, 330, 2)
+           330, 115, 300, 2)
     return p
 
 
@@ -867,84 +892,122 @@ def panel_canon():
 
 
 def panel_finder():
-    """The M3 answer finder panel: search your melody for the canons hidden in
-    it, and click a result to hear it through the canon panel."""
-    p = Patch(rect=(80, 80, 820, 560))
-    p.note(HAND_NOTE, 20, 10, 760, 2)
-    p.note("ANSWER FINDER (M3). Open the canon panel too: the finder searches the melody it plays (a preset's, "
-           "or your .mid), and a result you pick plays there. Set the ranges, then run. Clean = no hard faults; "
-           "cost = soft faults. Voices 3+ search sets of followers that all work together.", 20, 55, 760, 3)
-    engine = p.obj("cg.finder", 20, 470, 1, 1)
+    """The M3 answer finder panel: search the canon panel's melody for the canons
+    hidden in it, and click a result to hear it. Opens in presentation mode:
+    only the labelled controls. Each box sends its own message, and the finder
+    echoes every setting back (show ...), so the boxes show what it holds."""
+    p = Patch(rect=(60, 60, 840, 780), presentation=True)
+    present = p.present
 
-    p.comment("voices:", 20, 115)
-    voices = p.ui("number", 90, 115, 50, 22, 1, 2, ["", "bang"], minimum=2, maximum=6)
-    set_voices = p.obj("prepend voices", 150, 115, 2, 1)
-    p.connect(voices, 0, set_voices, 0)
-    p.connect(set_voices, 0, engine, 0)
+    present(p.comment("Answer finder: the canons hidden in a melody", 20, 10, fontsize=16.0, fontface=1, w=420))
+    present(p.note("Open the canon panel too: the finder searches the melody it plays (a preset's, or your .mid), "
+                   "and plays there the result you click. Clean = no hard faults; cost = soft faults.",
+                   20, 40, 760, 2))
 
-    p.comment("intervals (steps) from:", 20, 150)
-    iv_from = p.ui("number", 190, 150, 50, 22, 1, 2, ["", "bang"])
-    p.comment("to:", 250, 150)
-    iv_to = p.ui("number", 285, 150, 50, 22, 1, 2, ["", "bang"])
-    iv_pack = p.obj("pak -9 9", 350, 150, 2, 1)
-    set_iv = p.obj("prepend intervals", 430, 150, 2, 1)
-    p.connect(iv_from, 0, iv_pack, 0)
-    p.connect(iv_to, 0, iv_pack, 1)
-    p.connect(iv_pack, 0, set_iv, 0)
-    p.connect(set_iv, 0, engine, 0)
+    rows = {}  # setting -> its control
 
-    p.comment("delays (beats) from:", 20, 185)
-    d_from = p.ui("flonum", 170, 185, 50, 22, 1, 2, ["", "bang"], format=6)
-    p.comment("to:", 230, 185)
-    d_to = p.ui("flonum", 260, 185, 50, 22, 1, 2, ["", "bang"], format=6)
-    p.comment("step:", 315, 185)
-    d_step = p.ui("flonum", 360, 185, 50, 22, 1, 2, ["", "bang"], format=6)
-    d_pack = p.obj("pak 1. 8. 1.", 430, 185, 3, 1)
-    set_d = p.obj("prepend delays", 540, 185, 2, 1)
-    p.connect(d_from, 0, d_pack, 0)
-    p.connect(d_to, 0, d_pack, 1)
-    p.connect(d_step, 0, d_pack, 2)
-    p.connect(d_pack, 0, set_d, 0)
-    p.connect(set_d, 0, engine, 0)
+    def row_label(text, y):
+        present(p.comment(text, 20, y))
 
-    p.comment("profile:", 20, 220)
-    profile = p.ui("umenu", 90, 220, 140, 22, 1, 3, ["int", "", ""],
-                   items=["canon", ",", "florid", ",", "fux-strict", ",", "spectral", ",", "free"])
-    set_profile = p.obj("prepend profile", 250, 220, 2, 1)
-    p.connect(profile, 1, set_profile, 0)
-    p.connect(set_profile, 0, engine, 0)
-    p.comment("perpetual:", 400, 220)
-    perpetual = p.ui("toggle", 480, 220, 22, 22, 1, 1, ["int"])
-    set_perpetual = p.obj("prepend perpetual", 515, 220, 2, 1)
-    p.connect(perpetual, 0, set_perpetual, 0)
-    p.connect(set_perpetual, 0, engine, 0)
+    def hint(text, x, y):
+        present(p.comment(text, x, y))
 
-    p.comment("time slice (ms):", 20, 255)
-    slice_ms = p.ui("number", 140, 255, 50, 22, 1, 2, ["", "bang"], minimum=1)
-    set_slice = p.obj("prepend slicems", 200, 255, 2, 1)
-    p.connect(slice_ms, 0, set_slice, 0)
-    p.connect(set_slice, 0, engine, 0)
-    run = p.msg("run", 330, 255)
-    stop = p.msg("stop", 370, 255)
-    info = p.msg("info", 420, 255)
-    for m in (run, stop, info):
-        p.connect(m, 0, engine, 0)
+    def number(name, x, y, flo=False, **limits):
+        box = p.ui("flonum" if flo else "number", x, y, 50, 22, 1, 2, ["", "bang"],
+                   **({"format": 6} if flo else {}), **limits)
+        present(box)
+        rows[name] = box
+        return box
 
-    p.comment("results (click one to hear it):", 20, 295)
-    results = p.ui("umenu", 20, 320, 600, 22, 1, 3, ["int", "", ""])
-    pick = p.obj("prepend pick", 640, 320, 2, 1)
+    row_label("Voices", 95)
+    number("voices", 220, 95, minimum=2, maximum=6)
+    hint("2 = the melody and one follower. 3 or more = sets of followers that fit together.", 280, 95)
+
+    row_label("Intervals, in scale steps", 130)
+    number("intervalfrom", 220, 130)
+    hint("to", 275, 130)
+    number("intervalto", 310, 130)
+    hint("0 = unison, 7 = an octave up, -2 = a third down (in a 7-note scale)", 368, 130)
+
+    row_label("Entry delays, in beats", 165)
+    number("delayfrom", 220, 165, flo=True, minimum=0.0)
+    hint("to", 275, 165)
+    number("delayto", 310, 165, flo=True, minimum=0.0)
+    hint("every", 365, 165)
+    number("delaystep", 412, 165, flo=True, minimum=0.25)
+    hint("how long after the melody each follower comes in", 470, 165)
+
+    row_label("Rules", 200)
+    rules_menu = p.ui("umenu", 220, 200, 130, 22, 1, 3, ["int", "", ""],
+                      items=["canon", ",", "florid", ",", "fux-strict", ",", "spectral", ",", "free"])
+    present(rules_menu)
+    rows["profile"] = rules_menu
+    hint("Perpetual canon (it loops)", 370, 200)
+    loops = p.ui("toggle", 555, 200, 22, 22, 1, 1, ["int"])
+    present(loops)
+    rows["perpetual"] = loops
+
+    row_label("Time slice, ms", 235)
+    number("slicems", 220, 235, minimum=1, maximum=1000)
+    hint("bigger = a faster search, a slower screen", 280, 235)
+    run = p.msg("run", 560, 235)
+    stop = p.msg("stop", 605, 235)
+    present(run, stop)
+
+    present(p.comment("Results: click one to hear it in the canon panel", 20, 275))
+    results = p.ui("umenu", 20, 300, 760, 22, 1, 3, ["int", "", ""])
+    present(results)
+    present(p.comment("Status", 20, 335))
+    line = p.msg("", 75, 335, w=705)
+    present(line)
+
+    # The wiring, below; presentation mode hides it.
+    p.note(HAND_NOTE, 20, 390, 760, 2)
+    engine = p.obj("cg.finder", 20, 440, 1, 1)
+    p.connect(run, 0, engine, 0)
+    p.connect(stop, 0, engine, 0)
+    prepends = {}
+    x, y = 20, 480
+    for name in ["voices", "intervalfrom", "intervalto", "delayfrom", "delayto", "delaystep", "profile",
+                 "perpetual", "slicems"]:
+        text = f"prepend {name}"
+        w = 7 * len(text) + 14
+        if x + w > 800:
+            x, y = 20, y + 35
+        prepends[name] = p.obj(text, x, y, 2, 1)
+        x += w + 10
+        source_outlet = 1 if name == "profile" else 0  # the rules menu sends its item's text
+        p.connect(rows[name], source_outlet, prepends[name], 0)
+        p.connect(prepends[name], 0, engine, 0)
+    pick = p.obj("prepend pick", 20, 560, 2, 1)
     p.connect(results, 0, pick, 0)
     p.connect(pick, 0, engine, 0)
-    p.comment("progress:", 20, 360)
-    progress = p.msg("", 90, 360, w=530)
-    route = p.obj("route results progress", 20, 505, 2, 3)
-    show = p.obj("prepend set", 200, 540, 2, 1)
-    report = p.obj("print finder", 360, 540, 1, 0)
+
+    route = p.obj("route results progress error show", 20, 600, 2, 5)
     p.connect(engine, 0, route, 0)
     p.connect(route, 0, results, 0)
-    p.connect(route, 1, show, 0)
-    p.connect(show, 0, progress, 0)
+    progress = p.obj("prepend set", 290, 600, 2, 1)
+    p.connect(route, 1, progress, 0)
+    p.connect(progress, 0, line, 0)
+    failed = p.obj("prepend set error:", 395, 600, 2, 1)
+    p.connect(route, 2, failed, 0)
+    p.connect(failed, 0, line, 0)
+    report = p.obj("print finder", 550, 600, 1, 0)
     p.connect(route, 2, report, 0)
+    p.connect(route, 4, report, 0)
+    names = list(rows)
+    shows = p.obj("route " + " ".join(names), 20, 640, 2, len(names) + 1)
+    p.connect(route, 3, shows, 0)
+    x, y = 20, 680
+    for i, name in enumerate(names):
+        text = "prepend setsymbol" if name == "profile" else "prepend set"
+        w = 7 * len(text) + 14
+        if x + w > 800:
+            x, y = 20, y + 35
+        setter = p.obj(text, x, y, 2, 1)
+        x += w + 10
+        p.connect(shows, i, setter, 0)
+        p.connect(setter, 0, rows[name], 0)
     return p
 
 

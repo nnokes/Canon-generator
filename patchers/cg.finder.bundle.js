@@ -2747,24 +2747,31 @@ __cg_require.local = 1;
 // named dict cg.spec (the canon wrapper writes it on every render), runs the
 // search in time slices from a Task so Max's interface stays responsive (PLAN
 // 2.4), and lists the ranked results. Picking one writes its spec to the dict
-// cg.audition and asks the canon panel to play it.
+// cg.audition, and the patch has the canon panel play it.
+//
+// Each panel box has its own message, so moving one box never sends another's
+// value, and the ranges are checked only at run (not while you drag). Every
+// setting echoes back as show <name> <value>, so the boxes always show what the
+// finder holds, and a refused value snaps back (M3 session 1).
 //
 // Messages                     Outlet 0
-//   run                          progress <phase> <done> <total> ..., then results clear,
-//                                results append <label> ..., done <results> <ms> <slices> <ms per slice>
+//   settings                     show <name> <value>, for every setting
+//   voices <n>                   show voices <n>     2 = one follower; 3+ = sets of followers
+//   intervalfrom|intervalto <n>  show ...            the follower intervals, in scale steps
+//   delayfrom|delayto|delaystep <beats>  show ...    the entry delays
+//   profile <name>               show profile ...    canon (default), florid, fux-strict, spectral, free
+//   perpetual <0|1>              show perpetual ...  judge a perpetual canon in its steady state
+//   slicems <ms>                 show slicems ...    the time-slice budget: work per slice
+//   intervals <from> <to>, delays <from> <to> [step]   several at once
+//   transforms <P|I|R|RI ...>, timescales <x ...>, budget <n>
+//   run                          progress ..., results clear, results append <text> ...,
+//                                results set 0, progress done: ..., done <n> <ms> <slices>
+//                                <ms per slice>, status ... (one line; two for 3+ voices)
 //   stop                         status stopped
-//   voices <n>                   2 = one follower; 3+ = sets of followers
-//   intervals <from> <to>        scale steps (both ends included)
-//   delays <from> <to> <step>    beats
-//   transforms <P|I|R|RI ...>
-//   timescales <x ...>
-//   profile <name>               canon (default), florid, fux-strict, spectral, free
-//   perpetual <0|1>              judge a perpetual canon in its steady state
-//   slicems <ms>                 the time-slice budget: work per slice before yielding
-//   budget <n>                   the most renders + analyses
-//   pick <i>                     audition <dict>: the patch sends usespec <dict> to the canon
+//   pick <i>                     audition cg.audition (the patch: stop, usespec, play)
 //   info                         status ...
-// Errors come out as: error <message>. Every output starts with a selector.
+// Errors come out as: error <message>. Every output starts with a selector, and
+// no text carries a comma or semicolon: Max reads those as separators.
 
 autowatch = 1;
 inlets = 1;
@@ -2774,15 +2781,21 @@ const finder = __cg_require("cg-finder");
 const rules = __cg_require("cg-rules");
 
 const TRANSFORMS = ["P", "I", "R", "RI", "segmentRetrograde", "segmentPermute"];
-const options = {
-  voices: 2,
-  profile: "canon",
-  perpetual: false,
-  budget: 20000,
-  keep: 50,
-  ranges: { intervals: finder.range(-9, 9), delays: finder.range(1, 8), transforms: ["P"], timeScales: [1] },
+// What the panel shows, one entry per box.
+const state = {
+  voices: 2, intervalfrom: -9, intervalto: 9, delayfrom: 1, delayto: 8, delaystep: 1,
+  profile: "canon", perpetual: 0, slicems: 20,
 };
-let slice = 20; // ms of work per Task tick: the time-slice budget (M3 session 1)
+const CHECKS = {
+  voices: [(v) => Number.isInteger(v) && v >= 2 && v <= 6, "voices: a whole number from 2 to 6"],
+  intervalfrom: [Number.isInteger, "intervals: whole numbers of scale steps"],
+  intervalto: [Number.isInteger, "intervals: whole numbers of scale steps"],
+  delayfrom: [(v) => v >= 0, "delays: 0 beats or more"],
+  delayto: [(v) => v >= 0, "delays: 0 beats or more"],
+  delaystep: [(v) => v > 0, "delays: every must be above 0"],
+  slicems: [(v) => v > 0, "time slice: above 0 ms"],
+};
+const extra = { transforms: ["P"], timeScales: [1], budget: 20000, keep: 50 };
 let search = null; // { it, options, started, slices, busy }
 let results = [];
 let lastOptions = null;
@@ -2810,6 +2823,91 @@ function number(value, label, check) {
 }
 number.local = 1;
 
+function show(name) {
+  outlet(0, "show", name, state[name]);
+}
+show.local = 1;
+
+// Set one value, or report why not; either way the panel shows what's held.
+function set(name, value) {
+  attempt(() => {
+    const [check, label] = CHECKS[name];
+    state[name] = number(value, label, check);
+  });
+  show(name);
+}
+set.local = 1;
+
+function settings() {
+  for (const name of Object.keys(state)) show(name);
+}
+
+function voices(n) { set("voices", n); }
+function intervalfrom(n) { set("intervalfrom", n); }
+function intervalto(n) { set("intervalto", n); }
+function delayfrom(x) { set("delayfrom", x); }
+function delayto(x) { set("delayto", x); }
+function delaystep(x) { set("delaystep", x); }
+function slicems(ms) { set("slicems", ms); }
+
+function intervals(from, to) {
+  set("intervalfrom", from);
+  set("intervalto", to);
+}
+
+function delays(from, to, step) {
+  set("delayfrom", from);
+  set("delayto", to);
+  if (step !== undefined) set("delaystep", step);
+}
+
+function profile(name) {
+  attempt(() => {
+    rules.resolve(String(name)); // throws on an unknown profile
+    state.profile = String(name);
+  });
+  show("profile");
+}
+
+function perpetual(on) {
+  state.perpetual = on ? 1 : 0;
+  show("perpetual");
+}
+
+function transforms(...names) {
+  attempt(() => {
+    for (const t of names) if (!TRANSFORMS.includes(t)) throw new Error(`transforms: one of ${TRANSFORMS.join(" ")}, got ${t}`);
+    if (!names.length) throw new Error("transforms: name at least one");
+    extra.transforms = names;
+  });
+}
+
+function timescales(...values) {
+  attempt(() => {
+    if (!values.length) throw new Error("timescales: give at least one");
+    for (const v of values) number(v, "timescales must be above 0", (x) => x > 0);
+    extra.timeScales = values;
+  });
+}
+
+function budget(n) {
+  attempt(() => { extra.budget = number(n, "budget must be a whole number above 0", (v) => Number.isInteger(v) && v > 0); });
+}
+
+// The search's ranges, checked as a whole now that every box is set.
+function ranges() {
+  const s = state;
+  if (s.intervalto < s.intervalfrom) throw new Error(`intervals: to (${s.intervalto}) is below from (${s.intervalfrom})`);
+  if (s.delayto < s.delayfrom) throw new Error(`delays: to (${s.delayto}) is below from (${s.delayfrom})`);
+  return {
+    intervals: finder.range(s.intervalfrom, s.intervalto),
+    delays: finder.range(s.delayfrom, s.delayto, s.delaystep),
+    transforms: extra.transforms,
+    timeScales: extra.timeScales,
+  };
+}
+ranges.local = 1;
+
 // The melody and its world, from the canon wrapper's dict.
 function current() {
   const text = specDict.stringify();
@@ -2826,16 +2924,19 @@ current.local = 1;
 function run() {
   attempt(() => {
     if (search) stop();
-    const opts = { ...options, ranges: { ...options.ranges }, ...current() };
+    const opts = {
+      voices: state.voices, profile: state.profile, perpetual: Boolean(state.perpetual),
+      budget: extra.budget, keep: extra.keep, ranges: ranges(), ...current(),
+    };
     search = { it: finder.search(opts), options: opts, started: Date.now(), slices: 0, busy: 0 };
     results = [];
     outlet(0, "results", "clear");
-    outlet(0, "progress", "starting", 0, 1);
+    outlet(0, "progress", "searching");
     task.repeat();
   });
 }
 
-// One slice: advance the search for `slice` ms, then yield back to Max.
+// One slice: advance the search for `slicems` ms, then yield back to Max.
 function tick() {
   if (!search) return task.cancel();
   const begin = Date.now();
@@ -2848,8 +2949,8 @@ function tick() {
         finish(step.value);
         return;
       }
-      if (step.value) outlet(0, "progress", step.value.phase, step.value.done, step.value.total);
-      if (Date.now() - begin >= slice) break;
+      if (step.value) outlet(0, "progress", step.value.phase, step.value.done, "of", step.value.total);
+      if (Date.now() - begin >= state.slicems) break;
     }
   } catch (e) {
     task.cancel();
@@ -2862,23 +2963,35 @@ function tick() {
 }
 tick.local = 1;
 
+// A result as a menu item: no commas (Max splits menu items on them).
+function menuText(r, i) {
+  const cost = r.cost ? `cost ${round(r.cost)}` : "";
+  const mark = r.hard ? `${r.hard} ${r.hard === 1 ? "fault" : "faults"}` : "clean";
+  return `${i + 1}. ${r.label.replace(/\s*,\s*/g, " / ")}: ${mark}${cost ? " / " + cost : ""}`.replace(/[,;]/g, " ");
+}
+menuText.local = 1;
+
 function finish(value) {
   task.cancel();
   lastOptions = search.options;
   results = value.results;
   outlet(0, "results", "clear");
-  results.forEach((r, i) => {
-    const mark = r.hard ? `${r.hard} faults` : "clean";
-    outlet(0, "results", "append", `${i + 1}. ${r.label} (${mark}, cost ${round(r.cost)})`);
-  });
+  results.forEach((r, i) => outlet(0, "results", "append", menuText(r, i)));
+  if (!results.length) outlet(0, "results", "append", "(none found: see the status line)");
+  outlet(0, "results", "set", 0); // show the top one without playing it
   const ms = Date.now() - search.started;
   const passing = results.filter((r) => r.hard === 0).length;
+  const sets = value.voices > 2;
+  if (sets) {
+    outlet(0, "progress", "done:", passing, "clean sets of", value.tried, "/", value.passingFollowers, "of",
+      value.followersTried, "followers pass alone /", value.pairsOk, "pairs fit together");
+  } else {
+    outlet(0, "progress", "done:", passing, "clean of", value.tried, "in", ms, "ms");
+  }
   outlet(0, "done", results.length, ms, search.slices, round(search.busy / Math.max(1, search.slices)));
-  // No bare "," or ";" atoms: Max would read them as message separators.
-  const what = value.voices > 2 ? "sets tried" : "tried";
-  outlet(0, "status", "finder:", passing, "clean of", value.tried, what + (value.complete ? "" : " (stopped at the budget)"),
-    "in", ms, "ms,", search.slices, "slices of", slice, "ms");
-  if (value.voices > 2) {
+  outlet(0, "status", "finder:", passing, "clean of", value.tried, (sets ? "sets tried" : "tried") + (value.complete ? "" : " (stopped at the budget)"),
+    "in", ms, "ms,", search.slices, "slices of", state.slicems, "ms");
+  if (sets) {
     // Sets are built only from followers that pass against the dux alone.
     outlet(0, "status", "finder:", value.passingFollowers, "of", value.followersTried,
       "followers pass against the dux alone,", value.pairsOk, "pairs of them work together");
@@ -2894,71 +3007,18 @@ round.local = 1;
 
 function stop() {
   task.cancel();
-  if (search) outlet(0, "status", "stopped");
+  if (search) {
+    outlet(0, "status", "stopped");
+    outlet(0, "progress", "stopped");
+  }
   search = null;
-}
-
-function voices(n) {
-  attempt(() => { options.voices = number(n, "voices must be a whole number from 2 to 6", (v) => Number.isInteger(v) && v >= 2 && v <= 6); });
-}
-
-function intervals(from, to) {
-  attempt(() => {
-    number(from, "intervals: whole numbers of steps", Number.isInteger);
-    number(to, "intervals: whole numbers of steps", (v) => Number.isInteger(v) && v >= from);
-    options.ranges.intervals = finder.range(from, to);
-  });
-}
-
-function delays(from, to, step) {
-  attempt(() => {
-    const by = step === undefined ? 1 : step;
-    number(from, "delays: from must be 0 or more", (v) => v >= 0);
-    number(to, "delays: to must be at least from", (v) => v >= from);
-    number(by, "delays: step must be above 0", (v) => v > 0);
-    options.ranges.delays = finder.range(from, to, by);
-  });
-}
-
-function transforms(...names) {
-  attempt(() => {
-    for (const t of names) if (!TRANSFORMS.includes(t)) throw new Error(`transforms: one of ${TRANSFORMS.join(" ")}, got ${t}`);
-    if (!names.length) throw new Error("transforms: name at least one");
-    options.ranges.transforms = names;
-  });
-}
-
-function timescales(...values) {
-  attempt(() => {
-    if (!values.length) throw new Error("timescales: give at least one");
-    for (const v of values) number(v, "timescales must be above 0", (x) => x > 0);
-    options.ranges.timeScales = values;
-  });
-}
-
-function profile(name) {
-  attempt(() => {
-    rules.resolve(String(name)); // throws on an unknown profile
-    options.profile = String(name);
-  });
-}
-
-function perpetual(on) {
-  options.perpetual = Boolean(on);
-}
-
-function slicems(ms) {
-  attempt(() => { slice = number(ms, "slicems must be above 0", (v) => v > 0); });
-}
-
-function budget(n) {
-  attempt(() => { options.budget = number(n, "budget must be a whole number above 0", (v) => Number.isInteger(v) && v > 0); });
 }
 
 function pick(index) {
   attempt(() => {
     const r = results[index];
-    if (!r || !lastOptions) throw new Error(`no result ${index}: run the finder first`);
+    if (!lastOptions) throw new Error(`no result ${index}: run the finder first`);
+    if (!r) throw new Error(`no result ${index}: the last run found ${results.length}`);
     const spec = finder.specFor(lastOptions, r);
     auditionDict.parse(JSON.stringify(spec));
     outlet(0, "audition", "cg.audition");
@@ -2967,8 +3027,8 @@ function pick(index) {
 }
 
 function info() {
-  const r = options.ranges;
-  outlet(0, "status", "finder:", options.voices, "voices, intervals", r.intervals[0], "to", r.intervals[r.intervals.length - 1],
-    "steps, delays", ...r.delays, "beats, transforms", ...r.transforms, "time scales", ...r.timeScales,
-    "profile", options.profile + (options.perpetual ? " (perpetual)" : ""), "slice", slice, "ms");
+  const s = state;
+  outlet(0, "status", "finder:", s.voices, "voices, intervals", s.intervalfrom, "to", s.intervalto,
+    "steps, delays", s.delayfrom, "to", s.delayto, "every", s.delaystep, "beats, transforms", ...extra.transforms,
+    "time scales", ...extra.timeScales, "profile", s.profile + (s.perpetual ? " (perpetual)" : ""), "slice", s.slicems, "ms");
 }

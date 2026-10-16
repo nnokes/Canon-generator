@@ -264,17 +264,53 @@ edited is regenerated: the new finder panel is new, and your canon panel is unto
      the dux alone and how many pairs of them work together. `0 clean of 0 sets` meant no
      two passing followers worked together, but it didn't say so.
 
+   **Second round (2026-10-16):**
+   - **The finder kept working:**
+     - 2 voices: 1 clean of 152, in 62–108 ms (3–4 slices of 20 ms)
+     - 3 voices: 20 clean sets of 60; 14 of 152 followers passed alone, and 60 pairs fit
+       together
+   - **The results menu stayed blank every time,** even with 50 results. Three likely
+     causes, all fixed:
+     - **Nothing was selected:** a umenu shows no text until one item is. After the list,
+       `set 0` now shows the top result without playing it.
+     - **Commas in the item text:** Max uses commas to separate menu items. The text now
+       reads `1. lower 7th / after 2: clean`.
+     - **The Task's timing:** results come from the finder's Task, not from a click. The
+       finder's output now goes through `[deferlow]`, in order, on Max's main thread.
+   - **The panel was confusing:**
+     - `pak -9 9` and `pak 1. 8. 1.` held values the boxes didn't show, so changing one
+       box sent the hidden ones too. Your panel showed intervals 2 to 2 and step 0.,
+       which wasn't what the finder held.
+     - every drag sent at once, so editing passed through invalid ranges (`delays: to
+       must be at least from`)
+     - all the wiring was on screen
+   - **Remade:**
+     - the panel opens in **presentation mode**: titled, labelled rows with hints,
+       **Run** / **Stop**, the results menu and a status line (Cmd-Opt-E shows the
+       wiring)
+     - each box sends its own message, and the ranges are checked only at **run**
+     - the finder echoes every setting back, so the boxes show what it holds. A refused
+       value snaps back.
+     - **a click plays the result at once:** stop, load, play, in the canon panel
+     - a run that finds nothing says so in the menu and the status line
+
+   **Third round: the remade panel.** Discard your copy first. In the repo folder run
+   `git checkout -- patchers/cg.panel.finder.maxpat`, then `git pull`, and reopen both
+   panels.
+
 2. **The finder, 2 voices:**
-   - open `patchers/cg.panel.canon.maxpat` **and** `patchers/cg.panel.finder.maxpat`
+   - open `patchers/cg.panel.canon.maxpat` **and** `patchers/cg.panel.finder.maxpat`. The
+     finder opens clean, showing voices 2, intervals −9 to 9, delays 1 to 8 every 1,
+     rules canon, time slice 20.
    - in the canon panel, load your `.mid` (or keep the round)
-   - in the finder: voices 2, intervals −9 to 9, delays 1 to 8 step 1, profile canon. Click
-     **run**.
-   - the Max window prints `finder: <n> clean of 152 tried in <ms> ms, <slices> slices
-     of 20 ms`, and the results menu fills
-   - pick a result: the canon panel loads it (`melody ...` prints). Click **play** there.
-     Try a few, clean and not.
+   - in the finder, click **run**. The status line says `done: <n> clean of 152 in <ms>
+     ms`, and the results menu shows the top result. Open it to see them all.
+   - click a result: the canon panel stops, loads it and plays it. Try a few, clean and
+     not.
 3. **The finder, 3 voices:**
-   - voices 3, delays 2 to 8 step 2, then run: the results are sets of two followers
+   - voices 3, delays 2 to 8 every 2, then **run**. The results are sets of two
+     followers. The status line also says how many followers passed alone and how many
+     pairs fit together.
    - play the best two or three
 4. **The time-slice budget:**
    - set time slice to 5 and run a 3-voice search
