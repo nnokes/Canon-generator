@@ -894,14 +894,16 @@ def panel_canon():
 def panel_finder():
     """The M3 answer finder panel: search the canon panel's melody for the canons
     hidden in it, and click a result to hear it. Opens in presentation mode:
-    only the labelled controls. Each box sends its own message, and the finder
-    echoes every setting back (show ...), so the boxes show what it holds."""
+    only the labelled controls, and below them how to read what the finder says
+    (cost, faults, the status line, the rules, the time slice). Each box sends
+    its own message, and the finder echoes every setting back (show ...), so the
+    boxes show what it holds."""
     p = Patch(rect=(60, 60, 840, 780), presentation=True)
     present = p.present
 
     present(p.comment("Answer finder: the canons hidden in a melody", 20, 10, fontsize=16.0, fontface=1, w=420))
     present(p.note("Open the canon panel too: the finder searches the melody it plays (a preset's, or your .mid), "
-                   "and plays there the result you click. Clean = no hard faults; cost = soft faults.",
+                   "and plays there the result you click. How to read the results: at the bottom.",
                    20, 40, 760, 2))
 
     rows = {}  # setting -> its control
@@ -935,7 +937,7 @@ def panel_finder():
     number("delayto", 310, 165, flo=True, minimum=0.0)
     hint("every", 365, 165)
     number("delaystep", 412, 165, flo=True, minimum=0.25)
-    hint("how long after the melody each follower comes in", 470, 165)
+    hint("0 = with the melody. every = the step between tries", 470, 165)
 
     row_label("Rules", 200)
     rules_menu = p.ui("umenu", 220, 200, 130, 22, 1, 3, ["int", "", ""],
@@ -949,10 +951,11 @@ def panel_finder():
 
     row_label("Time slice, ms", 235)
     number("slicems", 220, 235, minimum=1, maximum=1000)
-    hint("bigger = a faster search, a slower screen", 280, 235)
+    hint("smaller = smoother, bigger = sooner", 280, 235)
     run = p.msg("run", 560, 235)
     stop = p.msg("stop", 605, 235)
     present(run, stop)
+    hint("abandons the search", 655, 235)
 
     present(p.comment("Results: click one to hear it in the canon panel", 20, 275))
     results = p.ui("umenu", 20, 300, 760, 22, 1, 3, ["int", "", ""])
@@ -961,13 +964,50 @@ def panel_finder():
     line = p.msg("", 75, 335, w=705)
     present(line)
 
+    # How to read it: two columns of wrapped comments. Lines are counted at a
+    # generous 52 characters, so Max's own wrapping never clips one.
+    present(p.comment("How to read it", 20, 375, fontface=1))
+
+    def column(x, y, paragraphs):
+        for text in paragraphs:
+            lines = -(-len(text) // 52)
+            present(p.note(text, x, y, 370, lines))
+            y += 14 + 14 * lines + 8
+        return y
+
+    left = column(20, 400, [
+        "A result reads like  3. lower 3rd / after 4: 1 fault / cost 1  (from the round). The 3. is its "
+        "rank: fewest faults first, then the lowest cost. lower 3rd / after 4 is the follower: a 3rd below "
+        "the melody, coming in 4 beats after it. With 3 or more voices, + joins the followers.",
+        "clean: it breaks no hard rule. A fault is one hard-rule break: parallel fifths or octaves, or a "
+        "dissonance that isn't a passing note or a suspension.",
+        "cost: the soft rules, added up. Each break adds its weight: a hidden fifth or octave 1, a leap "
+        "beyond a fifth 0.5, a voice coming back after less than a beat of rest 0.5. Lower is smoother; "
+        "no cost shown = 0. Every rule and weight: docs/controls.md",
+    ])
+    right = column(410, 400, [
+        "Status: done: 3 clean of 152 = 152 followers tried, 3 without faults. With 3 or more voices the "
+        "finder tries each follower against the melody alone (pass alone), pairs the ones that pass (fit "
+        "together), makes sets only of pairs that fit, and judges each set whole. stopped at the budget "
+        "(in the Max window) = 20000 canons tried: narrow the ranges.",
+        "Rules: canon = Albrechtsberger's florid canon rules (the default). florid = the same without the "
+        "two canon rules (a beat's rest before a voice comes back; no phrase starting a 7th or 9th from "
+        "the last). fux-strict = note against note: strict, few results. spectral = no hard rules; the "
+        "cost comes from roughness and parallels. free = no rules: everything is clean. Perpetual: every "
+        "voice loops, so where the melody wraps around is judged too.",
+        "Time slice: the search runs in pieces. The finder works this many ms, lets Max redraw and take "
+        "clicks, then carries on. Smaller = smoother; bigger = finishes sooner. 20 ms is about one "
+        "screen refresh.",
+    ])
+
     # The wiring, below; presentation mode hides it.
-    p.note(HAND_NOTE, 20, 390, 760, 2)
-    engine = p.obj("cg.finder", 20, 440, 1, 1)
+    top = max(left, right) + 20
+    p.note(HAND_NOTE, 20, top, 760, 2)
+    engine = p.obj("cg.finder", 20, top + 50, 1, 1)
     p.connect(run, 0, engine, 0)
     p.connect(stop, 0, engine, 0)
     prepends = {}
-    x, y = 20, 480
+    x, y = 20, top + 90
     for name in ["voices", "intervalfrom", "intervalto", "delayfrom", "delayto", "delaystep", "profile",
                  "perpetual", "slicems"]:
         text = f"prepend {name}"
@@ -979,26 +1019,27 @@ def panel_finder():
         source_outlet = 1 if name == "profile" else 0  # the rules menu sends its item's text
         p.connect(rows[name], source_outlet, prepends[name], 0)
         p.connect(prepends[name], 0, engine, 0)
-    pick = p.obj("prepend pick", 20, 560, 2, 1)
+    pick = p.obj("prepend pick", 20, y + 45, 2, 1)
     p.connect(results, 0, pick, 0)
     p.connect(pick, 0, engine, 0)
 
-    route = p.obj("route results progress error show", 20, 600, 2, 5)
+    y += 85
+    route = p.obj("route results progress error show", 20, y, 2, 5)
     p.connect(engine, 0, route, 0)
     p.connect(route, 0, results, 0)
-    progress = p.obj("prepend set", 290, 600, 2, 1)
+    progress = p.obj("prepend set", 290, y, 2, 1)
     p.connect(route, 1, progress, 0)
     p.connect(progress, 0, line, 0)
-    failed = p.obj("prepend set error:", 395, 600, 2, 1)
+    failed = p.obj("prepend set error:", 395, y, 2, 1)
     p.connect(route, 2, failed, 0)
     p.connect(failed, 0, line, 0)
-    report = p.obj("print finder", 550, 600, 1, 0)
+    report = p.obj("print finder", 550, y, 1, 0)
     p.connect(route, 2, report, 0)
     p.connect(route, 4, report, 0)
     names = list(rows)
-    shows = p.obj("route " + " ".join(names), 20, 640, 2, len(names) + 1)
+    shows = p.obj("route " + " ".join(names), 20, y + 40, 2, len(names) + 1)
     p.connect(route, 3, shows, 0)
-    x, y = 20, 680
+    x, y = 20, y + 80
     for i, name in enumerate(names):
         text = "prepend setsymbol" if name == "profile" else "prepend set"
         w = 7 * len(text) + 14
