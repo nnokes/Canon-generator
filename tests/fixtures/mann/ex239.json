@@ -1,7 +1,6 @@
 {
   "source": "Albrechtsberger, in Mann, The Study of Fugue (1958), p. 261: Ex. 239-240, the perpetual canon for four voices sent to Haydn (1806), 'Solatium miseris socios habuisse dolorum', and Ex. 241, solution 1",
-  "transcription": "C major: degree 0 = C4 (MIDI 60), so 7 = C5. Durations in beats, quarter = 1, bar = 4 (cut time); 13 bars, the last a rest, then the canon repeats. Bars 1-8 read from Ex. 241's soprano and checked against its alto (a fifth below), tenor (an octave below) and bass (a twelfth below). Bars 9-12 read from Ex. 239's second line (soprano clef): the scan is unclear there, so CHECK bars 9-12 against the book. The entries follow the section signs: one, three and four bars after the dux.",
-  "check": "bars 9-12 (D5 | B4 G4 B4 | C5 E5 | D5) need checking against the book",
+  "transcription": "C major: degree 0 = C4 (MIDI 60), so 7 = C5. Durations in beats, quarter = 1, bar = 4 (cut time); 13 bars, the last a rest, then the canon repeats. Bars 1-8 read from Ex. 241's soprano and checked against its alto (a fifth below), tenor (an octave below) and bass (a twelfth below). Bars 9-12 read from Ex. 239's second line (soprano clef), where the scan is unclear, and confirmed against p. 261 of the book (2026-10-18). The entries follow the section signs: one, three and four bars after the dux.",
   "system": { "type": "edo", "divisions": 12, "mode": [0, 2, 4, 5, 7, 9, 11], "ref": { "step": 0, "midi": 60 } },
   "meter": { "beats": 4, "strong": [0] },
   "dux": { "source": "list", "notes": [

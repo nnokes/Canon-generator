@@ -28,7 +28,10 @@ canons hidden in it, for two voices or for N.
 - Started 2026-10-15. Parts A–E are built: 136 tests.
 - **Max session 1** (below): step 1, the MPE pitch check carried in from M2, **passed**
   (median +0.23 cents, implied bend range 1.99).
-- **Next:** session 1's steps 2–5, then part F (the piano roll).
+- Session 1, steps 2, 3 and 5 are done: the finder works on your melody in Max, a click
+  plays the result, and the Haydn transcription is confirmed against the book.
+- **Next:** a 3-voice list in Max (on the round), and the time-slice budget (step 4).
+  Then part F, the piano roll.
 
 ---
 
@@ -183,8 +186,8 @@ canons hidden in it, for two voices or for N.
       239/241), and upper 4th + lower octave + lower 5th (Ex. 240)
     - of the 36 sets, the 15 that pass all enter at the fifth below (or fourth above) and
       the octave, in some register
-    - **check:** I read bars 9–12 of the melody from an unclear scan (D5 | B4 G4 B4 | C5
-      E5 | D5); please compare them with p. 261 (session 1)
+    - bars 9–12 of the melody were read from an unclear scan (D5 | B4 G4 B4 | C5 E5 | D5)
+      and **confirmed against p. 261** in session 1
 
 ## Part E. Max: the finder panel and time slicing: built
 - [x] **`code/cg.finder.v8.js`:**
@@ -298,6 +301,17 @@ edited is regenerated: the new finder panel is new, and your canon panel is unto
    `git checkout -- patchers/cg.panel.finder.maxpat`, then `git pull`, and reopen both
    panels.
 
+   **Third round results (2026-10-18):**
+   - **Steps 2–3 pass:**
+     - the panel opens with the real values
+     - the results menu fills
+     - a click stops, loads and plays the result in the canon panel
+   - **3 voices on your Live clip found no canon.** That's the melody: a set needs two
+     followers that each pass against the clip and also fit each other, and a 13-note clip
+     has few. With delays every 1 (round 2) it did find 20 clean sets.
+   - **Still to do:** a 3-voice list on a melody that has some. The round, with delays 2
+     to 8 every 2, gives 18 sets, 1 of them clean.
+
 2. **The finder, 2 voices:**
    - open `patchers/cg.panel.canon.maxpat` **and** `patchers/cg.panel.finder.maxpat`. The
      finder opens clean, showing voices 2, intervals −9 to 9, delays 1 to 8 every 1,
@@ -320,6 +334,8 @@ edited is regenerated: the new finder panel is new, and your canon panel is unto
      `done` line (its last number is the measured ms per slice)
 5. **Check my transcription:** compare bars 9–12 of the canon for Haydn
    (`tests/fixtures/mann/ex239.json`: D5 | B4 G4 B4 | C5 E5 | D5) with Mann p. 261.
+   **Done (2026-10-18):** you compared Ex. 239 and Ex. 241, bar by bar, with my reading,
+   and all of it matches.
 6. Paste anything from `finder` or `canon-error`, and anything that sounds wrong.
 
 ## Part F. The piano roll (after session 1)
@@ -330,6 +346,7 @@ edited is regenerated: the new finder panel is new, and your canon panel is unto
 | Check | Result | Decision |
 |---|---|---|
 | MPE pitch at Drift's ±2 (from M2; session 1, step 1) | **PASS:** median +0.23 cents (7 of 9 summaries; the others +0.97 and +1.71), min −4.2, max +5.8, all an octave low and folded; implied bend range 1.99 (1.93–2.09) | M2's last exit criterion is met. MPE to Drift bends for ±2; MIDI out stays ±48. |
-| answer finder (Part D) | **PASS** (Node, `tests/finder.test.js`): Ex. 201 gives all eight of Albrechtsberger's answers (plus the unison), and only their octave equivalents besides; Ex. 239–240 gives both solutions | Fourths screened as upper voices until the whole set; a 6/4 hard only on strong beats and in the first and last bars (Mann p. 228) |
+| your melody in Max (session 1) | **PASS for 2 voices:** your Live clip gives a ranked list (1 clean of 152), the menu fills, and a click plays the result in the canon panel. 3 voices: none for the clip (too few followers fit together). | A 3-voice list on the round is still to be seen in Max (it gives 18 sets, 1 clean). |
+| answer finder (Part D) | **PASS** (Node, `tests/finder.test.js`): Ex. 201 gives all eight of Albrechtsberger's answers (plus the unison), and only their octave equivalents besides; Ex. 239–240 gives both solutions. The Haydn transcription is confirmed against p. 261 (session 1). | Fourths screened as upper voices until the whole set; a 6/4 hard only on strong beats and in the first and last bars (Mann p. 228) |
 | Fux golden tests (Part C) | **PASS** (Node, `tests/analyze.test.js`): Fig. 5 clean; Fig. 6 exactly the mode error at bar 1 and the hidden fifth from bar 2 to 3, clean once corrected; Figs. 7–8 hidden fifths in direct motion, parallel fifths once filled in | Rules as `docs/controls.md` lists them |
 | roughness curve (Part A) | **PASS** (Node, `tests/consonance.test.js`): minima at 6/5, 5/4, 4/3, 3/2, 5/3, 2/1 within 2 cents (plus 7/6, 7/5, 7/4), fifth and octave smoother than the third, seconds roughest | Sethares's shape for a harmonic timbre |
