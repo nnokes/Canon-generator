@@ -590,7 +590,7 @@ def finder():
     p = Patch(rect=(80, 80, 680, 380))
     p.note(GENERATED_NOTE, 20, 10, 600, 1)
     inlet = p.inlet(20, 50, "messages: run, stop, settings, voices, intervalfrom, intervalto, delayfrom, delayto, "
-                    "delaystep, profile, perpetual, slicems, pick, info", 0)
+                    "delaystep, profile, perpetual, transform, timescale, slicems, pick, info", 0)
     load = p.obj("loadbang", 110, 50, 1, 1, ["bang"])
     ask = p.msg("settings", 110, 80)
     v8 = p.obj("v8 cg.finder.bundle.js", 20, 115, 1, 1)
@@ -898,7 +898,7 @@ def panel_finder():
     (cost, faults, the status line, the rules, the time slice). Each box sends
     its own message, and the finder echoes every setting back (show ...), so the
     boxes show what it holds."""
-    p = Patch(rect=(60, 60, 840, 780), presentation=True)
+    p = Patch(rect=(60, 60, 840, 860), presentation=True)
     present = p.present
 
     present(p.comment("Answer finder: the canons hidden in a melody", 20, 10, fontsize=16.0, fontface=1, w=420))
@@ -949,24 +949,41 @@ def panel_finder():
     present(loops)
     rows["perpetual"] = loops
 
-    row_label("Time slice, ms", 235)
-    number("slicems", 220, 235, minimum=1, maximum=1000)
-    hint("smaller = smoother, bigger = sooner", 280, 235)
-    run = p.msg("run", 560, 235)
-    stop = p.msg("stop", 605, 235)
-    present(run, stop)
-    hint("abandons the search", 655, 235)
+    # Transforms and time scales: one toggle each. The finder echoes each group
+    # as 0/1 flags, one per toggle (show transforms 1 0 0 0).
+    flags = {"transforms": [], "timescales": []}  # group -> [(toggle, its message)]
 
-    present(p.comment("Results: click one to hear it in the canon panel", 20, 275))
-    results = p.ui("umenu", 20, 300, 760, 22, 1, 3, ["int", "", ""])
+    def toggle(group, message, label, x, y):
+        box = p.ui("toggle", x, y, 22, 22, 1, 1, ["int"])
+        present(box)
+        hint(label, x + 25, y)
+        flags[group].append((box, message))
+
+    row_label("Transforms", 235)
+    for i, t in enumerate(["P", "I", "R", "RI"]):
+        toggle("transforms", f"transform {t}", t, 220 + 60 * i, 235)
+    hint("Time scales", 480, 235)
+    for i, x in enumerate(["0.5", "1", "2"]):
+        toggle("timescales", f"timescale {x}", f"x{x}", 565 + 65 * i, 235)
+
+    row_label("Time slice, ms", 270)
+    number("slicems", 220, 270, minimum=1, maximum=1000)
+    hint("smaller = smoother, bigger = sooner", 280, 270)
+    run = p.msg("run", 560, 270)
+    stop = p.msg("stop", 605, 270)
+    present(run, stop)
+    hint("abandons the search", 655, 270)
+
+    present(p.comment("Results: click one to hear it in the canon panel", 20, 310))
+    results = p.ui("umenu", 20, 335, 760, 22, 1, 3, ["int", "", ""])
     present(results)
-    present(p.comment("Status", 20, 335))
-    line = p.msg("", 75, 335, w=705)
+    present(p.comment("Status", 20, 370))
+    line = p.msg("", 75, 370, w=705)
     present(line)
 
     # How to read it: two columns of wrapped comments. Lines are counted at a
     # generous 52 characters, so Max's own wrapping never clips one.
-    present(p.comment("How to read it", 20, 375, fontface=1))
+    present(p.comment("How to read it", 20, 410, fontface=1))
 
     def column(x, y, paragraphs):
         for text in paragraphs:
@@ -975,7 +992,7 @@ def panel_finder():
             y += 14 + 14 * lines + 8
         return y
 
-    left = column(20, 400, [
+    left = column(20, 435, [
         "A result reads like  3. lower 3rd / after 4: 1 fault / cost 1  (from the round). The 3. is its "
         "rank: fewest faults first, then the lowest cost. lower 3rd / after 4 is the follower: a 3rd below "
         "the melody, coming in 4 beats after it. With 3 or more voices, + joins the followers.",
@@ -984,12 +1001,15 @@ def panel_finder():
         "cost: the soft rules, added up. Each break adds its weight: a hidden fifth or octave 1, a leap "
         "beyond a fifth 0.5, a voice coming back after less than a beat of rest 0.5. Lower is smoother; "
         "no cost shown = 0. Every rule and weight: docs/controls.md",
+        "Transforms: P = the melody as is, I = upside down, R = backwards, RI = both. Time scales: x2 = "
+        "the follower at half speed (augmentation, as in a prolation canon), x0.5 = twice as fast. Each "
+        "tick multiplies the search. In a result, I, R, RI or x2 marks a follower's transform or speed.",
     ])
-    right = column(410, 400, [
+    right = column(410, 435, [
         "Status: done: 3 clean of 152 = 152 followers tried, 3 without faults. With 3 or more voices the "
         "finder tries each follower against the melody alone (pass alone), pairs the ones that pass (fit "
         "together), makes sets only of pairs that fit, and judges each set whole. stopped at the budget "
-        "(in the Max window) = 20000 canons tried: narrow the ranges.",
+        "(in the Max window) = 20000 canons tried: narrow the ranges. No sets: the line says why.",
         "Rules: canon = Albrechtsberger's florid canon rules (the default). florid = the same without the "
         "two canon rules (a beat's rest before a voice comes back; no phrase starting a 7th or 9th from "
         "the last). fux-strict = note against note: strict, few results. spectral = no hard rules; the "
@@ -1000,25 +1020,32 @@ def panel_finder():
         "screen refresh.",
     ])
 
-    # The wiring, below; presentation mode hides it.
+    # The wiring, below; presentation mode hides it. Boxes flow left to right,
+    # wrapping at the panel's width.
     top = max(left, right) + 20
     p.note(HAND_NOTE, 20, top, 760, 2)
     engine = p.obj("cg.finder", 20, top + 50, 1, 1)
     p.connect(run, 0, engine, 0)
     p.connect(stop, 0, engine, 0)
-    prepends = {}
-    x, y = 20, top + 90
-    for name in ["voices", "intervalfrom", "intervalto", "delayfrom", "delayto", "delaystep", "profile",
-                 "perpetual", "slicems"]:
-        text = f"prepend {name}"
+    at = {"x": 20, "y": top + 90}
+
+    def flow(text, ins, outs):
         w = 7 * len(text) + 14
-        if x + w > 800:
-            x, y = 20, y + 35
-        prepends[name] = p.obj(text, x, y, 2, 1)
-        x += w + 10
-        source_outlet = 1 if name == "profile" else 0  # the rules menu sends its item's text
-        p.connect(rows[name], source_outlet, prepends[name], 0)
-        p.connect(prepends[name], 0, engine, 0)
+        if at["x"] + w > 800:
+            at["x"], at["y"] = 20, at["y"] + 35
+        box = p.obj(text, at["x"], at["y"], ins, outs)
+        at["x"] += w + 10
+        return box
+
+    sends = [(rows[name], 1 if name == "profile" else 0, name)  # the rules menu sends its item's text
+             for name in ["voices", "intervalfrom", "intervalto", "delayfrom", "delayto", "delaystep", "profile",
+                          "perpetual", "slicems"]]
+    sends += [(box, 0, message) for group in flags.values() for box, message in group]
+    for source, source_outlet, message in sends:
+        prepend = flow(f"prepend {message}", 2, 1)
+        p.connect(source, source_outlet, prepend, 0)
+        p.connect(prepend, 0, engine, 0)
+    y = at["y"]
     pick = p.obj("prepend pick", 20, y + 45, 2, 1)
     p.connect(results, 0, pick, 0)
     p.connect(pick, 0, engine, 0)
@@ -1036,17 +1063,22 @@ def panel_finder():
     report = p.obj("print finder", 550, y, 1, 0)
     p.connect(route, 2, report, 0)
     p.connect(route, 4, report, 0)
-    names = list(rows)
+    names = list(rows) + list(flags)
     shows = p.obj("route " + " ".join(names), 20, y + 40, 2, len(names) + 1)
     p.connect(route, 3, shows, 0)
-    x, y = 20, y + 80
+    at["x"], at["y"] = 20, y + 80
     for i, name in enumerate(names):
-        text = "prepend setsymbol" if name == "profile" else "prepend set"
-        w = 7 * len(text) + 14
-        if x + w > 800:
-            x, y = 20, y + 35
-        setter = p.obj(text, x, y, 2, 1)
-        x += w + 10
+        if name in flags:
+            # One flag per toggle: unpack, then set each without sending.
+            group = flags[name]
+            unpack = flow("unpack " + " ".join("0" * len(group)), 1, len(group))
+            p.connect(shows, i, unpack, 0)
+            for j, (box, _) in enumerate(group):
+                setter = flow("prepend set", 2, 1)
+                p.connect(unpack, j, setter, 0)
+                p.connect(setter, 0, box, 0)
+            continue
+        setter = flow("prepend setsymbol" if name == "profile" else "prepend set", 2, 1)
         p.connect(shows, i, setter, 0)
         p.connect(setter, 0, rows[name], 0)
     return p

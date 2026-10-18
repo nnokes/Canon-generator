@@ -18,11 +18,16 @@
 //   profile <name>               show profile ...    canon (default), florid, fux-strict, spectral, free
 //   perpetual <0|1>              show perpetual ...  judge a perpetual canon in its steady state
 //   slicems <ms>                 show slicems ...    the time-slice budget: work per slice
+//   transform <P|I|R|RI> <0|1>   show transforms <P> <I> <R> <RI>   one transform on or off;
+//                                the panel's toggles, as 0/1 flags
+//   timescale <x> <0|1>          show timescales <0.5> <1> <2>      one time scale on or off
+//                                (x2 = the follower at half speed); flags for the panel's three
 //   intervals <from> <to>, delays <from> <to> [step]   several at once
-//   transforms <P|I|R|RI ...>, timescales <x ...>, budget <n>
+//   transforms <P|I|R|RI ...>, timescales <x ...>       all at once (echo as above); budget <n>
 //   run                          progress ..., results clear, results append <text> ...,
 //                                results set 0, progress done: ..., done <n> <ms> <slices>
-//                                <ms per slice>, status ... (one line; two for 3+ voices)
+//                                <ms per slice>, status ... (one line; two for 3+ voices, and
+//                                a third saying why when no set was found)
 //   stop                         status stopped
 //   pick <i>                     audition cg.audition (the patch: stop, usespec, play)
 //   info                         status ...
@@ -37,6 +42,9 @@ const finder = require("cg-finder");
 const rules = require("cg-rules");
 
 const TRANSFORMS = ["P", "I", "R", "RI", "segmentRetrograde", "segmentPermute"];
+// The panel's toggles: which transforms and time scales it shows.
+const PANEL_TRANSFORMS = ["P", "I", "R", "RI"];
+const PANEL_SCALES = [0.5, 1, 2];
 // What the panel shows, one entry per box.
 const state = {
   voices: 2, intervalfrom: -9, intervalto: 9, delayfrom: 1, delayto: 8, delaystep: 1,
@@ -94,8 +102,17 @@ function set(name, value) {
 }
 set.local = 1;
 
+// The transforms or time scales held, as one 0/1 flag per panel toggle.
+function showFlags(which) {
+  if (which === "transforms") outlet(0, "show", which, ...PANEL_TRANSFORMS.map((t) => (extra.transforms.includes(t) ? 1 : 0)));
+  else outlet(0, "show", which, ...PANEL_SCALES.map((x) => (extra.timeScales.includes(x) ? 1 : 0)));
+}
+showFlags.local = 1;
+
 function settings() {
   for (const name of Object.keys(state)) show(name);
+  showFlags("transforms");
+  showFlags("timescales");
 }
 
 function voices(n) { set("voices", n); }
@@ -136,6 +153,7 @@ function transforms(...names) {
     if (!names.length) throw new Error("transforms: name at least one");
     extra.transforms = names;
   });
+  showFlags("transforms");
 }
 
 function timescales(...values) {
@@ -144,6 +162,27 @@ function timescales(...values) {
     for (const v of values) number(v, "timescales must be above 0", (x) => x > 0);
     extra.timeScales = values;
   });
+  showFlags("timescales");
+}
+
+// One toggle: a transform on or off. None at all is refused at run, not here,
+// so you can untick P before ticking I.
+function transform(name, on) {
+  attempt(() => {
+    if (!TRANSFORMS.includes(name)) throw new Error(`transform: one of ${TRANSFORMS.join(" ")}, got ${name}`);
+    const rest = extra.transforms.filter((t) => t !== name);
+    extra.transforms = on ? TRANSFORMS.filter((t) => t === name || rest.includes(t)) : rest;
+  });
+  showFlags("transforms");
+}
+
+function timescale(x, on) {
+  attempt(() => {
+    number(x, "timescale must be above 0", (v) => v > 0);
+    const rest = extra.timeScales.filter((v) => v !== x);
+    extra.timeScales = (on ? [...rest, x] : rest).sort((a, b) => a - b);
+  });
+  showFlags("timescales");
 }
 
 function budget(n) {
@@ -155,6 +194,8 @@ function ranges() {
   const s = state;
   if (s.intervalto < s.intervalfrom) throw new Error(`intervals: to (${s.intervalto}) is below from (${s.intervalfrom})`);
   if (s.delayto < s.delayfrom) throw new Error(`delays: to (${s.delayto}) is below from (${s.delayfrom})`);
+  if (!extra.transforms.length) throw new Error("transforms: tick at least one");
+  if (!extra.timeScales.length) throw new Error("time scales: tick at least one");
   return {
     intervals: finder.range(s.intervalfrom, s.intervalto),
     delays: finder.range(s.delayfrom, s.delayto, s.delaystep),
@@ -238,7 +279,10 @@ function finish(value) {
   const ms = Date.now() - search.started;
   const passing = results.filter((r) => r.hard === 0).length;
   const sets = value.voices > 2;
-  if (sets) {
+  const empty = sets ? noSets(value) : null;
+  if (empty) {
+    outlet(0, "progress", "done: no sets:", ...empty);
+  } else if (sets) {
     outlet(0, "progress", "done:", passing, "clean sets of", value.tried, "/", value.passingFollowers, "of",
       value.followersTried, "followers pass alone /", value.pairsOk, "pairs fit together");
   } else {
@@ -252,9 +296,28 @@ function finish(value) {
     outlet(0, "status", "finder:", value.passingFollowers, "of", value.followersTried,
       "followers pass against the dux alone,", value.pairsOk, "pairs of them work together");
   }
+  if (empty) outlet(0, "status", "finder: no sets:", ...empty);
   search = null;
 }
 finish.local = 1;
+
+// Why a complete 3+ voice search found no set, from the first stage that came up
+// empty, and what to try (M3 session 1: 154 pairs fit on a 13-note clip, but no
+// three followers all fit each other; at time scale x2 there were 10 clean sets).
+// A search stopped at the budget says so on its status line instead.
+function noSets(value) {
+  if (value.tried > 0 || !value.complete) return null;
+  const k = value.voices - 1;
+  if (value.passingFollowers < k) {
+    return ["only", value.passingFollowers, "of", value.followersTried, "followers pass against the melody and a set needs", k,
+      "/ widen the intervals or delays or tick more transforms or time scales"];
+  }
+  if (value.pairsOk === 0) {
+    return ["no two passing followers fit each other / try time scale x2 or other transforms or other delays"];
+  }
+  return ["no", k, "followers all fit each other: each pair must be a canon too / try time scale x2 or other transforms or wider delays"];
+}
+noSets.local = 1;
 
 function round(x) {
   return Math.round(x * 100) / 100;

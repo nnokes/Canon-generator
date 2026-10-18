@@ -238,15 +238,25 @@ test("cg.finder: a pick plays at once: stop, then usespec, then play, to the can
 test("the finder panel opens in presentation mode, with each setting wired both ways", () => {
   const { patcher, byText, from } = wiring("patchers/cg.panel.finder.maxpat");
   assert.equal(patcher.openinpresentation, 1);
-  const shows = byText("route voices intervalfrom intervalto delayfrom delayto delaystep profile perpetual slicems");
+  const shows = byText("route voices intervalfrom intervalto delayfrom delayto delaystep profile perpetual slicems "
+    + "transforms timescales");
   assert.ok(shows, "show <name> sets each control");
   const names = shows.text.split(/\s+/).slice(1);
+  // The transforms and time scales come back as one 0/1 flag per toggle, in this order.
+  const toggles = { transforms: ["transform P", "transform I", "transform R", "transform RI"],
+    timescales: ["timescale 0.5", "timescale 1", "timescale 2"] };
   names.forEach((name, i) => {
-    const setter = from(shows, i)[0];
-    const control = from(setter)[0];
-    assert.ok(control.presentation, `${name}: its control is in the presentation`);
-    const sends = from(control).map((b) => b.text);
-    assert.ok(sends.includes(`prepend ${name}`), `${name}: the control sends its own message`);
+    const first = from(shows, i)[0];
+    const pairs = toggles[name]
+      ? toggles[name].map((message, j) => [from(first, j)[0], message])
+      : [[first, name]];
+    if (toggles[name]) assert.equal(first.text, `unpack ${toggles[name].map(() => 0).join(" ")}`);
+    for (const [setter, message] of pairs) {
+      const control = from(setter)[0];
+      assert.ok(control.presentation, `${message}: its control is in the presentation`);
+      const sends = from(control).map((b) => b.text);
+      assert.ok(sends.includes(`prepend ${message}`), `${message}: the control sends its own message`);
+    }
   });
   assert.ok(from(byText("route results progress error show"), 0)[0].maxclass === "umenu", "results fill the menu");
 });
@@ -255,7 +265,7 @@ test("the finder panel explains its words where you see them: cost, faults, the 
   const { boxes } = wiring("patchers/cg.panel.finder.maxpat");
   const shown = [...boxes.values()].filter((b) => b.presentation && b.maxclass === "comment").map((b) => b.text).join("\n");
   for (const word of ["clean:", "A fault", "cost:", "Status:", "pass alone", "fit together", "stopped at the budget",
-    "Perpetual:", "Time slice:"]) {
+    "Perpetual:", "Time slice:", "Transforms:", "Time scales:", "No sets: the line says why"]) {
     assert.ok(shown.includes(word), `the panel explains ${word}`);
   }
   for (const name of require("cg-rules").profiles()) assert.ok(shown.includes(`${name} =`), `the panel explains the ${name} rules`);

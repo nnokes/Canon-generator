@@ -81,6 +81,41 @@ test("Mann Ex. 239-240: the four-voice search finds both solutions of the canon 
   }
 });
 
+// M3 session 1: a 4-voice run on the user's clip found 154 pairs that fit and no
+// set. Each pair of followers is a canon too, and no three of them fit pairwise:
+// the sets are exactly the triangles of the pair graph. A follower at half speed
+// (x2, augmentation) gives clean sets.
+test("your clip: no 4-voice set at one speed; at x2 clean sets, exactly the triangles of fitting pairs", () => {
+  const io = require("cg-io");
+  const round = require("cg-presets").preset(0);
+  const system = (round.groups ? round.groups[0] : round).system;
+  const parsed = io.parseMidi(fs.readFileSync(path.join(__dirname, "fixtures", "live-clip.mid")));
+  const dux = { source: "list", notes: io.melodyFromMidi(parsed, { system: scales.fromSpec(system) }).notes };
+  const base = { dux, system, meter: round.meter };
+  const ranges = { intervals: finder.range(-9, 9), delays: finder.range(1, 8) };
+  const plain = finder.find({ ...base, voices: 4, ranges });
+  assert.equal(plain.tried, 0);
+  assert.ok(plain.pairsOk > 0, "pairs fit, but no three followers all fit each other");
+
+  const halfSpeed = { ...ranges, timeScales: [1, 2] };
+  const four = finder.find({ ...base, voices: 4, ranges: halfSpeed });
+  const clean = four.results.filter((r) => r.hard === 0);
+  assert.equal(clean.length, 10);
+  assert.equal(clean[0].label, "upper 5th, after 1 + upper 9th, after 3, x2 + lower 5th, after 6, x2");
+  // The pairs that fit (the 3-voice sets), and their triangles, by brute force.
+  const three = finder.find({ ...base, voices: 3, ranges: halfSpeed, keep: Infinity });
+  const key = (s) => `${s.interval.steps}@${s.delay}x${s.timeScale}`;
+  const fits = new Set(three.results.map((r) => r.settings.map(key).sort().join(" ")));
+  const nodes = [...new Set(three.results.flatMap((r) => r.settings.map(key)))];
+  const fit = (a, b) => fits.has([a, b].sort().join(" "));
+  let triangles = 0;
+  nodes.forEach((a, i) => nodes.slice(i + 1).forEach((b, j) => {
+    if (fit(a, b)) for (const c of nodes.slice(i + j + 2)) if (fit(a, c) && fit(b, c)) triangles++;
+  }));
+  assert.equal(three.tried, three.pairsOk);
+  assert.equal(four.tried, triangles);
+});
+
 test("search: a generator that reports progress, stops at its budget, and gives specs that render", () => {
   const fx = fixture("ex201.json");
   const options = { dux: fx.dux, system: fx.system, meter: fx.meter, ranges: { intervals: [0, 7], delays: [2, 4, 6, 8] } };

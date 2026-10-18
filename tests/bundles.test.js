@@ -506,7 +506,8 @@ test("cg.mpecheck: the target Hz, and what 'off' says about the readings left", 
 test("cg.finder exposes exactly its documented messages", () => {
   assert.deepEqual(loadBundle("cg.finder").handlers(), [
     "budget", "delayfrom", "delays", "delaystep", "delayto", "info", "intervalfrom", "intervals", "intervalto",
-    "perpetual", "pick", "profile", "run", "settings", "slicems", "stop", "timescales", "transforms", "voices",
+    "perpetual", "pick", "profile", "run", "settings", "slicems", "stop", "timescale", "timescales", "transform",
+    "transforms", "voices",
   ]);
 });
 
@@ -609,7 +610,7 @@ test("cg.finder: settings shows every box's value, and each setting echoes what 
   const bundle = loadBundle("cg.finder");
   assert.deepEqual(select(bundle.send("settings"), "show"), [
     ["voices", 2], ["intervalfrom", -9], ["intervalto", 9], ["delayfrom", 1], ["delayto", 8], ["delaystep", 1],
-    ["profile", "canon"], ["perpetual", 0], ["slicems", 20],
+    ["profile", "canon"], ["perpetual", 0], ["slicems", 20], ["transforms", 1, 0, 0, 0], ["timescales", 0, 1, 0],
   ]);
   assert.deepEqual(select(bundle.send("delaystep", 0.5), "show"), [["delaystep", 0.5]]);
   assert.deepEqual(select(bundle.send("delaystep", 0), "show"), [["delaystep", 0.5]], "0 is refused: it snaps back");
@@ -629,6 +630,67 @@ test("cg.finder: a run that finds nothing says so in the menu", () => {
   assert.match(errors(bundle.send("pick", 0))[0], /no result 0: the last run found 0/);
 });
 
+test("cg.finder: a 3+ voice run with no sets says why, from the first stage that came up empty", () => {
+  loadBundle("cg.canon").send("preset", 0);
+  const bundle = loadBundle("cg.finder");
+  const why = (out) => [select(out, "progress").at(-1).join(" "), select(out, "status").at(-1).join(" ")];
+  // One setting: a single follower, and a set needs two.
+  bundle.send("voices", 3);
+  bundle.send("intervals", 1, 1);
+  bundle.send("delays", 4, 4);
+  bundle.send("run");
+  const [few, fewStatus] = why(bundle.tick().out);
+  assert.match(few, /^done: no sets: only \d of 1 followers pass against the melody and a set needs 2 \/ widen/);
+  assert.match(fewStatus, /^finder: no sets: only/);
+  // Two followers pass, but they don't fit each other.
+  bundle.send("intervals", -7, 0);
+  bundle.send("delays", 4, 8, 4);
+  bundle.send("run");
+  assert.match(why(bundle.tick().out)[0], /^done: no sets: no two passing followers fit each other \/ try time scale x2/);
+});
+
+test("cg.finder: your clip makes no 4-voice canon at one speed, and 10 clean ones with a follower at half speed", () => {
+  const canonBundle = loadBundle("cg.canon");
+  canonBundle.send("preset", 0);
+  canonBundle.send("loadmidi", path.join(FIXTURES, "live-clip.mid"));
+  const bundle = loadBundle("cg.finder");
+  bundle.send("voices", 4);
+  bundle.send("run");
+  const plain = bundle.tick().out;
+  assert.match(select(plain, "progress").at(-1).join(" "),
+    /^done: no sets: no 3 followers all fit each other: each pair must be a canon too \/ try time scale x2/);
+  assert.match(select(plain, "status")[1].join(" "), /\d+ of 152 followers pass against the dux alone, [1-9]\d* pairs/);
+  assert.deepEqual(select(bundle.send("timescale", 2, 1), "show"), [["timescales", 0, 1, 1]]);
+  bundle.send("run");
+  const out = bundle.tick().out;
+  assert.match(select(out, "progress").at(-1).join(" "), /^done: 10 clean sets of \d+ \//);
+  const top = select(out, "results").find((r) => r[0] === "append")[1];
+  assert.equal(top, "1. upper 5th / after 1 + upper 9th / after 3 / x2 + lower 5th / after 6 / x2: clean");
+});
+
+test("cg.finder: transform and time scale toggles echo as flags; none ticked is refused at run", () => {
+  loadBundle("cg.canon").send("preset", 0);
+  const bundle = loadBundle("cg.finder");
+  assert.deepEqual(select(bundle.send("transform", "I", 1), "show"), [["transforms", 1, 1, 0, 0]]);
+  assert.deepEqual(select(bundle.send("transform", "RI", 1), "show"), [["transforms", 1, 1, 0, 1]]);
+  assert.deepEqual(select(bundle.send("transform", "P", 0), "show"), [["transforms", 0, 1, 0, 1]]);
+  assert.deepEqual(select(bundle.send("timescale", 0.5, 1), "show"), [["timescales", 1, 1, 0]]);
+  assert.deepEqual(select(bundle.send("timescale", 1, 0), "show"), [["timescales", 1, 0, 0]]);
+  // The list messages set them all at once, and echo the same way.
+  assert.deepEqual(select(bundle.send("transforms", "R"), "show"), [["transforms", 0, 0, 1, 0]]);
+  assert.deepEqual(select(bundle.send("timescales", 1, 2), "show"), [["timescales", 0, 1, 1]]);
+  assert.match(errors(bundle.send("transform", "X", 1))[0], /transform: one of P I R RI/);
+  bundle.send("transform", "R", 0);
+  assert.match(errors(bundle.send("run"))[0], /transforms: tick at least one/);
+  bundle.send("transform", "P", 1);
+  bundle.send("timescale", 1, 0);
+  bundle.send("timescale", 2, 0);
+  assert.match(errors(bundle.send("run"))[0], /time scales: tick at least one/);
+  bundle.send("timescale", 1, 1);
+  assert.deepEqual(errors(bundle.send("run")), []);
+  bundle.send("stop");
+});
+
 test("cg.finder: with 3+ voices it says how many followers and pairs got through", () => {
   loadBundle("cg.canon").send("preset", 0);
   const bundle = loadBundle("cg.finder");
@@ -639,4 +701,5 @@ test("cg.finder: with 3+ voices it says how many followers and pairs got through
   const lines = select(bundle.tick().out, "status").map((s) => s.join(" "));
   assert.match(lines[0], /^finder: \d+ clean of \d+ sets tried in/);
   assert.match(lines[1], /^finder: \d+ of 16 followers pass against the dux alone, \d+ pairs of them work together$/);
+  assert.match(lines[2], /^finder: no sets: no two passing followers fit each other/);
 });

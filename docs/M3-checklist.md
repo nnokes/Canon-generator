@@ -213,6 +213,16 @@ canons hidden in it, for two voices or for N.
   - run / stop / info
   - the results menu (click to audition) and a progress line; `[print finder]` for the
     rest
+- [x] **Added in session 1:**
+  - **"How to read it":** the panel explains its words where you see them: a result's
+    rank, clean, fault and cost; the status line; each rule profile; the time slice
+  - **Transforms (P, I, R, RI) and time scales (x0.5, x1, x2)** as toggles. The finder
+    could already search them, but the panel had no controls. Each toggle sends
+    `transform <name> <0|1>` or `timescale <x> <0|1>`, and the finder echoes each group
+    as flags (`show transforms 1 0 0 0`).
+  - **Why no sets:** a 3+ voice run that finds no set says why, from the first stage
+    that came up empty (too few followers pass; no two fit; no N all fit each other),
+    and what to try
 - [x] **Tests:**
   - the `[v8]` simulation has a `Task` now, driven tick by tick
   - the finder's message list, and bad values reported, not thrown
@@ -312,6 +322,21 @@ edited is regenerated: the new finder panel is new, and your canon panel is unto
    - **Still to do:** a 3-voice list on a melody that has some. The round, with delays 2
      to 8 every 2, gives 18 sets, 1 of them clean.
 
+   **4 voices on your clip (2026-10-18):** `0 clean of 0 sets`, although 40 of 348
+   followers passed alone and 154 pairs fit.
+   - **Not a bug:** a set needs three followers that all fit each other pairwise, the
+     triangles of the pair graph. A brute-force count of them matches the finder's set
+     search (a test checks it).
+   - **The melody, at one speed:** each pair of followers is a canon too. The clip is a
+     rising, mostly stepwise 16-beat line. At x1 only a few delays work against it (1,
+     1.5 and 2 beats, or 8 and more), and no three of those work with each other.
+     Allowing up to 2 faults per pair doesn't help: the best 4-voice set has 6.
+   - **Augmentation works:** a follower at half speed. At the default ranges plus x2,
+     4 voices give 10 clean sets, the top one `upper 5th, after 1 + upper 9th, after
+     3, x2 + lower 5th, after 6, x2`, and 3 voices give 35.
+   - **So the panel gains transform and time-scale toggles,** and a run with no sets
+     says why (Part E).
+
 2. **The finder, 2 voices:**
    - open `patchers/cg.panel.canon.maxpat` **and** `patchers/cg.panel.finder.maxpat`. The
      finder opens clean, showing voices 2, intervals −9 to 9, delays 1 to 8 every 1,
@@ -346,7 +371,7 @@ edited is regenerated: the new finder panel is new, and your canon panel is unto
 | Check | Result | Decision |
 |---|---|---|
 | MPE pitch at Drift's ±2 (from M2; session 1, step 1) | **PASS:** median +0.23 cents (7 of 9 summaries; the others +0.97 and +1.71), min −4.2, max +5.8, all an octave low and folded; implied bend range 1.99 (1.93–2.09) | M2's last exit criterion is met. MPE to Drift bends for ±2; MIDI out stays ±48. |
-| your melody in Max (session 1) | **PASS for 2 voices:** your Live clip gives a ranked list (1 clean of 152), the menu fills, and a click plays the result in the canon panel. 3 voices: none for the clip (too few followers fit together). | A 3-voice list on the round is still to be seen in Max (it gives 18 sets, 1 clean). |
+| your melody in Max (session 1) | **PASS for 2 and 3 voices:** your Live clip gives a ranked list (1 clean of 152), the menu fills, and a click plays the result in the canon panel. The round gives 18 three-voice sets (1 clean), and picked sets play. 4 voices on the clip: no set at x1 (no three followers fit each other pairwise). | Transform and time-scale toggles on the panel, and a reason when no set is found. At x2 the clip gives 10 clean 4-voice sets (Node); to be seen in Max. |
 | answer finder (Part D) | **PASS** (Node, `tests/finder.test.js`): Ex. 201 gives all eight of Albrechtsberger's answers (plus the unison), and only their octave equivalents besides; Ex. 239–240 gives both solutions. The Haydn transcription is confirmed against p. 261 (session 1). | Fourths screened as upper voices until the whole set; a 6/4 hard only on strong beats and in the first and last bars (Mann p. 228) |
 | Fux golden tests (Part C) | **PASS** (Node, `tests/analyze.test.js`): Fig. 5 clean; Fig. 6 exactly the mode error at bar 1 and the hidden fifth from bar 2 to 3, clean once corrected; Figs. 7–8 hidden fifths in direct motion, parallel fifths once filled in | Rules as `docs/controls.md` lists them |
 | roughness curve (Part A) | **PASS** (Node, `tests/consonance.test.js`): minima at 6/5, 5/4, 4/3, 3/2, 5/3, 2/1 within 2 cents (plus 7/6, 7/5, 7/4), fifth and octave smoother than the third, seconds roughest | Sethares's shape for a harmonic timbre |

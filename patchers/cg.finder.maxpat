@@ -48,7 +48,7 @@
 			{
 				"box": {
 					"maxclass": "inlet",
-					"comment": "messages: run, stop, settings, voices, intervalfrom, intervalto, delayfrom, delayto, delaystep, profile, perpetual, slicems, pick, info",
+					"comment": "messages: run, stop, settings, voices, intervalfrom, intervalto, delayfrom, delayto, delaystep, profile, perpetual, transform, timescale, slicems, pick, info",
 					"index": 0,
 					"numinlets": 0,
 					"numoutlets": 1,
