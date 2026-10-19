@@ -24,16 +24,24 @@ canons hidden in it, for two voices or for N.
   staying responsive.
 - **The roughness curve** matches Sethares's published shape for a harmonic timbre.
 
-**Status:**
-- Started 2026-10-15. Parts A–E are built: 136 tests.
-- **Max session 1** (below): step 1, the MPE pitch check carried in from M2, **passed**
-  (median +0.23 cents, implied bend range 1.99).
-- Session 1 is done: the finder works on your melody in Max (2 and 3 voices), a click
-  plays the result, the Haydn transcription is confirmed against the book, and the
-  time-slice budget is recorded (provisionally: 400 ms still felt smooth; recheck in M4).
-- **Part F is built:** the piano roll, in a tidied canon panel. 158 tests.
-- **Next:** Max session 2 (below): look at the roll and the new canon panel. Then M3
-  closes.
+**Status: closed 2026-10-19** (started 2026-10-15). 159 tests. Every exit criterion is
+met:
+- **Fux golden tests** (Figs. 5–8): PASS in Node (`tests/analyze.test.js`).
+- **Answer-finder golden tests** (Mann Ex. 201; Ex. 239–240): PASS in Node
+  (`tests/finder.test.js`); the Haydn transcription confirmed against the book.
+- **Your melody:** PASS in Max (sessions 1 and 2): ranked 2- and 3-voice lists, a click
+  auditions the result, and 4-voice sets at x2.
+- **Time-slice budget:** recorded, 400 ms (provisional), and the interface stays
+  responsive (session 1).
+- **Roughness curve:** PASS in Node (`tests/consonance.test.js`).
+- Also passed: the MPE pitch check carried in from M2 (session 1), and the piano roll
+  in a tidied canon panel (session 2).
+
+**Carried into M4:**
+- recheck the time-slice budget with the generator's longer searches, and on a slower
+  machine
+- the finder's edits toggle (`allowEdits`, already in M4's scope): the answer to your
+  clip at x1, where no three followers fit each other
 
 ---
 
@@ -436,7 +444,12 @@ roll showed nothing**, and no cord went into its `[v8ui]`.
   - real cords into the roll: its renders from the route, and the playhead
   - a drawing error is posted to the Max window (`roll: ...`) and shown in the roll
 
-**Second round:** the canon panel was remade again, so discard your copy: in the repo folder run `git
+**Second round (2026-10-19): PASS.** The roll draws the round in its voice colours
+with markers and the dissonance curve, the playhead follows the music, the rules menu
+changes the markers, a click names a marker, and the roll follows your clip and a picked
+finder result (4 voices, x2).
+
+The steps, as run: the canon panel was remade again, so discard your copy: in the repo folder run `git
 checkout -- patchers/cg.panel.canon.maxpat`, then `git pull`. Your MIDI-out port choice
 went with it: double-click `[midiout]` (wiring column) to choose it again.
 1. Open `patchers/cg.panel.canon.maxpat`. Check the layout reads clearly: controls on the
@@ -460,9 +473,9 @@ went with it: double-click `[midiout]` (wiring column) to choose it again.
 | Check | Result | Decision |
 |---|---|---|
 | MPE pitch at Drift's ±2 (from M2; session 1, step 1) | **PASS:** median +0.23 cents (7 of 9 summaries; the others +0.97 and +1.71), min −4.2, max +5.8, all an octave low and folded; implied bend range 1.99 (1.93–2.09) | M2's last exit criterion is met. MPE to Drift bends for ±2; MIDI out stays ±48. |
-| your melody in Max (session 1) | **PASS for 2 and 3 voices:** your Live clip gives a ranked list (1 clean of 152), the menu fills, and a click plays the result in the canon panel. The round gives 18 three-voice sets (1 clean), and picked sets play. 4 voices on the clip: no set at x1 (no three followers fit each other pairwise). | Transform and time-scale toggles on the panel, and a reason when no set is found. At x2 the clip gives 10 clean 4-voice sets (Node); to be seen in Max. |
+| your melody in Max (session 1) | **PASS for 2 and 3 voices:** your Live clip gives a ranked list (1 clean of 152), the menu fills, and a click plays the result in the canon panel. The round gives 18 three-voice sets (1 clean), and picked sets play. 4 voices on the clip: no set at x1 (no three followers fit each other pairwise). | Transform and time-scale toggles on the panel, and a reason when no set is found. At x2 the clip gives 10 clean 4-voice sets, seen in Max (session 2). |
 | answer finder (Part D) | **PASS** (Node, `tests/finder.test.js`): Ex. 201 gives all eight of Albrechtsberger's answers (plus the unison), and only their octave equivalents besides; Ex. 239–240 gives both solutions. The Haydn transcription is confirmed against p. 261 (session 1). | Fourths screened as upper voices until the whole set; a 6/4 hard only on strong beats and in the first and last bars (Mann p. 228) |
 | Fux golden tests (Part C) | **PASS** (Node, `tests/analyze.test.js`): Fig. 5 clean; Fig. 6 exactly the mode error at bar 1 and the hidden fifth from bar 2 to 3, clean once corrected; Figs. 7–8 hidden fifths in direct motion, parallel fifths once filled in | Rules as `docs/controls.md` lists them |
 | time-slice budget (session 1, step 4) | **400 ms felt smooth** on a 2.7 s search (the first try's searches were too short to stutter) | **Provisional: 400 ms.** The default stays 20. Recheck in M4 (longer searches) and on a slower machine. |
-| piano roll (Part F) | Built; tested in Node (layout, drawing calls, the canon panel's wiring) | To be seen in Max (session 2) |
+| piano roll (Part F) | **PASS** in Max (session 2, second round): colours, markers, the curve, the playhead, rules, click-to-name; follows your clip and finder picks. The first round drew nothing (a function named `refresh`, a jsui built-in). | The message is `rendered`; a test forbids Max built-in names in wrappers; the roll gets real cords. |
 | roughness curve (Part A) | **PASS** (Node, `tests/consonance.test.js`): minima at 6/5, 5/4, 4/3, 3/2, 5/3, 2/1 within 2 cents (plus 7/6, 7/5, 7/4), fifth and octave smoother than the third, seconds roughest | Sethares's shape for a harmonic timbre |
