@@ -14,19 +14,22 @@
 //   now    the slice and the motion into it, the melodic rules on the notes
 //          that start there, and the begin rules: a window of the slices just
 //          before it (BACK of them) and each voice's last BACK notes
-//   next   the rules that need the following note (a dissonance's resolution):
-//          the same window plus the next slice and each voice's next note
+//   next   the rules that need the following slice (a dissonance's resolution;
+//          the penultimate, at the slice before the last): the same window plus
+//          the next slice and each voice's next note
 // Each counts only the violations the analyzer reports at that slice, so every
 // violation of the whole canon is counted once. A check is ready as soon as
-// every dux note in its window has a pitch. The rules about the canon's end
-// (end-perfect, penultimate, mode-final) and the ending's slices (a cadence
-// built on the last notes) are judged once the dux is complete, on the whole
-// canon (full()).
+// every dux note in its window has a pitch. The analyzer is told the whole
+// canon's edges, so the begin and end rules judge the canon, not the window
+// (mode-final needs options.final for that; without it, it waits for the whole
+// canon). The ending's slices (a cadence built on the last notes) and the
+// roughness ceiling's window means are judged once the dux is complete, on the
+// whole canon (full()).
 //
 //   model(options) -> {
 //     variables   the dux notes to give pitches (indices of non-rests)
 //     degrees     the candidate degrees, low to high
-//     checks      [{ slice, t, kind: "now"|"next", indices }]
+//     checks      [{ slice, t, kind: "now"|"next", indices, profile }]
 //     check(c, dux) -> violations at the check's slice (dux: degree per note,
 //                      undefined where unassigned)
 //     spec(dux)   the canon spec with these degrees
@@ -48,10 +51,11 @@ const consonance = require("cg-consonance");
 const tuning = require("cg-tuning");
 const time = require("cg-time");
 
-// Rules that read the next note: a dissonance's resolution.
-const LOOKAHEAD = ["dissonance-treatment"];
-// Rules about the canon's end, judged on the whole canon only.
-const AT_END = ["end-perfect", "penultimate", "mode-final", "roughness-ceiling"];
+// Rules that read the next slice: a dissonance's resolution; the penultimate
+// (reported at the slice before the last, judged with the last).
+const LOOKAHEAD = ["dissonance-treatment", "penultimate"];
+// Rules judged on the whole canon only: the roughness ceiling's window means.
+const AT_END = ["roughness-ceiling"];
 const BACK = 4; // slices (and each voice's notes) a check looks back
 
 function check(condition, message) {
@@ -76,9 +80,12 @@ function model(options) {
   const profile = rules.resolve(options.profile);
   const ids = Object.keys(profile.rules);
   const final = options.final !== undefined ? tuning.degreeToPitch(system, options.final) : undefined;
+  const atEnd = final === undefined ? [...AT_END, "mode-final"] : AT_END; // mode-final's final: voice 0's last note
   const subProfile = (only) => ({ ...profileSpec(options.profile), only: ids.filter(only) });
-  const nowProfile = subProfile((id) => !LOOKAHEAD.includes(id) && !AT_END.includes(id));
-  const nextProfile = subProfile((id) => LOOKAHEAD.includes(id));
+  const nowProfile = subProfile((id) => !LOOKAHEAD.includes(id) && !atEnd.includes(id));
+  // The next check's rules at a slice: penultimate only before the last slice.
+  const nextProfileAt = (s) => subProfile((id) => LOOKAHEAD.includes(id) && !atEnd.includes(id)
+    && (id !== "penultimate" || (s + 1 < onsets.length && time.eq(onsets[s + 1], edges.last))));
   const firstVar = variables[0];
 
   const withDegrees = (dux) => ({
@@ -142,19 +149,19 @@ function model(options) {
 
   const checks = [];
   onsets.forEach((t, s) => {
-    for (const kind of nextProfile.only.length ? ["now", "next"] : ["now"]) {
+    for (const [kind, profile] of [["now", nowProfile], ["next", nextProfileAt(s)]]) {
+      if (!profile.only.length) continue;
       const events = window(s, kind === "next");
       if (events.some(coda)) continue; // judged with the whole canon
       const indices = [...new Set(events.map((i) => skeleton[i].index))].sort((a, b) => a - b);
-      checks.push({ slice: s, t, kind, events, indices });
+      checks.push({ slice: s, t, kind, events, indices, profile });
     }
   });
 
   function checkOne(c, dux) {
     const events = c.events.map((i) => ({ ...skeleton[i], pitch: pitchOf(i, dux) }));
     const report = analyze.analyze({ events }, {
-      system, meter, consonance: model_, final, edges, metrics: false,
-      profile: c.kind === "now" ? nowProfile : nextProfile,
+      system, meter, consonance: model_, final, edges, metrics: false, profile: c.profile,
     });
     return report.violations.filter((v) => time.eq(v.t, c.t));
   }
@@ -165,7 +172,6 @@ function model(options) {
 
   return {
     variables, degrees, checks, skeleton, onsets, edges,
-    profiles: { now: nowProfile, next: nextProfile }, // the rules each kind of check runs
     check: checkOne,
     full,
     spec: (dux) => withDegrees(dux),

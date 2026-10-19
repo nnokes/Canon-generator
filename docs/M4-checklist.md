@@ -83,31 +83,45 @@ exists.
   - an inverting follower's pitches follow the first note
   - a check takes about 0.1 ms
 
-## Part B. The search (engine: `code/lib/cg-generate.js`)
-- [ ] **Depth-first, with backtracking.**
-  - each note's candidates: the scale degrees in the dux's range, ordered by soft cost
-    plus a seeded jitter (`cg-rng`), so the same seed gives the same canon
+## Part B. The search (engine: `code/lib/cg-generate.js`): done
+- [x] **Depth-first, with backtracking.**
+  - each note's candidates: the degrees in the dux's range. A candidate that breaks a
+    hard rule in the checks it completes is left out; the rest are tried in order of
+    the soft cost they add, plus a seeded jitter (`cg-rng`), so the same seed gives the
+    same canon
   - **variable order:** left to right (the treatise chain); outside-in (first, last,
     second, second-to-last, ...) when any voice is R or RI, so crab and table canons are
     checked early
-- [ ] **A node budget**, with the best canon so far as the fallback.
-- [ ] **Beam mode:** keep the best *B* partial duxes.
-- [ ] **Fixed notes:** a given cantus firmus, or the notes you lock.
-- [ ] **Diagnostics:** count which rules forced each backtrack. When no canon exists for
-  the settings, the report names the rule that blocks it (a light version of FuxCP's
-  minimal unsatisfiable subsets).
-- [ ] **A generator function**, like the finder's: it yields progress, so the `[v8]`
-  wrapper runs it in time slices.
-- [ ] **Tests:** the same seed gives the same canon; another seed, another canon; the
-  budget stops the search and returns the best so far; an impossible setting names its
-  blocking rule.
+  - each finished dux: the whole canon analyzed (`full`), for the ending and anything
+    a window can't see
+- [x] **A node budget** (candidate notes tried; default 100,000), with the best complete
+  canon so far (fewest hard faults, then cost) as the fallback.
+- [x] **Beam mode:** keep the best *B* partial duxes, a note further each round.
+- [x] **Fixed notes:** `fixed: { index: degree }`, for a cantus firmus or the notes you
+  lock.
+- [x] **Diagnostics:** how often each rule rejected a candidate, and the rule that
+  stopped the deepest note reached, named when no canon is found.
+- [x] **A generator function**, like the finder's: it yields progress (`nodes`, `depth`)
+  every 64 steps, so the `[v8]` wrapper can run it in time slices.
+- [x] **Tests** (`tests/generate.test.js`):
+  - a canon at the fifth is found, and passes `fux-strict` analyzed afresh
+  - the same seed gives the same canon, and other seeds give others
+  - fixed notes keep their degree
+  - the budget stops the search and says so
+  - no canon: the blocking rule is named. With one degree only, `repeat`; started
+    on G with the follower a fifth up, `mode-final` (it would enter on D over a bass
+    that must be the final)
+  - beam mode finds a canon; the generator yields progress; the variable orders
 
 ## Part C. Two-voice strict canons
 - [ ] **First species:** one note per bar, in a mode. Settings: the final, the range, and
   the dux's length. Rule profile `fux-strict`.
-- [ ] **The ending:** the follower is cut where the dux ends, and a cadence follows (the
-  M2 `free-cadence`, 7-6 | 8 or 2-3 | 1). The search checks the join into the cadence
-  with the close.
+- [x] **The ending:** the follower is cut where the dux ends, and a cadence follows
+  (`free-cadence`). M2's formulas (7-6 | 8, 2-3 | 1) open on a suspension, a dissonance
+  first species forbids, so every first-species canon failed at its close. Two
+  first-species closes are added (Fux pp. 28-29): **6 | 8** (re under ti, opening to the
+  octave) and **3 | 1** (ti under re, closing to the unison), and a formula now has any
+  number of chords. The whole-canon analysis judges the join into the cadence.
 - [ ] **Exit test:** canons at the octave, fifth and fourth, each with delays of 1, 2, 3
   and 4 bars, all pass the full analysis with no hard faults.
 - [ ] **A 32-note canon:** time and node count in Node, for Part G.
@@ -169,7 +183,7 @@ a round, a 32-note canon at several slice sizes, and a repair of your clip.
 | Check | Result | Decision |
 |---|---|---|
 | incremental checks = full analysis (Part A) | **PASS** (Node, `tests/constraints.test.js`): every check equals the whole canon's analysis at its slice, for random duxes, first species and florid | The analyzer takes the canon's edges; end rules judged on the whole canon |
-| same seed, same canon (Part B) | | |
+| same seed, same canon (Part B) | **PASS** (Node, `tests/generate.test.js`) | The seed orders equal-cost candidates |
 | 2-voice canons at the 8ve, 5th, 4th; delays 1–4 bars (Part C) | | |
 | `fux-relaxed` (Part D) | | |
 | rounds by the block method (Part E) | | |

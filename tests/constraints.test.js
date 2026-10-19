@@ -23,14 +23,15 @@ const tags = (list) => list.map(tag).sort();
 
 // For a complete dux: every check against the whole canon's analysis, with the
 // same rules, at the check's slice.
-function agree(m, spec, dux, profileOf) {
+function agree(m, spec, dux, final) {
   const rendered = canon.render(m.spec(dux));
-  const whole = {};
-  for (const kind of ["now", "next"]) {
-    whole[kind] = analyze.analyze(rendered, { system: scales.fromSpec(spec.system), meter: spec.meter, profile: m.profiles[kind], ...profileOf });
-  }
+  const whole = new Map(); // the check's rules -> the whole canon analyzed with them
   for (const c of m.checks) {
-    const expected = whole[c.kind].violations.filter((v) => Math.abs(v.t - c.t) < 1e-9);
+    const key = JSON.stringify(c.profile);
+    if (!whole.has(key)) {
+      whole.set(key, analyze.analyze(rendered, { system: scales.fromSpec(spec.system), meter: spec.meter, profile: c.profile, final }));
+    }
+    const expected = whole.get(key).violations.filter((v) => Math.abs(v.t - c.t) < 1e-9);
     assert.deepEqual(tags(m.check(c, dux)), tags(expected), `slice ${c.slice} (beat ${c.t}, ${c.kind}), dux ${dux.join(" ")}`);
   }
 }
@@ -69,9 +70,20 @@ test("first species: every check reports exactly what the whole canon's analysis
     const m = constraints.model({ spec, degrees: [-3, 9], profile: "fux-strict", final: 0 });
     for (let k = 0; k < 15; k++) {
       const dux = m.variables.map(() => -3 + r.int(13));
-      agree(m, spec, dux);
+      agree(m, spec, dux, 60);
     }
   }
+});
+
+test("with no cadence, the end rules are checked in windows too: the penultimate a slice ahead", () => {
+  const r = rng.create(5);
+  const spec = { ...firstSpecies(10, { delay: 4, interval: { steps: 7 } }), ending: "cut" };
+  const m = constraints.model({ spec, degrees: [-3, 9], profile: "fux-strict", final: 0 });
+  const next = m.checks.filter((c) => c.kind === "next");
+  assert.equal(next.length, 1, "one next check: the slice before the last");
+  assert.deepEqual(next[0].profile.only, ["penultimate"]);
+  assert.equal(m.onsets[next[0].slice + 1], m.edges.last);
+  for (let k = 0; k < 20; k++) agree(m, spec, m.variables.map(() => -3 + r.int(13)), 60);
 });
 
 test("florid rhythm (Mann Ex. 201's), the canon rules: dissonance treatment checked a note later, still exactly", () => {
@@ -112,6 +124,6 @@ test("an inverting follower turns around the dux's first note: the tables follow
       const real = rendered.find((x) => x.voice === e.voice && x.index === e.index && Math.abs(x.t - e.t) < 1e-9);
       assert.equal(m.pitchOf(i, dux), real.pitch, `${dux.join(" ")}: voice ${e.voice} note ${e.index}`);
     });
-    agree(m, spec, dux);
+    agree(m, spec, dux, 60);
   }
 });

@@ -41,10 +41,15 @@ const rng = require("cg-rng");
 const DEFAULT_VEL = 90;
 const TRANSFORMS = ["P", "I", "R", "RI", "segmentRetrograde", "segmentPermute"];
 const FORMULAS = {
-  // Degrees above the final, for the upper and lower voice: suspension,
-  // resolution, final (Mann p. 230). 8 is the final an octave (period) up.
-  "7-6|8": { upper: (m) => [m, m - 1, m], lower: () => [1, 1, 0], apart: 1 },
-  "2-3|1": { upper: () => [1, 1, 0], lower: () => [0, -1, 0], apart: 0 },
+  // Degrees above the final, for the upper and lower voice, chord by chord, and
+  // each chord's length in `dur`s. 8 is the final an octave (period) up.
+  // Suspension, resolution, final (Mann p. 230):
+  "7-6|8": { upper: (m) => [m, m - 1, m], lower: () => [1, 1, 0], lengths: [1, 1, 2], apart: 1 },
+  "2-3|1": { upper: () => [1, 1, 0], lower: () => [0, -1, 0], lengths: [1, 1, 2], apart: 0 },
+  // First species (Fux pp. 28-29): the penultimate a major sixth opening to the
+  // octave, or a minor third closing to the unison, by contrary step (M4).
+  "6|8": { upper: (m) => [m - 1, m], lower: () => [1, 0], lengths: [1, 2], apart: 1 },
+  "3|1": { upper: () => [1, 0], lower: () => [-1, 0], lengths: [1, 2], apart: 0 },
 };
 
 function check(condition, message) {
@@ -68,7 +73,7 @@ function endingOf(e) {
     }
     case "free-cadence": {
       const formula = spec.formula || "7-6|8";
-      check(FORMULAS[formula], `unknown cadence formula "${formula}" (7-6|8 or 2-3|1)`);
+      check(FORMULAS[formula], `unknown cadence formula "${formula}" (${Object.keys(FORMULAS).join(", ")})`);
       const dur = spec.dur === undefined ? 1 : spec.dur;
       check(dur > 0, `the cadence's chord length must be above 0, got ${dur}`);
       return { kind: "free-cadence", formula, dur, final: spec.final, at: spec.at };
@@ -292,9 +297,11 @@ function coda(plan, events, at) {
     .sort((a, b) => a.pitch - b.pitch);
   if (parts.length === 0) return [];
   const final = plan.ending.final !== undefined ? plan.ending.final : firstDegree(plan);
-  const lengths = [dur, dur, 2 * dur];
+  const lengths = shape.lengths.map((k) => k * dur);
+  const starts = lengths.map((_, i) => lengths.slice(0, i).reduce((a, b) => a + b, 0));
+  const total = lengths.reduce((a, b) => a + b, 0);
   const line = (cv, degrees) => degrees.map((d, i) => ({
-    t: at + (i === 0 ? 0 : i === 1 ? dur : 2 * dur), dur: lengths[i],
+    t: at + starts[i], dur: lengths[i],
     pitch: tuning.degreeToPitch(cv.system, d) + 12 * cv.register,
     vel: cv.vel, voice: cv.index, index: -1, pass: 0, coda: true,
   }));
@@ -309,19 +316,21 @@ function coda(plan, events, at) {
   let lowFinal = null;
   if (parts.length > 1) {
     const rel = shape.lower(m(low.cv));
-    lowFinal = nearestShift(low.cv.system, final + rel[2], low.pitch);
-    const base = lowFinal - rel[2];
+    const last = rel[rel.length - 1];
+    lowFinal = nearestShift(low.cv.system, final + last, low.pitch);
+    const base = lowFinal - last;
     out.push(...line(low.cv, rel.map((r) => base + r)));
   }
   const relHigh = shape.upper(m(high.cv));
-  let highFinal = nearestShift(high.cv.system, final + relHigh[2], high.pitch);
+  const highLast = relHigh[relHigh.length - 1];
+  let highFinal = nearestShift(high.cv.system, final + highLast, high.pitch);
   if (lowFinal !== null) {
     // Keep the formula's interval: the upper final at least `apart` periods above.
     const floor = tuning.degreeToPitch(low.cv.system, lowFinal) + 12 * low.cv.register
       + (shape.apart * low.cv.system.period_cents) / 100 - 12 * high.cv.register;
     while (time.lt(tuning.degreeToPitch(high.cv.system, highFinal), floor)) highFinal += m(high.cv);
   }
-  out.push(...line(high.cv, relHigh.map((r) => highFinal - relHigh[2] + r)));
+  out.push(...line(high.cv, relHigh.map((r) => highFinal - highLast + r)));
 
   for (const { cv, pitch } of parts.slice(1, -1)) {
     let best = null;
@@ -330,7 +339,7 @@ function coda(plan, events, at) {
       if (best === null || Math.abs(tuning.degreeToPitch(cv.system, d) - pitch) < Math.abs(tuning.degreeToPitch(cv.system, best) - pitch)) best = d;
     }
     out.push({
-      t: at, dur: 4 * dur, pitch: tuning.degreeToPitch(cv.system, best) + 12 * cv.register,
+      t: at, dur: total, pitch: tuning.degreeToPitch(cv.system, best) + 12 * cv.register,
       vel: cv.vel, voice: cv.index, index: -1, pass: 0, coda: true,
     });
   }
