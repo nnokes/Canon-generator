@@ -233,3 +233,39 @@ test("preset: the 31-EDO spiral rises a meantone whole tone per pass and misses 
   // The seventh pass starts 30 steps up: an octave less a diesis (38.71 cents).
   near((pass(0)[0].pitch + 12 - pass(6)[0].pitch) * 100, 1200 / 31, 1e-9, "the diesis");
 });
+
+// M4: first-species closes, with musica ficta where the mode needs it.
+test("first-species closes: 6|8 a major sixth to the octave, 3|1 a minor third to the unison, raised where the mode needs it", () => {
+  const close = (mode, ref, formula) => {
+    const spec = {
+      system: { type: "edo", divisions: 12, mode, ref: { step: 0, midi: ref } }, meter: { beats: 4, strong: [0] },
+      dux: { source: "list", notes: [0, 1, 2].map((d) => ({ degree: d, dur: 4 })) },
+      voices: [{}, { delay: 4, interval: { steps: 4 } }],
+      ending: { kind: "free-cadence", formula, final: 0, dur: 4 },
+    };
+    const coda = canon.render(spec).events.filter((e) => e.index < 0);
+    const at = Math.min(...coda.map((e) => e.t));
+    const pen = coda.filter((e) => e.t === at).map((e) => e.pitch).sort((a, b) => a - b);
+    const fin = coda.filter((e) => e.t > at).map((e) => e.pitch).sort((a, b) => a - b);
+    return { pen, size: (pen[1] - pen[0]) % 12, fin };
+  };
+  const DORIAN = [0, 2, 3, 5, 7, 9, 10];
+  const PHRYGIAN = [0, 1, 3, 5, 7, 8, 10];
+  const IONIAN = [0, 2, 4, 5, 7, 9, 11];
+  // D dorian: E under C sharp (raised from C), then D and D.
+  assert.deepEqual(close(DORIAN, 62, "6|8"), { pen: [64, 73], size: 9, fin: [62, 74] });
+  // E phrygian: F under D, already a major sixth.
+  assert.deepEqual(close(PHRYGIAN, 64, "6|8"), { pen: [65, 74], size: 9, fin: [64, 76] });
+  // C ionian: D under B, unchanged.
+  assert.deepEqual(close(IONIAN, 60, "6|8"), { pen: [62, 71], size: 9, fin: [60, 72] });
+  // 3|1 in D dorian: C sharp (raised) under E, a minor third (here a tenth: the voices sit an octave apart).
+  assert.equal(close(DORIAN, 62, "3|1").pen[0], 61);
+  assert.equal(close(DORIAN, 62, "3|1").size, 3);
+  // The chords: the penultimate one dur, the final two.
+  const spec = {
+    system: { type: "edo", divisions: 12, mode: IONIAN, ref: { step: 0, midi: 60 } },
+    dux: { source: "list", notes: [{ degree: 0, dur: 4 }] }, voices: [{}, { delay: 0, interval: { steps: 4 } }],
+    ending: { kind: "free-cadence", formula: "6|8", final: 0, dur: 4 },
+  };
+  assert.deepEqual(canon.render(spec).events.filter((e) => e.index < 0).map((e) => [e.t, e.dur]).sort(), [[4, 4], [4, 4], [8, 8], [8, 8]]);
+});

@@ -11,6 +11,9 @@
 //   search(options) is a generator: it yields { phase, nodes, depth, best } as it
 //   goes and returns the result, so a [v8] wrapper can run it in time slices.
 //   generate(options) runs it to the end.
+//   strict(settings) turns musical settings (a final, a length, followers at
+//   intervals and delays in bars) into options for a first-species canon (M4
+//   part C).
 //
 // options: everything cg-constraints.model takes (spec, degrees, profile,
 // consonance, final), plus:
@@ -55,7 +58,8 @@ function orderOf(variables, how) {
 }
 
 function* search(input) {
-  const options = { ...DEFAULTS, ...input };
+  const options = { ...DEFAULTS };
+  for (const [k, v] of Object.entries(input)) if (v !== undefined) options[k] = v; // unset: the default
   const m = constraints.model(options);
   const backwards = (options.spec.voices || []).some((v) => v.transform === "R" || v.transform === "RI");
   const how = options.order === "auto" ? (backwards ? "outside-in" : "left") : options.order;
@@ -181,6 +185,70 @@ function* search(input) {
   };
 }
 
+// ---------------------------------------------------------------- strict canons
+
+const MAJOR = { type: "edo", divisions: 12, mode: [0, 2, 4, 5, 7, 9, 11], ref: { step: 0, midi: 60 } };
+
+// Taste (ours, after Schottstaedt's penalties; not one of Fux's rules, and not
+// part of the analysis): a soft cost that orders the search's candidates away
+// from a dux that rocks between two notes, toward steps, with few repeats.
+function melodicTaste(dux) {
+  let cost = 0;
+  let a;
+  let b;
+  for (const d of dux) {
+    if (d === undefined) {
+      a = b = undefined;
+      continue;
+    }
+    if (b !== undefined) {
+      const k = Math.abs(d - b);
+      if (k === 0) cost += 0.3;
+      else if (k > 2) cost += 0.2;
+    }
+    if (a !== undefined && d === a && d !== b) cost += 0.5;
+    a = b;
+    b = d;
+  }
+  return cost;
+}
+
+// A first-species canon (Fux, first species, pp. 27-33): one note per bar, in
+// a mode; each follower at its interval (scale steps) and delay (bars), closed
+// by a first-species cadence on the final.
+//   settings: system (C major), meter (4/4), final (degree 0), length (12 notes),
+//     range ([final - 3, final + 9], degrees), followers ([{ interval: 7, delay: 1,
+//     transform }]), close ("6|8" or "3|1"), profile (fux-strict; fux-relaxed for
+//     more than one follower), taste (true), tempo, and the search's seed, budget,
+//     beam and fixed
+function strict(settings = {}) {
+  const system = settings.system || MAJOR;
+  const meter = settings.meter || { beats: 4, strong: [0] };
+  const final = settings.final === undefined ? 0 : settings.final;
+  const length = settings.length === undefined ? 12 : settings.length;
+  const followers = settings.followers || [{ interval: 7, delay: 1 }];
+  const bar = meter.beats;
+  return {
+    spec: {
+      name: settings.name || "generated canon",
+      system, meter, tempo: settings.tempo,
+      dux: { source: "list", notes: Array.from({ length }, () => ({ dur: bar })) },
+      voices: [{}, ...followers.map((f) => ({
+        delay: f.delay * bar, interval: { steps: f.interval }, transform: f.transform || "P",
+      }))],
+      ending: { kind: "free-cadence", formula: settings.close || "6|8", final, dur: bar },
+    },
+    degrees: settings.range || [final - 3, final + 9],
+    profile: settings.profile || (followers.length > 1 ? "fux-relaxed" : "fux-strict"),
+    final,
+    prefer: settings.taste === false ? undefined : melodicTaste,
+    seed: settings.seed,
+    budget: settings.budget,
+    beam: settings.beam,
+    fixed: settings.fixed,
+  };
+}
+
 function generate(options) {
   const it = search(options);
   for (;;) {
@@ -192,3 +260,5 @@ function generate(options) {
 exports.search = search;
 exports.generate = generate;
 exports.orderOf = orderOf;
+exports.strict = strict;
+exports.melodicTaste = melodicTaste;

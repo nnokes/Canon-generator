@@ -98,3 +98,59 @@ test("the order: left to right, or outside-in when a voice runs backwards", () =
   assert.deepEqual(generator.orderOf([0, 1, 2, 3, 4, 5], "outside-in"), [0, 5, 1, 4, 2, 3]);
   assert.deepEqual(generator.orderOf([0, 1, 2, 3, 4], "outside-in"), [0, 4, 1, 3, 2]);
 });
+
+// ---------------------------------------------------------------- part C: strict canons
+
+test("strict canons: at the octave, fifth and fourth, above and below, 1 to 4 bars apart, all pass fux-strict", () => {
+  for (const interval of [7, -7, 4, -4, 3, -3]) {
+    for (const delay of [1, 2, 3, 4]) {
+      const settings = { length: 10, followers: [{ interval, delay }] };
+      const result = generator.generate(generator.strict(settings));
+      assert.equal(result.found, true, `interval ${interval}, delay ${delay}: ${result.diagnostics.blocking}`);
+      const again = analyze.analyze(canon.render(result.spec), {
+        system: scales.fromSpec(MAJOR), meter: METER, profile: "fux-strict", final: 60,
+      });
+      assert.equal(again.hard, 0, `interval ${interval}, delay ${delay}`);
+      // The follower is the dux, transposed: a canon.
+      const events = canon.render(result.spec).events.filter((e) => e.index >= 0);
+      const dux = events.filter((e) => e.voice === 0);
+      for (const f of events.filter((e) => e.voice === 1)) {
+        const lead = dux.find((d) => d.index === f.index);
+        assert.equal(f.t - lead.t, 4 * delay);
+      }
+    }
+  }
+});
+
+test("a 32-note canon: found in well under a second's worth of candidates", () => {
+  const started = Date.now();
+  const result = generator.generate(generator.strict({ length: 32, followers: [{ interval: 4, delay: 2 }] }));
+  assert.equal(result.found, true);
+  assert.equal(result.dux.length, 32);
+  assert.ok(result.nodes < 5000, `${result.nodes} candidates`);
+  assert.ok(Date.now() - started < 5000);
+});
+
+test("taste (ours): rocking between two notes costs more than a line, and can be turned off", () => {
+  assert.ok(generator.melodicTaste([0, 2, 0, 2]) > generator.melodicTaste([0, 1, 2, 3]));
+  assert.ok(generator.melodicTaste([0, 0, 1]) > generator.melodicTaste([0, 1, 2]), "a repeat");
+  assert.ok(generator.melodicTaste([0, 4, 1]) > generator.melodicTaste([0, 1, 2]), "a leap");
+  assert.equal(generator.strict({ taste: false }).prefer, undefined);
+  assert.equal(generator.strict().prefer, generator.melodicTaste);
+});
+
+test("strict settings: the defaults, and a canon in another mode keeps its final", () => {
+  const options_ = generator.strict();
+  assert.equal(options_.profile, "fux-strict");
+  assert.deepEqual(options_.degrees, [-3, 9]);
+  assert.equal(options_.spec.dux.notes.length, 12);
+  assert.deepEqual(options_.spec.voices[1], { delay: 4, interval: { steps: 7 }, transform: "P" });
+  // D dorian: the white notes, final D (degree 1 of C major's degrees, so give the mode its own ref).
+  const dorian = { type: "edo", divisions: 12, mode: [0, 2, 3, 5, 7, 9, 10], ref: { step: 0, midi: 62 } };
+  const result = generator.generate(generator.strict({ system: dorian, length: 10, followers: [{ interval: 4, delay: 1 }] }));
+  assert.equal(result.found, true);
+  const again = analyze.analyze(canon.render(result.spec), {
+    system: scales.fromSpec(dorian), meter: METER, profile: "fux-strict", final: 62,
+  });
+  assert.equal(again.hard, 0);
+});

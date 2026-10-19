@@ -916,9 +916,12 @@ const FORMULAS = {
   "7-6|8": { upper: (m) => [m, m - 1, m], lower: () => [1, 1, 0], lengths: [1, 1, 2], apart: 1 },
   "2-3|1": { upper: () => [1, 1, 0], lower: () => [0, -1, 0], lengths: [1, 1, 2], apart: 0 },
   // First species (Fux pp. 28-29): the penultimate a major sixth opening to the
-  // octave, or a minor third closing to the unison, by contrary step (M4).
-  "6|8": { upper: (m) => [m - 1, m], lower: () => [1, 0], lengths: [1, 2], apart: 1 },
-  "3|1": { upper: () => [1, 0], lower: () => [-1, 0], lengths: [1, 2], apart: 0 },
+  // octave, or a minor third closing to the unison, by contrary step (M4). In a
+  // mode where it isn't that size (dorian, mixolydian, aeolian), the voice that
+  // leads to the final by step is raised a semitone (musica ficta: C sharp in
+  // D dorian); in phrygian it already is. 12-tone tunings only.
+  "6|8": { upper: (m) => [m - 1, m], lower: () => [1, 0], lengths: [1, 2], apart: 1, ficta: { raise: "upper", cents: 900 } },
+  "3|1": { upper: () => [1, 0], lower: () => [-1, 0], lengths: [1, 2], apart: 0, ficta: { raise: "lower", cents: 300 } },
 };
 
 function check(condition, message) {
@@ -1200,6 +1203,7 @@ function coda(plan, events, at) {
     while (time.lt(tuning.degreeToPitch(high.cv.system, highFinal), floor)) highFinal += m(high.cv);
   }
   out.push(...line(high.cv, relHigh.map((r) => highFinal - highLast + r)));
+  if (shape.ficta && lowFinal !== null) ficta(shape.ficta, out, low.cv, high.cv, at);
 
   for (const { cv, pitch } of parts.slice(1, -1)) {
     let best = null;
@@ -1213,6 +1217,22 @@ function coda(plan, events, at) {
     });
   }
   return out;
+}
+
+// Musica ficta for a first-species close: if the penultimate interval isn't the
+// formula's (a major sixth, a minor third), raise the voice that leads to the
+// final to a semitone below it. Only in tunings with a 1200-cent period.
+function ficta(rule, events, low, high, at) {
+  if (low.system.period_cents !== 1200 || high.system.period_cents !== 1200) return;
+  const pen = (cv) => events.find((e) => e.voice === cv.index && time.eq(e.t, at));
+  const fin = (cv) => events.find((e) => e.voice === cv.index && time.lt(at, e.t));
+  const [lo, hi] = [pen(low), pen(high)];
+  if (!lo || !hi) return;
+  const size = (((hi.pitch - lo.pitch) * 100) % 1200 + 1200) % 1200;
+  if (Math.abs(size - rule.cents) < 1) return;
+  const leader = rule.raise === "upper" ? hi : lo;
+  const target = fin(rule.raise === "upper" ? high : low);
+  if (target) leader.pitch = target.pitch - 1;
 }
 
 function firstDegree(plan) {

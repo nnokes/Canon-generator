@@ -113,18 +113,35 @@ exists.
     that must be the final)
   - beam mode finds a canon; the generator yields progress; the variable orders
 
-## Part C. Two-voice strict canons
-- [ ] **First species:** one note per bar, in a mode. Settings: the final, the range, and
-  the dux's length. Rule profile `fux-strict`.
+## Part C. Two-voice strict canons: done
+- [x] **First species:** `strict(settings)` turns musical settings into a search: one
+  note per bar, in a mode; the final, the dux's length and range; each follower's
+  interval (scale steps) and delay (bars); rule profile `fux-strict`. Defaults: C
+  major, final C, 12 notes, a range from a sixth below the final to a tenth above, the
+  octave a bar later.
 - [x] **The ending:** the follower is cut where the dux ends, and a cadence follows
   (`free-cadence`). M2's formulas (7-6 | 8, 2-3 | 1) open on a suspension, a dissonance
   first species forbids, so every first-species canon failed at its close. Two
   first-species closes are added (Fux pp. 28-29): **6 | 8** (re under ti, opening to the
-  octave) and **3 | 1** (ti under re, closing to the unison), and a formula now has any
+  octave) and **3 | 1** (ti under re, closing to the unison). A formula now has any
   number of chords. The whole-canon analysis judges the join into the cadence.
-- [ ] **Exit test:** canons at the octave, fifth and fourth, each with delays of 1, 2, 3
-  and 4 bars, all pass the full analysis with no hard faults.
-- [ ] **A 32-note canon:** time and node count in Node, for Part G.
+- [x] **Musica ficta in the close:** where the mode's penultimate isn't a major sixth (or
+  minor third), the voice that leads to the final is raised a semitone: C sharp in D
+  dorian, F sharp in G mixolydian, G sharp in A aeolian. Phrygian already has its major
+  sixth (F under D). 12-tone tunings only; other tunings keep the mode's own step.
+- [x] **Taste (ours, after Schottstaedt's penalties):** a soft cost that orders the
+  search away from a dux rocking between two notes, toward steps, with few repeats. It
+  only orders candidates; it isn't one of the rules and isn't in the analysis. `taste:
+  false` turns it off.
+- [x] **Exit test:** canons at the octave, fifth and fourth, above and below, each with
+  delays of 1, 2, 3 and 4 bars (24 settings), all pass the full analysis with no hard
+  faults, and the follower is the dux transposed and delayed. About 5 s in Node, most of
+  it the 4-bar delays (the notes before the follower enters are barely constrained).
+- [x] **A 32-note canon:** 31 ms and under 1,000 candidates at the fifth, 2 bars apart; the
+  slowest setting tried (4 bars apart) about 0.9 s.
+- [x] **Tests** (`tests/generate.test.js`, `tests/canon.test.js`): the 24 settings; the
+  32-note canon; taste; strict's defaults and a canon in D dorian; the closes and their
+  ficta in dorian, phrygian and ionian.
 
 ## Part D. More voices: `fux-relaxed`
 - [ ] **The profile:** `fux-strict`, relaxed as Fux relaxes it for three and four
@@ -184,7 +201,7 @@ a round, a 32-note canon at several slice sizes, and a repair of your clip.
 |---|---|---|
 | incremental checks = full analysis (Part A) | **PASS** (Node, `tests/constraints.test.js`): every check equals the whole canon's analysis at its slice, for random duxes, first species and florid | The analyzer takes the canon's edges; end rules judged on the whole canon |
 | same seed, same canon (Part B) | **PASS** (Node, `tests/generate.test.js`) | The seed orders equal-cost candidates |
-| 2-voice canons at the 8ve, 5th, 4th; delays 1–4 bars (Part C) | | |
+| 2-voice canons at the 8ve, 5th, 4th; delays 1–4 bars (Part C) | **PASS** (Node, `tests/generate.test.js`): all 24 settings, above and below, no hard faults | First-species closes 6 \| 8 and 3 \| 1, with ficta; taste orders the search |
 | `fux-relaxed` (Part D) | | |
 | rounds by the block method (Part E) | | |
 | edits toggle golden test (Part F) | | |
