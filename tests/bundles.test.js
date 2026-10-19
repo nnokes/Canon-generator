@@ -171,7 +171,7 @@ const rows = (out) => select(out, "coll").filter((r) => r[0] !== "clear");
 test("cg.canon exposes exactly its documented messages", () => {
   assert.deepEqual(loadBundle("cg.canon").handlers(), [
     "delay", "info", "interval", "loadmidi", "loadspec", "midiline", "midimap", "midiquantize", "miditrack",
-    "output", "passes", "preset", "presetmelody", "presets", "register", "render", "savespec", "select", "tempo", "timescale",
+    "output", "passes", "preset", "presetmelody", "presets", "profile", "register", "render", "savespec", "select", "tempo", "timescale",
     "transform", "tuning", "tunings", "usespec",
   ]);
 });
@@ -518,6 +518,73 @@ test("cg.canon writes its spec to the dict cg.spec on every render, for the find
   assert.deepEqual(written.dux, library.preset(0).dux);
   bundle.send("tempo", 77);
   assert.equal(JSON.parse(new SimDict("cg.spec").stringify()).tempo, 77);
+});
+
+test("cg.canon: every render is analyzed into cg.report for the piano roll; profile changes the rules", () => {
+  const bundle = loadBundle("cg.canon");
+  const out = bundle.send("preset", 0); // the round
+  assert.deepEqual(select(out, "roll"), [["refresh"]]);
+  const report = JSON.parse(new SimDict("cg.report").stringify());
+  assert.equal(report.profile, "canon");
+  assert.equal(report.model, "fux12");
+  assert.deepEqual(report.meter, { beats: 4, strong: [0] });
+  assert.equal(report.hard, report.violations.filter((v) => v.hard).length);
+  for (const v of report.violations) assert.deepEqual(Object.keys(v), ["t", "bar", "beat", "rule", "voices", "hard", "detail"]);
+  assert.ok(report.curve.length > 0 && report.curve.every((p) => typeof p.t === "number" && p.score >= 0));
+  assert.deepEqual(select(out, "analysis")[0].slice(0, 2), ["canon", "rules:"]);
+  // Stricter rules: more faults, re-analyzed without re-rendering.
+  const strict = bundle.send("profile", "fux-strict");
+  assert.deepEqual(rows(strict), [], "no re-render");
+  assert.deepEqual(select(strict, "rules"), [["fux-strict"]]);
+  const stricter = JSON.parse(new SimDict("cg.report").stringify());
+  assert.equal(stricter.profile, "fux-strict");
+  assert.ok(stricter.hard > report.hard);
+  // An unknown name is refused, and the menu shows the rules still in use.
+  const refused = bundle.send("profile", "baroque");
+  assert.match(errors(refused)[0], /unknown rule profile baroque/);
+  assert.deepEqual(select(refused, "rules"), [["fux-strict"]]);
+  // The rules stay through later renders.
+  bundle.send("tempo", 90);
+  assert.equal(JSON.parse(new SimDict("cg.report").stringify()).profile, "fux-strict");
+});
+
+test("cg.roll: draws what the canon renders, follows the playhead, and names a clicked marker", () => {
+  const canonBundle = loadBundle("cg.canon");
+  canonBundle.send("preset", 0); // the round
+  const notes = JSON.parse(new SimDict("cg.events").stringify()).events.length;
+  const bundle = loadBundle("cg.roll");
+  assert.deepEqual(bundle.handlers(), ["clear", "playhead", "refresh"]);
+  const g = bundle.context.mgraphics;
+  bundle.send("refresh");
+  assert.ok(g.redraws > 0, "a redraw is requested");
+  bundle.call("paint");
+  const named = (name) => g.calls.filter((c) => c[0] === name);
+  assert.equal(named("rectangle").length, notes + 2, "every note, plus the background and the curve's strip");
+  assert.ok(named("show_text").some((c) => /^4-voice round .*: canon rules: \d+ faults/.test(c[1])), "the caption");
+  // The playhead: drawn over the cached layout, the only 2 px line.
+  g.calls.length = 0;
+  bundle.send("playhead", 3);
+  bundle.call("paint");
+  assert.equal(named("set_line_width").filter((c) => c[1] === 2).length, 1);
+  g.calls.length = 0;
+  bundle.send("playhead", -1);
+  bundle.call("paint");
+  assert.equal(named("set_line_width").filter((c) => c[1] === 2).length, 0, "-1 hides it");
+  // Click the first marker (a diamond: move_to its top, then line_to its right point).
+  const k = g.calls.findIndex((c) => c[0] === "close_path");
+  const [x, y] = [g.calls[k - 4][1], g.calls[k - 3][2]];
+  const out = bundle.call("onclick", x, y);
+  const [status] = select(out, "status");
+  assert.match(status[0], /^bar \d+ beat [\d.]+: [\w-]+ \/ .+ \((fault|soft)\)/);
+  assert.ok(!status[0].includes(","), "no commas: Max splits messages on them");
+  g.calls.length = 0;
+  bundle.call("paint");
+  assert.ok(named("show_text").some((c) => c[1] === status[0]), "the caption shows it");
+  assert.deepEqual(bundle.call("onclick", -50, -50), [], "a click on nothing says nothing");
+  bundle.send("clear");
+  g.calls.length = 0;
+  bundle.call("paint");
+  assert.deepEqual(named("show_text").map((c) => c[1]), ["nothing rendered yet"]);
 });
 
 test("cg.finder: searches the canon panel's melody in time slices, lists results, and a pick plays in the canon", () => {

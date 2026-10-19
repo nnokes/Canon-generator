@@ -235,6 +235,55 @@ test("cg.finder: a pick plays at once: stop, then usespec, then play, to the can
   for (const o of [0, 1, 2]) assert.deepEqual(from(from(order, o)[0]).map((b) => b.text), ["s cg.canon.in"]);
 });
 
+test("cg.canon sends the playing note's index to [s cg.playhead], and -1 on stop, for the piano roll", () => {
+  const { byText, from } = wiring("patchers/cg.canon.maxpat");
+  const playhead = byText("s cg.playhead");
+  assert.ok(from(byText("i")).includes(playhead), "the player's index");
+  assert.ok(from(byText("-1")).includes(playhead), "-1 on stop");
+  assert.ok(from(byText("route play stop"), 1).some((b) => b.text === "t b b" && from(b, 0).some((x) => x.text === "-1")));
+});
+
+test("the canon panel: controls on the left only; each reaches cg.canon; replies set them by name", () => {
+  const { patcher, boxes, byText, from } = wiring("patchers/cg.panel.canon.maxpat");
+  assert.ok(!patcher.openinpresentation, "no presentation mode");
+  const engine = byText("cg.canon");
+  const columnX = engine.patching_rect[0];
+  // The controls area holds controls and comments only: every object is in the wiring column.
+  for (const box of boxes.values()) {
+    if (box.maxclass === "newobj") assert.ok(box.patching_rect[0] >= columnX, `[${box.text}] sits in the wiring column`);
+  }
+  // Every message the panel sends reaches cg.canon.
+  const sent = [...boxes.values()].filter((b) => from(b).includes(engine))
+    .map((b) => (b.maxclass === "message" ? b.text : b.text.replace(/^prepend /, ""))).sort();
+  assert.deepEqual(sent, ["delay", "interval", "loadmidi", "loadspec", "midiline", "midimap", "midiquantize", "miditrack",
+    "output", "passes", "play", "preset", "presetmelody", "profile", "register", "savespec", "select", "stop", "tempo",
+    "timescale", "transform", "tuning"]);
+  // A cord from a control leaves through the gap under its row: its first bend is below the control.
+  for (const { patchline } of patcher.lines) {
+    const src = boxes.get(patchline.source[0]);
+    if (src.patching_rect[0] >= columnX || !patchline.midpoints) continue;
+    const [, y, , h] = src.patching_rect;
+    assert.ok(patchline.midpoints[1] > y + h, `[${src.text || src.maxclass}]'s cord drops below its row first`);
+  }
+  // cg.canon's replies: every script send names a control that exists, and all reach [thispatcher].
+  const names = new Set([...boxes.values()].filter((b) => b.varname).map((b) => b.varname));
+  const scripting = byText("thispatcher");
+  const scripts = [...boxes.values()].filter((b) => /script send/.test(b.text || ""));
+  assert.ok(scripts.length >= 6);
+  for (const box of scripts) {
+    for (const [, name] of box.text.matchAll(/script send (\S+)/g)) assert.ok(names.has(name), `${name} is a scripting name`);
+    assert.ok(from(box).includes(scripting), `${box.text} reaches [thispatcher]`);
+  }
+  // The piano roll: the [v8ui], named roll; the playhead comes in from the player.
+  const roll = [...boxes.values()].find((b) => b.maxclass === "v8ui");
+  assert.equal(roll.varname, "roll");
+  assert.equal(roll.textfile.filename, "cg.roll.bundle.js");
+  const later = from(byText("r cg.playhead"))[0];
+  assert.equal(later.text, "deferlow", "from the scheduler to the main thread first");
+  assert.deepEqual(from(later).map((b) => b.text), ["prepend script send roll playhead"]);
+  assert.deepEqual(from(byText("route menu tmenu bpm editor rules roll"), 5).map((b) => b.text), ["prepend script send roll"]);
+});
+
 test("the finder panel opens in presentation mode, with each setting wired both ways", () => {
   const { patcher, byText, from } = wiring("patchers/cg.panel.finder.maxpat");
   assert.equal(patcher.openinpresentation, 1);

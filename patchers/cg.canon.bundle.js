@@ -2013,6 +2013,1166 @@ exports.writeMidi = writeMidi;
 exports.tempoEvent = tempoEvent;
   };
 
+  // ---- cg-consonance.js
+  factories["cg-consonance"] = function (exports, module, require) {
+"use strict";
+// Consonance models (PLAN.md 3.3). Fux's rules need to tell consonance from
+// dissonance and perfect from imperfect (Study of Counterpoint, pp. 20-22). In
+// 12-TET that's a table; in other tunings it has to be computed. Every model has
+// one interface:
+//
+//   model.classify(cents, { lowHz }) -> { cls, fourth, score, ratio }
+//     cls     "perfect" | "imperfect" | "dissonant"
+//     fourth  true for the fourth (4/3): cls says dissonant, because it is against
+//             the bass in two voices (Fux p. 21), but between upper voices it's
+//             consonant. The rules decide which applies (cg-rules).
+//     score   the model's own measure, lower = more consonant. Its scale differs
+//             by model (a class rank, a Tenney height, a normalized roughness), so
+//             it's for curves and ranking within one model, not across models.
+//     ratio   the ratio the interval was heard as ("3/2"), where the model has one
+//
+// Intervals are folded to the system's period first (a tenth is a third), except
+// by `roughness`, which hears the actual interval at the actual register.
+//
+//   fux12      Fux's table, snapped to the nearest semitone within a tolerance
+//   ratio      the simplest ratio within a tolerance, scored by Tenney height
+//              log2(n*d); classes are thresholds on it
+//   roughness  Sethares's sensory roughness (after Plomp and Levelt), computed
+//              from the timbre the voice bank plays (DEFAULT_PARTIALS)
+//   table      your own table: cents -> class
+
+// The voice bank's partial weights (cg.voice~, partials 1-4), so the roughness
+// model hears the timbre the voices play. tools/patchgen.py writes the same
+// numbers into the voice; tests/consonance.test.js checks that they match.
+const DEFAULT_PARTIALS = [0.48, 0.24, 0.16, 0.12];
+const CLASSES = ["perfect", "imperfect", "dissonant"];
+const RANK = { perfect: 0, imperfect: 1, dissonant: 2 };
+
+// Fold an interval (cents, either direction) into [0, period). A value a hair
+// under the period counts as 0 (an octave is a unison class).
+function fold(cents, period = 1200) {
+  const value = Math.abs(cents);
+  if (!period) return value;
+  const folded = value - period * Math.floor(value / period);
+  return period - folded < 1e-6 ? 0 : folded;
+}
+
+function result(cls, score, extra = {}) {
+  return { cls, fourth: false, score, ratio: null, ...extra };
+}
+
+// --- fux12 -------------------------------------------------------------------
+
+// Semitone class -> class. 5 is the fourth (see the header).
+const FUX = ["perfect", "dissonant", "dissonant", "imperfect", "imperfect", "fourth", "dissonant",
+  "perfect", "imperfect", "imperfect", "dissonant", "dissonant"];
+// Scores rank the classes, and the fifth just above the octave, as Fux orders them.
+const FUX_SCORE = [0, 1, 1, 0.3, 0.3, 0.5, 1, 0.1, 0.3, 0.3, 1, 1];
+
+function fux12({ tolerance = 15 } = {}) {
+  return {
+    name: "fux12",
+    period: 1200,
+    classify(cents) {
+      const folded = fold(cents, 1200);
+      const semis = Math.round(folded / 100) % 12;
+      if (Math.abs(folded - Math.round(folded / 100) * 100) > tolerance) return result("dissonant", 1);
+      const cls = FUX[semis];
+      if (cls === "fourth") return result("dissonant", FUX_SCORE[semis], { fourth: true });
+      return result(cls, FUX_SCORE[semis]);
+    },
+  };
+}
+
+// --- ratio -------------------------------------------------------------------
+
+function gcd(a, b) {
+  return b ? gcd(b, a % b) : a;
+}
+
+function largestPrime(n) {
+  let largest = 1;
+  for (let p = 2; p * p <= n; p++) {
+    while (n % p === 0) { largest = p; n /= p; }
+  }
+  return n > 1 ? Math.max(largest, n) : largest;
+}
+
+// Every reduced n/d with n, d <= limit, primes <= primeLimit, inside [1, periodRatio).
+function candidates(limit, primeLimit, periodRatio) {
+  const list = [];
+  for (let d = 1; d <= limit; d++) {
+    for (let n = d; n <= limit * Math.ceil(periodRatio); n++) {
+      if (gcd(n, d) !== 1 || n / d >= periodRatio - 1e-12) continue;
+      if (n > limit && d > 1) continue;
+      if (largestPrime(n) > primeLimit || largestPrime(d) > primeLimit) continue;
+      list.push({ n, d, cents: 1200 * Math.log2(n / d), height: Math.log2(n * d) });
+    }
+  }
+  return list.sort((a, b) => a.height - b.height || a.cents - b.cents);
+}
+
+// The simplest ratio within `tolerance` cents wins (not the nearest: with a
+// limit of 16 something complex is always near). perfect/imperfect are Tenney
+// height thresholds: 1/1, 2/1 and 3/2 are perfect; thirds and sixths (and 7/4
+// at prime limit 7) imperfect. The defaults agree with Fux's table on all 12
+// classes of 12-EDO.
+function ratio({ period = 1200, limit = 16, primeLimit = 5, tolerance = 20, perfect = 2.6, imperfect = 5.4 } = {}) {
+  const periodRatio = period ? Math.pow(2, period / 1200) : 2;
+  const list = candidates(limit, primeLimit, periodRatio);
+  return {
+    name: "ratio",
+    period: period || 1200,
+    classify(cents) {
+      const folded = fold(cents, period || 1200);
+      const hit = list.find((r) => Math.abs(r.cents - folded) <= tolerance
+        || Math.abs(r.cents - folded + (period || 1200)) <= tolerance); // just under the period
+      if (!hit) return result("dissonant", Math.log2(limit * limit));
+      const text = `${hit.n}/${hit.d}`;
+      if (hit.n === 4 && hit.d === 3) return result("dissonant", hit.height, { fourth: true, ratio: text });
+      const cls = hit.height <= perfect ? "perfect" : hit.height <= imperfect ? "imperfect" : "dissonant";
+      return result(cls, hit.height, { ratio: text });
+    },
+  };
+}
+
+// --- roughness ---------------------------------------------------------------
+
+// Sethares, Tuning, Timbre, Spectrum, Scale (2nd ed. 2005), the dissmeasure
+// routine: for two partials f1 < f2 with amplitudes a1, a2,
+//   s = D* / (S1 f1 + S2),   d = a1 a2 (C1 e^(A1 s (f2-f1)) + C2 e^(A2 s (f2-f1)))
+// summed over every pair of partials of both tones together.
+const SETHARES = { dstar: 0.24, s1: 0.0207, s2: 18.96, c1: 5, c2: -5, a1: -3.51, a2: -5.75 };
+
+function dissonance(freqs, amps) {
+  const order = freqs.map((f, i) => i).sort((i, j) => freqs[i] - freqs[j]);
+  const f = order.map((i) => freqs[i]);
+  const a = order.map((i) => amps[i]);
+  let total = 0;
+  for (let i = 0; i < f.length; i++) {
+    for (let j = i + 1; j < f.length; j++) {
+      const s = SETHARES.dstar / (SETHARES.s1 * f[i] + SETHARES.s2);
+      const x = f[j] - f[i];
+      total += a[i] * a[j] * (SETHARES.c1 * Math.exp(SETHARES.a1 * s * x) + SETHARES.c2 * Math.exp(SETHARES.a2 * s * x));
+    }
+  }
+  return total;
+}
+
+// Two tones with these partials (weights; partial k at k times f0), the upper
+// one `cents` above `lowHz`.
+function roughnessOf(cents, lowHz, partials = DEFAULT_PARTIALS) {
+  const freqs = [];
+  const amps = [];
+  for (const f0 of [lowHz, lowHz * Math.pow(2, cents / 1200)]) {
+    partials.forEach((w, k) => { freqs.push(f0 * (k + 1)); amps.push(w); });
+  }
+  return dissonance(freqs, amps);
+}
+
+// The roughness curve over one period above lowHz, one point per `step` cents.
+function curve(lowHz, { partials = DEFAULT_PARTIALS, period = 1200, step = 1 } = {}) {
+  const points = [];
+  for (let c = 0; c <= period + 1e-9; c += step) points.push({ cents: c, roughness: roughnessOf(c, lowHz, partials) });
+  return points;
+}
+
+// Classes are thresholds on roughness normalized to [0, 1] over the period at the
+// bass's own frequency (roughness depends on register: the same third is rougher
+// low down, which is why low thirds sound muddy).
+function roughness({ partials = DEFAULT_PARTIALS, period = 1200, perfect = 0.12, imperfect = 0.45, lowHz = 261.63 } = {}) {
+  const ranges = new Map(); // rounded Hz -> { min, max }
+  function range(hz) {
+    const key = Math.round(hz);
+    if (!ranges.has(key)) {
+      const values = curve(key, { partials, period: period || 1200, step: 5 }).map((p) => p.roughness);
+      ranges.set(key, { min: Math.min(...values), max: Math.max(...values) });
+    }
+    return ranges.get(key);
+  }
+  return {
+    name: "roughness",
+    period: period || 1200,
+    classify(cents, context = {}) {
+      const hz = context.lowHz || lowHz;
+      const { min, max } = range(hz);
+      const score = Math.max(0, (roughnessOf(Math.abs(cents), hz, partials) - min) / (max - min || 1));
+      const cls = score <= perfect ? "perfect" : score <= imperfect ? "imperfect" : "dissonant";
+      return result(cls, score);
+    },
+  };
+}
+
+// --- table -------------------------------------------------------------------
+
+// entries: [{ cents, cls }] within one period; the nearest within tolerance wins.
+// A fourth can be marked with cls "fourth".
+function table({ entries = [], period = 1200, tolerance = 15 } = {}) {
+  for (const e of entries) {
+    if (![...CLASSES, "fourth"].includes(e.cls)) throw new Error(`consonance table: unknown class ${e.cls}`);
+  }
+  return {
+    name: "table",
+    period: period || 1200,
+    classify(cents) {
+      const folded = fold(cents, period || 1200);
+      let best = null;
+      for (const e of entries) {
+        const distance = Math.min(Math.abs(fold(e.cents, period || 1200) - folded),
+          (period || 1200) - Math.abs(fold(e.cents, period || 1200) - folded));
+        if (distance <= tolerance && (!best || distance < best.distance)) best = { e, distance };
+      }
+      if (!best) return result("dissonant", RANK.dissonant);
+      if (best.e.cls === "fourth") return result("dissonant", 1.5, { fourth: true });
+      return result(best.e.cls, RANK[best.e.cls]);
+    },
+  };
+}
+
+// --- choosing a model --------------------------------------------------------
+
+function isTwelve(system) {
+  return system && system.period_cents === 1200 && system.steps_cents.length === 12
+    && system.steps_cents.every((c, i) => Math.abs(c - 100 * i) < 1e-6);
+}
+
+// The largest prime in a system's ratios, so a 7-limit system hears 7/4. A
+// system that doesn't repeat at the octave starts at 7: Bohlen-Pierce is built on
+// odd ratios 3:5:7, even in its equal-tempered form.
+function systemPrimeLimit(system) {
+  let largest = system && system.period_cents && Math.abs(system.period_cents - 1200) > 1e-6 ? 7 : 5;
+  for (const r of [...((system && system.ratios) || []), system && system.period_ratio]) {
+    if (typeof r !== "string") continue;
+    for (const part of r.split("/")) largest = Math.max(largest, largestPrime(Number(part)));
+  }
+  return Math.min(largest, 13);
+}
+
+const MODELS = { fux12, ratio, roughness, table };
+
+// spec: undefined, a model name, or { model, ...options }. The period comes from
+// the system (non-repeating systems fold at 1200 cents, PLAN 3.6).
+function fromSpec(spec, system) {
+  const options = typeof spec === "string" ? { model: spec } : { ...(spec || {}) };
+  const period = (system && system.period_cents) || 1200;
+  const name = options.model || (isTwelve(system) || !system ? "fux12" : "ratio");
+  if (!MODELS[name]) throw new Error(`consonance: unknown model ${name}; one of ${Object.keys(MODELS).join(" ")}`);
+  delete options.model;
+  if (name === "ratio" && options.primeLimit === undefined) options.primeLimit = systemPrimeLimit(system);
+  if (name !== "fux12" && options.period === undefined) options.period = period;
+  return MODELS[name](options);
+}
+
+exports.DEFAULT_PARTIALS = DEFAULT_PARTIALS;
+exports.CLASSES = CLASSES;
+exports.fold = fold;
+exports.fux12 = fux12;
+exports.ratio = ratio;
+exports.roughness = roughness;
+exports.table = table;
+exports.roughnessOf = roughnessOf;
+exports.curve = curve;
+exports.dissonance = dissonance;
+exports.fromSpec = fromSpec;
+exports.names = () => Object.keys(MODELS);
+  };
+
+  // ---- cg-rules.js
+  factories["cg-rules"] = function (exports, module, require) {
+"use strict";
+// Rule profiles (PLAN.md 3.3). A rule reads the analyzer's slices and motion and
+// returns violations; a profile says which rules apply, which are hard (M4's
+// search prunes on them) and what the soft ones cost. docs/controls.md lists
+// every rule with its source.
+//
+//   judge(context, profile) -> { profile, violations: [{ rule, hard, cost,
+//                                bar, beat, t, voices, detail }] }
+//   profile: a name ("fux-strict", "florid", "canon", "spectral", "free"), or
+//            { base, rules: { id: { hard, weight, ...params } or false } }
+//
+// Pitch rules count scale steps of the active scale for melody (step vs leap)
+// and cents for consonance (PLAN 3.6): that's how Fux's melodic rules carry over
+// to any tuning.
+
+const tuning = require("cg-tuning");
+const time = require("cg-time");
+
+// ---------------------------------------------------------------- helpers
+
+const isPerfect = (x) => x.cls === "perfect";
+const isImperfect = (x) => x.cls === "imperfect";
+// Against the bass a fourth is a dissonance; between upper voices it isn't.
+const consonantPair = (p) => p.cls !== "dissonant" || (p.fourth && !p.withBass);
+
+function violation(rule, slice, voices, detail, extra = {}) {
+  return { rule, bar: slice.bar, beat: slice.beat, t: slice.t, voices, detail, ...extra };
+}
+
+function pairIn(slice, a, b) {
+  return slice.pairs.find((p) => (p.low === a && p.high === b) || (p.low === b && p.high === a));
+}
+
+function noteOf(slice, voice) {
+  return slice.notes.find((n) => n.voice === voice);
+}
+
+const multi = (slices) => slices.filter((s) => s.notes.length > 1);
+
+// Whether time t falls on a strong beat of the meter.
+function analyzePosition(c, t) {
+  const bar = Math.floor(t / c.meter.beats + time.EPS);
+  const beat = t - bar * c.meter.beats;
+  return { strong: c.meter.strong.some((x) => time.eq(beat, x)) };
+}
+
+// The folded class of an interval (cents within the period), for "same interval" tests.
+function folded(cents, period) {
+  const value = ((Math.abs(cents) % period) + period) % period;
+  return period - value < 1 ? 0 : value;
+}
+
+// Each voice's notes in order, and where each note sits in its line.
+function neighbours(byVoice, event) {
+  const line = byVoice.get(event.voice) || [];
+  const i = line.indexOf(event);
+  return { prev: i > 0 ? line[i - 1] : null, next: i >= 0 && i + 1 < line.length ? line[i + 1] : null };
+}
+
+const steps = (system, a, b) => tuning.quantize(system, b).degree - tuning.quantize(system, a).degree;
+const isStep = (system, a, b) => a && b && Math.abs(steps(system, a.pitch, b.pitch)) === 1;
+// Two notes touch if one ends where the next starts (no rest between).
+const touches = (a, b) => a && b && time.eq(a.t + a.dur, b.t);
+
+// ---------------------------------------------------------------- rules
+
+const RULES = {};
+
+// First species: every slice consonant (Fux p. 27). A fourth over the bass is a dissonance.
+RULES.dissonance = (c) => {
+  const out = [];
+  for (const s of c.slices) {
+    for (const p of s.pairs) {
+      if (!consonantPair(p)) out.push(violation("dissonance", s, [p.low, p.high], `${Math.round(p.cents)} cents`));
+    }
+  }
+  return out;
+};
+
+// Florid counterpoint (ours, after Fux's second to fourth species and
+// Albrechtsberger's canons): a dissonance must be a passing or neighbour note
+// (in and out by step, off the strong beats) or a suspension (held from a
+// consonance, resolving down by step). A fourth over the bass with 3+ voices
+// sounding is reported as a 6/4 (Mann pp. 228, 236-237).
+RULES["dissonance-treatment"] = (c) => {
+  const out = [];
+  const sounding = multi(c.slices);
+  const firstBar = sounding.length ? sounding[0].bar : 0;
+  const lastBar = sounding.length ? sounding[sounding.length - 1].bar : 0;
+  c.slices.forEach((s, si) => {
+    const prev = si > 0 ? c.slices[si - 1] : null;
+    for (const p of s.pairs) {
+      if (consonantPair(p)) continue;
+      const ok = [p.low, p.high].some((v) => {
+        const n = noteOf(s, v);
+        const { prev: before, next: after } = neighbours(c.byVoice, n.event);
+        // Passing or neighbour: by step in and out, struck off the strong beats. It
+        // stays one for as long as it sounds, even if another voice moves meanwhile.
+        const struck = analyzePosition(c, n.event.t);
+        if (!struck.strong && touches(before, n.event) && touches(n.event, after)
+          && isStep(c.system, before, n.event) && isStep(c.system, n.event, after)) return true;
+        if (n.onset) return false;
+        // Held over: prepared (consonant in the slice before), resolving down by step.
+        if (!prev) return false;
+        const other = v === p.low ? p.high : p.low;
+        const was = pairIn(prev, v, other);
+        const prepared = !was || consonantPair(was);
+        return prepared && after && touches(n.event, after) && steps(c.system, n.event.pitch, after.pitch) === -1;
+      });
+      if (ok) continue;
+      const sixFour = p.fourth && p.withBass && s.notes.length > 2;
+      if (!sixFour) {
+        out.push(violation("dissonance", s, [p.low, p.high], `${Math.round(p.cents)} cents`));
+        continue;
+      }
+      // A 6/4 is "bad particularly in the first or in the last measure or on any
+      // strong beat" (Mann p. 228): there it's hard, elsewhere a soft cost.
+      const edge = s.bar === firstBar || s.bar === lastBar;
+      out.push(violation("six-four", s, [p.low, p.high], `${Math.round(p.cents)} cents`, s.strong || edge ? {} : { soft: true }));
+    }
+  });
+  return out;
+};
+
+// Fux p. 22: into a perfect consonance only by contrary or oblique motion.
+// Parallel (or similar, by octave displacement) into the same perfect class is
+// parallel-perfect; similar motion into a perfect consonance from anything else is
+// hidden-perfect (Fux pp. 32-33: what diminution reveals).
+function motionRules(c) {
+  const out = { parallel: [], hidden: [] };
+  for (const m of c.motion) {
+    const a = c.slices[m.from];
+    const b = c.slices[m.to];
+    for (const move of m.moves) {
+      if (move.kind !== "parallel" && move.kind !== "similar") continue;
+      const [x, y] = move.voices;
+      const now = pairIn(b, x, y);
+      if (!now || !isPerfect(now)) continue;
+      const before = pairIn(a, x, y);
+      const same = before && isPerfect(before)
+        && Math.abs(folded(before.cents, c.period) - folded(now.cents, c.period)) < 1;
+      const detail = `${Math.round(before ? before.cents : 0)} -> ${Math.round(now.cents)} cents, ${move.kind}`;
+      (same ? out.parallel : out.hidden).push(violation(same ? "parallel-perfect" : "hidden-perfect", b, [x, y], detail,
+        { from: { bar: a.bar, beat: a.beat, t: a.t } }));
+    }
+  }
+  return out;
+}
+RULES["parallel-perfect"] = (c) => motionRules(c).parallel;
+RULES["hidden-perfect"] = (c) => motionRules(c).hidden;
+
+// Fux p. 28: begin and end on perfect consonances. With three or more voices the
+// final chord may hold a third (Fux p. 112).
+RULES["begin-perfect"] = (c) => {
+  const s = multi(c.slices)[0];
+  if (!s) return [];
+  return s.above.filter((x) => !isPerfect(x)).map((x) => violation("begin-perfect", s, [s.bass, x.voice], `${Math.round(x.cents)} cents`));
+};
+RULES["end-perfect"] = (c) => {
+  const all = multi(c.slices);
+  const s = all[all.length - 1];
+  if (!s) return [];
+  const allowed = (x) => isPerfect(x) || (s.notes.length > 2 && isImperfect(x));
+  return s.above.filter((x) => !allowed(x)).map((x) => violation("end-perfect", s, [s.bass, x.voice], `${Math.round(x.cents)} cents`));
+};
+
+// Fux p. 31: stay in the mode of the given melody. The lowest voice sounds the
+// final at the beginning and the end. The final: options.final, or voice 0's last note.
+RULES["mode-final"] = (c, params) => {
+  const all = multi(c.slices);
+  if (!all.length) return [];
+  let final = c.options.final;
+  if (final === undefined) {
+    const line = c.byVoice.get(0) || [...c.byVoice.values()][0];
+    final = line[line.length - 1].pitch;
+  }
+  const tolerance = params.tolerance || 15;
+  const out = [];
+  for (const s of [all[0], all[all.length - 1]]) {
+    const bass = noteOf(s, s.bass);
+    if (folded((bass.pitch - final) * 100, c.period) > tolerance
+      && c.period - folded((bass.pitch - final) * 100, c.period) > tolerance) {
+      out.push(violation("mode-final", s, [s.bass], `the bass is ${Math.round(folded((bass.pitch - final) * 100, c.period))} cents from the final`));
+    }
+    if (all.length === 1) break;
+  }
+  return out;
+};
+
+// Fux pp. 28-29: the next-to-last bar is a major sixth (cantus below) or a minor
+// third (cantus above), the outer voices closing by contrary step. In 12-EDO the
+// sizes are checked (fux12 and ratio); in other tunings, the class and the steps.
+RULES.penultimate = (c) => {
+  const all = multi(c.slices);
+  if (all.length < 2) return [];
+  const last = all[all.length - 1];
+  const pen = all[all.length - 2];
+  // The outer voices of the penultimate slice; at a final unison they may swap.
+  const lo = pen.bass;
+  const hi = pen.notes[pen.notes.length - 1].voice;
+  const p = pairIn(pen, lo, hi);
+  if (!p || !noteOf(last, lo) || !noteOf(last, hi)) return [violation("penultimate", pen, [lo, hi], "an outer voice stops before the end")];
+  const out = [];
+  const lowStep = steps(c.system, noteOf(pen, lo).pitch, noteOf(last, lo).pitch);
+  const highStep = steps(c.system, noteOf(pen, hi).pitch, noteOf(last, hi).pitch);
+  if (!isImperfect(p)) out.push(violation("penultimate", pen, [lo, hi], "not an imperfect consonance"));
+  if (!(Math.abs(lowStep) === 1 && Math.abs(highStep) === 1 && Math.sign(lowStep) !== Math.sign(highStep))) {
+    out.push(violation("penultimate", pen, [lo, hi], "the outer voices don't close by contrary step"));
+  }
+  if (c.model.name === "fux12" || c.model.name === "ratio") {
+    const semis = Math.round(folded(p.cents, 1200) / 100);
+    if (semis !== 9 && semis !== 3) out.push(violation("penultimate", pen, [lo, hi], "not a major sixth or minor third"));
+  }
+  return out;
+};
+
+// Fux p. 28: imperfect consonances are preferred between the beginning and the end.
+RULES["prefer-imperfect"] = (c) => {
+  const all = multi(c.slices);
+  const out = [];
+  for (const s of all.slice(1, -1)) {
+    for (const x of s.above) if (isPerfect(x)) out.push(violation("prefer-imperfect", s, [s.bass, x.voice], "perfect inside"));
+  }
+  return out;
+};
+
+// Mann's note (Fux p. 21): no more than three or four parallel imperfect
+// consonances in a row. A run of more than `max` parallel moves.
+RULES["parallel-imperfect-run"] = (c, params) => {
+  const max = params.max || 3;
+  const runs = new Map();
+  const out = [];
+  for (const m of c.motion) {
+    const b = c.slices[m.to];
+    for (const move of m.moves) {
+      const now = pairIn(b, ...move.voices);
+      const run = move.kind === "parallel" && now && isImperfect(now) ? (runs.get(move.key) || 0) + 1 : 0;
+      runs.set(move.key, run);
+      if (run > max) out.push(violation("parallel-imperfect-run", b, move.voices, `${run} parallel moves`));
+    }
+  }
+  return out;
+};
+
+// Fux p. 29n: a tone repeated at most once (three in a row is too many).
+RULES.repeat = (c) => {
+  const out = [];
+  for (const line of c.byVoice.values()) {
+    for (let i = 2; i < line.length; i++) {
+      const same = (a, b) => Math.abs(a.pitch - b.pitch) < 0.01 && touches(a, b);
+      if (same(line[i - 2], line[i - 1]) && same(line[i - 1], line[i])) {
+        const s = c.slices.find((x) => time.eq(x.t, line[i].t));
+        out.push(violation("repeat", s, [line[i].voice], "a third time"));
+      }
+    }
+  }
+  return out;
+};
+
+// The sizes a k-step interval takes in the mode, and how often (over every
+// starting degree). A size that occurs once while another occurs more is
+// augmented or diminished (ours: in the diatonic scale it flags exactly the
+// tritone, as F-B and B-F).
+function stepSpectrum(system) {
+  const count = tuning.size(system);
+  const period = system.period_cents;
+  const spectrum = new Map();
+  if (!period) return spectrum;
+  for (let k = 1; k < count; k++) {
+    const sizes = new Map();
+    for (let d = 0; d < count; d++) {
+      const size = Math.round((tuning.degreeCents(system, d + k) - tuning.degreeCents(system, d)) * 10) / 10;
+      sizes.set(size, (sizes.get(size) || 0) + 1);
+    }
+    const most = Math.max(...sizes.values());
+    spectrum.set(k, [...sizes].filter(([, n]) => !(n === 1 && most > 1)).map(([size]) => size));
+  }
+  return spectrum;
+}
+
+// Fux p. 27n: no augmented, diminished or chromatic melodic intervals.
+RULES["melodic-augmented"] = (c, params) => {
+  const spectrum = stepSpectrum(c.system);
+  const tolerance = params.tolerance || 10;
+  const period = c.system.period_cents;
+  const out = [];
+  if (!period) return out;
+  const count = tuning.size(c.system);
+  for (const line of c.byVoice.values()) {
+    for (let i = 1; i < line.length; i++) {
+      if (!touches(line[i - 1], line[i])) continue;
+      const cents = Math.abs(line[i].pitch - line[i - 1].pitch) * 100;
+      if (cents < 1) continue;
+      const k = Math.abs(steps(c.system, line[i - 1].pitch, line[i].pitch)) % count;
+      const inPeriod = cents % period;
+      const regular = k === 0 ? inPeriod < tolerance || period - inPeriod < tolerance
+        : (spectrum.get(k) || []).some((size) => Math.abs(size - inPeriod) <= tolerance);
+      if (!regular) {
+        const s = c.slices.find((x) => time.eq(x.t, line[i].t));
+        out.push(violation("melodic-augmented", s, [line[i].voice], `${Math.round(cents)} cents over ${k} steps`));
+      }
+    }
+  }
+  return out;
+};
+
+// Fux p. 27n: no leap larger than a fifth, except the octave and the ascending
+// minor sixth. In cents, so it holds in any tuning.
+RULES["melodic-leap"] = (c, params) => {
+  const fifth = params.fifth || 702;
+  const tolerance = params.tolerance || 15;
+  const period = c.system.period_cents || 1200;
+  const out = [];
+  for (const line of c.byVoice.values()) {
+    for (let i = 1; i < line.length; i++) {
+      if (!touches(line[i - 1], line[i])) continue;
+      const signed = (line[i].pitch - line[i - 1].pitch) * 100;
+      const size = Math.abs(signed);
+      if (size <= fifth + tolerance) continue;
+      if (Math.abs(size - period) <= tolerance) continue;
+      if (signed > 0 && Math.abs(size - 814) <= 35) continue; // the ascending minor sixth (8/5 to 12-TET's 800)
+      const s = c.slices.find((x) => time.eq(x.t, line[i].t));
+      out.push(violation("melodic-leap", s, [line[i].voice], `${Math.round(signed)} cents`));
+    }
+  }
+  return out;
+};
+
+// Fux p. 27n: leaps compensated (the next move turns back), and no two leaps in
+// a row in one direction. A leap is more than two scale steps (larger than a third).
+RULES["leap-compensation"] = (c) => {
+  const out = [];
+  for (const line of c.byVoice.values()) {
+    for (let i = 2; i < line.length; i++) {
+      if (!touches(line[i - 2], line[i - 1]) || !touches(line[i - 1], line[i])) continue;
+      const first = steps(c.system, line[i - 2].pitch, line[i - 1].pitch);
+      const second = steps(c.system, line[i - 1].pitch, line[i].pitch);
+      const s = c.slices.find((x) => time.eq(x.t, line[i].t));
+      if (Math.abs(first) > 2 && second !== 0 && Math.sign(second) === Math.sign(first)) {
+        out.push(violation("leap-compensation", s, [line[i].voice], "a leap not turned back"));
+      } else if (Math.abs(first) > 1 && Math.abs(second) > 1 && Math.sign(first) === Math.sign(second)) {
+        out.push(violation("leap-compensation", s, [line[i].voice], "two leaps one way"));
+      }
+    }
+  }
+  return out;
+};
+
+// Albrechtsberger (Mann pp. 216-217): let rests set up the entrances. A voice
+// coming back after a rest shorter than `beats` re-enters unprepared.
+RULES["entry-rest"] = (c, params) => {
+  const beats = params.beats || 1;
+  const out = [];
+  for (const line of c.byVoice.values()) {
+    for (let i = 1; i < line.length; i++) {
+      const gap = line[i].t - (line[i - 1].t + line[i - 1].dur);
+      if (gap > time.EPS && time.lt(gap, beats)) {
+        const s = c.slices.find((x) => time.eq(x.t, line[i].t));
+        out.push(violation("entry-rest", s, [line[i].voice], `a rest of ${gap} beats`));
+      }
+    }
+  }
+  return out;
+};
+
+// Albrechtsberger (Mann p. 217): "It is not good to place the beginning of a new
+// phrase at the distance of a seventh or ninth from the end of the preceding
+// phrase." Phrases are a voice's runs of notes between rests.
+RULES["phrase-seventh"] = (c) => {
+  const out = [];
+  const count = tuning.size(c.system);
+  for (const line of c.byVoice.values()) {
+    for (let i = 1; i < line.length; i++) {
+      if (touches(line[i - 1], line[i])) continue;
+      const k = Math.abs(steps(c.system, line[i - 1].pitch, line[i].pitch));
+      if (count === 7 && (k === 6 || k === 8)) {
+        const s = c.slices.find((x) => time.eq(x.t, line[i].t));
+        out.push(violation("phrase-seventh", s, [line[i].voice], `${k + 1}th from the phrase before`));
+      }
+    }
+  }
+  return out;
+};
+
+// The spectral profile: a ceiling on the model's score per slice and as a mean
+// over a window (a density envelope).
+RULES["roughness-ceiling"] = (c, params) => {
+  const ceiling = params.ceiling === undefined ? 0.6 : params.ceiling;
+  const windowCeiling = params.windowCeiling === undefined ? 0.4 : params.windowCeiling;
+  const window = params.window || c.meter.beats;
+  const out = [];
+  const score = (s) => (s.above.length ? s.above.reduce((sum, x) => sum + x.score, 0) / s.above.length : 0);
+  for (const s of c.slices) if (score(s) > ceiling) out.push(violation("roughness-ceiling", s, [s.bass], `slice ${score(s).toFixed(2)}`));
+  for (let start = 0; c.slices.length && time.lt(start, c.slices[c.slices.length - 1].t + time.EPS); start += window) {
+    const inside = c.slices.filter((s) => time.le(start, s.t) && time.lt(s.t, start + window));
+    if (!inside.length) continue;
+    const mean = inside.reduce((sum, s) => sum + score(s), 0) / inside.length;
+    if (mean > windowCeiling) out.push(violation("roughness-ceiling", inside[0], [inside[0].bass], `window mean ${mean.toFixed(2)}`));
+  }
+  return out;
+};
+
+// ---------------------------------------------------------------- profiles
+
+const H = (weight = 1, params = {}) => ({ hard: true, weight, ...params });
+const S = (weight = 1, params = {}) => ({ hard: false, weight, ...params });
+
+const PROFILES = {
+  free: {},
+  // Fux, first species (Study of Counterpoint, pp. 27-33).
+  "fux-strict": {
+    dissonance: H(), "parallel-perfect": H(), "hidden-perfect": H(),
+    "begin-perfect": H(), "end-perfect": H(), "mode-final": H(), penultimate: H(),
+    repeat: H(), "melodic-augmented": H(), "melodic-leap": H(),
+    "prefer-imperfect": S(0.5), "parallel-imperfect-run": S(1, { max: 3 }), "leap-compensation": S(0.5),
+  },
+  // Florid canons, as Albrechtsberger writes them (ours: species 2-4's dissonance
+  // treatment, brought forward from M5 for the answer finder). Melodic faults
+  // are soft: a follower inherits the dux's melody, and a composer fixes a
+  // scale-step answer with an accidental (Mann Ex. 210's E natural).
+  florid: {
+    "dissonance-treatment": H(), "parallel-perfect": H(), "hidden-perfect": S(1),
+    "melodic-augmented": S(1), "melodic-leap": S(0.5), repeat: S(0.25),
+  },
+  // Albrechtsberger's canon rules on top of florid (Mann pp. 213-261).
+  canon: {
+    base: "florid",
+    "entry-rest": S(0.5), "phrase-seventh": S(1),
+  },
+  // Motion rules on the model's own classes, and a roughness envelope.
+  spectral: {
+    "parallel-perfect": S(2), "hidden-perfect": S(0.5), "roughness-ceiling": S(1),
+  },
+};
+
+// A profile's full rule table: its base's rules, then its own, then overrides.
+function resolve(profile) {
+  if (profile === undefined || profile === null) return { name: "free", rules: {} };
+  const spec = typeof profile === "string" ? { name: profile } : profile;
+  let rules = {};
+  let name = spec.name || spec.base || "custom";
+  const chain = [];
+  let cursor = spec.name && PROFILES[spec.name] ? spec.name : spec.base;
+  while (cursor) {
+    if (!PROFILES[cursor]) throw new Error(`unknown rule profile ${cursor}; one of ${Object.keys(PROFILES).join(" ")}`);
+    chain.unshift(cursor);
+    cursor = PROFILES[cursor].base;
+  }
+  if (typeof profile === "string" && !PROFILES[profile]) {
+    throw new Error(`unknown rule profile ${profile}; one of ${Object.keys(PROFILES).join(" ")}`);
+  }
+  for (const p of chain) {
+    for (const [id, r] of Object.entries(PROFILES[p])) if (id !== "base") rules[id] = r;
+  }
+  for (const [id, r] of Object.entries(spec.rules || {})) {
+    if (r === false) { delete rules[id]; continue; }
+    if (!RULES[id]) throw new Error(`unknown rule ${id}`);
+    rules[id] = { ...(rules[id] || { hard: false, weight: 1 }), ...r };
+  }
+  if (spec.only) rules = Object.fromEntries(Object.entries(rules).filter(([id]) => spec.only.includes(id)));
+  return { name, rules };
+}
+
+// Fux p. 139: "as the number of voices increases, the rules are to be less
+// rigorously observed". fux-relaxed (M4) scales soft weights by voice count.
+
+function judge(context, profile) {
+  const { name, rules } = resolve(profile);
+  const c = { ...context, period: context.system.period_cents || 1200, options: context.options || {} };
+  const violations = [];
+  for (const [id, r] of Object.entries(rules)) {
+    const found = RULES[id](c, r);
+    for (const v of found) {
+      // A rule may report a more specific id (dissonance-treatment -> six-four),
+      // and mark a violation soft where its source says it's only a fault in places.
+      const { soft, ...rest } = v;
+      const hardHere = r.hard && !soft;
+      violations.push({ ...rest, hard: hardHere, cost: hardHere ? 0 : r.weight });
+    }
+  }
+  violations.sort((a, b) => a.t - b.t || a.rule.localeCompare(b.rule));
+  return { profile: name, violations };
+}
+
+exports.judge = judge;
+exports.resolve = resolve;
+exports.stepSpectrum = stepSpectrum;
+exports.profiles = () => Object.keys(PROFILES);
+exports.rules = () => Object.keys(RULES);
+  };
+
+  // ---- cg-analyze.js
+  factories["cg-analyze"] = function (exports, module, require) {
+"use strict";
+// The analyzer (PLAN.md 3.3, 3.6). It reads rendered events and reports what a
+// listener would hear:
+//   slices   at every onset: the sounding notes, lowest first. The lowest is the
+//            sounding bass, in real registers, whatever the voice order on paper
+//            (Mann p. 228: a canon sung in the wrong registers turns a 5/3 into a
+//            6/4). Every interval above the bass and between every pair, classed
+//            by the consonance model.
+//   motion   per voice pair, between consecutive slices: parallel, similar,
+//            contrary, oblique (or none: neither moved)
+//   metrics  Tymoczko's components of tonality, and voice-leading size, in any
+//            tuning (A Geometry of Music, ch. 1-5; formulas marked "ours" are ours)
+//   rules    a rule profile (cg-rules) turns slices and motion into violations
+//
+// analyze(rendered, options) takes cg-canon's render(spec) result, or any
+// { events: [{ t, dur, pitch, voice }] }. Options:
+//   system       the scale system (melodic steps are counted in its degrees)
+//   meter        { beats: 4, strong: [0] }: a bar's length, and its strong beats
+//   consonance   a model, or a cg-consonance spec
+//   profile      a rule profile name or object (cg-rules); none = metrics only
+//   window       beats per macroharmony window (default: one bar)
+//   pcTolerance  cents within which two pitch classes count as one (default 15)
+//   vlNorm       taxicab (default), euclidean or chebyshev
+//   final        the mode's final as a pitch (fux rules); default: voice 0's last note
+//   fourthsFree  judge every pair as upper voices (a fourth is consonant): for
+//                screening part of a texture whose real bass isn't there yet
+
+const tuning = require("cg-tuning");
+const scales = require("cg-scales");
+const time = require("cg-time");
+const consonance = require("cg-consonance");
+const rules = require("cg-rules");
+
+const DEFAULT_METER = { beats: 4, strong: [0] };
+
+function meterOf(m) {
+  const beats = m && m.beats > 0 ? m.beats : DEFAULT_METER.beats;
+  const strong = m && Array.isArray(m.strong) ? m.strong : DEFAULT_METER.strong;
+  return { beats, strong };
+}
+
+// Bar (from 1, as scores count), beat within the bar (from 0), strong or not.
+function position(t, meter) {
+  const bar = Math.floor(t / meter.beats + time.EPS);
+  const beat = t - bar * meter.beats;
+  return { bar: bar + 1, beat, strong: meter.strong.some((s) => time.eq(beat, s)) };
+}
+
+// ---------------------------------------------------------------- slices
+
+function onsets(events) {
+  const times = [];
+  for (const e of time.sortEvents(events)) {
+    if (!times.length || !time.eq(times[times.length - 1], e.t)) times.push(e.t);
+  }
+  return times;
+}
+
+function classifier(model) {
+  const cache = new Map();
+  return (cents, lowPitch) => {
+    const lowHz = tuning.midiToHz(lowPitch);
+    const key = model.name === "roughness" ? `${cents.toFixed(3)}@${lowHz.toFixed(1)}` : cents.toFixed(3);
+    if (!cache.has(key)) cache.set(key, model.classify(cents, { lowHz }));
+    return cache.get(key);
+  };
+}
+
+// Every onset time, with what sounds there. A sweep: events enter at their
+// onset and leave at their end.
+function buildSlices(events, model, meter, fourthsFree = false) {
+  const sorted = time.sortEvents(events.filter((e) => e.dur > 0));
+  const classify = classifier(model);
+  const slices = [];
+  let next = 0;
+  let active = [];
+  for (const t of onsets(sorted)) {
+    while (next < sorted.length && time.le(sorted[next].t, t)) active.push(sorted[next++]);
+    active = active.filter((e) => time.lt(t, e.t + e.dur));
+    const notes = active
+      .map((e) => ({ voice: e.voice, pitch: e.pitch, onset: time.eq(e.t, t), event: e }))
+      .sort((a, b) => a.pitch - b.pitch || a.voice - b.voice);
+    const bass = notes[0];
+    const above = notes.slice(1).map((n) => {
+      const cents = (n.pitch - bass.pitch) * 100;
+      return { voice: n.voice, cents, ...classify(cents, bass.pitch) };
+    });
+    const pairs = [];
+    for (let i = 0; i < notes.length; i++) {
+      for (let j = i + 1; j < notes.length; j++) {
+        const low = notes[i];
+        const high = notes[j];
+        const cents = (high.pitch - low.pitch) * 100;
+        pairs.push({ low: low.voice, high: high.voice, cents, withBass: i === 0 && !fourthsFree, ...classify(cents, low.pitch) });
+      }
+    }
+    slices.push({ t, ...position(t, meter), notes, bass: bass.voice, above, pairs });
+  }
+  return slices;
+}
+
+// ---------------------------------------------------------------- motion
+
+const pairKey = (a, b) => (a < b ? `${a}-${b}` : `${b}-${a}`);
+
+// Between consecutive slices, for every pair sounding in both.
+function motionBetween(prev, next) {
+  const before = new Map(prev.notes.map((n) => [n.voice, n]));
+  const out = [];
+  const voices = next.notes.filter((n) => before.has(n.voice));
+  for (let i = 0; i < voices.length; i++) {
+    for (let j = i + 1; j < voices.length; j++) {
+      const a = voices[i];
+      const b = voices[j];
+      const da = a.pitch - before.get(a.voice).pitch;
+      const db = b.pitch - before.get(b.voice).pitch;
+      const was = (before.get(a.voice).pitch - before.get(b.voice).pitch) * 100;
+      const is = (a.pitch - b.pitch) * 100;
+      let kind;
+      const still = (d) => Math.abs(d) < 1e-6;
+      if (still(da) && still(db)) kind = "none";
+      else if (still(da) || still(db)) kind = "oblique";
+      else if (Math.sign(da) !== Math.sign(db)) kind = "contrary";
+      else kind = Math.abs(Math.abs(is) - Math.abs(was)) < 1 ? "parallel" : "similar";
+      out.push({ voices: [a.voice, b.voice].sort((x, y) => x - y), kind, key: pairKey(a.voice, b.voice),
+        crossed: Math.sign(is) !== Math.sign(was) && !still(is) && !still(was) });
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- metrics
+
+const fold = (cents, period) => ((cents % period) + period) % period;
+
+// Melodic lines per voice: each note's pitch in order (held notes count once).
+function lines(events) {
+  const byVoice = new Map();
+  for (const e of time.sortEvents(events)) {
+    if (!byVoice.has(e.voice)) byVoice.set(e.voice, []);
+    byVoice.get(e.voice).push(e);
+  }
+  return byVoice;
+}
+
+// Steps of the active scale between two pitches (the scale is the ruler, ch. 4).
+function scaleSteps(system, a, b) {
+  return Math.abs(tuning.quantize(system, b).degree - tuning.quantize(system, a).degree);
+}
+
+function conjunct(byVoice, system) {
+  const perVoice = {};
+  let steps = 0;
+  let cents = 0;
+  let count = 0;
+  for (const [voice, notes] of byVoice) {
+    let s = 0;
+    let c = 0;
+    let n = 0;
+    for (let i = 1; i < notes.length; i++) {
+      s += scaleSteps(system, notes[i - 1].pitch, notes[i].pitch);
+      c += Math.abs(notes[i].pitch - notes[i - 1].pitch) * 100;
+      n++;
+    }
+    perVoice[voice] = n ? { steps: s / n, cents: c / n } : { steps: 0, cents: 0 };
+    steps += s;
+    cents += c;
+    count += n;
+  }
+  return { steps: count ? steps / count : 0, cents: count ? cents / count : 0, perVoice };
+}
+
+// The dissonance curve: the mean model score above the bass, per slice.
+function dissonanceCurve(slices) {
+  const points = slices.map((s) => ({
+    t: s.t,
+    score: s.above.length ? s.above.reduce((sum, a) => sum + a.score, 0) / s.above.length : 0,
+  }));
+  const mean = points.length ? points.reduce((sum, p) => sum + p.score, 0) / points.length : 0;
+  return { points, mean, max: points.reduce((m, p) => Math.max(m, p.score), 0) };
+}
+
+// Distinct pitch classes (cents, folded), merging any within `tolerance`.
+function pitchClasses(pitches, period, tolerance) {
+  const pcs = [];
+  for (const p of pitches) {
+    const pc = fold(p * 100, period);
+    const near = pcs.find((q) => Math.min(Math.abs(q - pc), period - Math.abs(q - pc)) <= tolerance);
+    if (near === undefined) pcs.push(pc);
+  }
+  return pcs.sort((a, b) => a - b);
+}
+
+// A chord type: its pitch classes, transposed to start at 0 and rotated to the
+// most compact form, so octave, order and transposition don't matter (OPT).
+function chordType(pcs, period) {
+  let best = null;
+  for (let r = 0; r < pcs.length; r++) {
+    const rotated = pcs.map((_, i) => fold(pcs[(r + i) % pcs.length] - pcs[r], period));
+    const span = rotated[rotated.length - 1];
+    if (!best || span < best.span - 1e-9) best = { form: rotated, span };
+  }
+  return best.form;
+}
+
+function typeDistance(a, b, period) {
+  let best = Infinity;
+  for (let r = 0; r < b.length; r++) {
+    const rotated = b.map((_, i) => fold(b[(r + i) % b.length] - b[r], period));
+    best = Math.min(best, a.reduce((sum, x, i) => sum + Math.abs(x - rotated[i]), 0));
+  }
+  return best;
+}
+
+// Mean distance between successive chord types, only between slices with the
+// same number of distinct pitch classes; otherwise undefined (not counted).
+function harmonicConsistency(slices, period, tolerance) {
+  let total = 0;
+  let count = 0;
+  let prev = null;
+  for (const s of slices) {
+    const pcs = pitchClasses(s.notes.map((n) => n.pitch), period, tolerance);
+    const type = pcs.length > 1 ? chordType(pcs, period) : null;
+    if (type && prev && prev.length === type.length) {
+      total += typeDistance(prev, type, period);
+      count++;
+    }
+    prev = type;
+  }
+  return { mean: count ? total / count : null, compared: count };
+}
+
+// Pitch-class content in consecutive windows: its size, the circulation rate
+// (new pitch classes per beat) and consistency (overlap with the window before).
+function macroharmony(events, length, window, period, tolerance) {
+  const windows = [];
+  for (let start = 0; time.lt(start, length); start += window) {
+    const end = start + window;
+    const pitches = events.filter((e) => time.lt(e.t, end) && time.lt(start, e.t + e.dur)).map((e) => e.pitch);
+    windows.push({ start, pcs: pitchClasses(pitches, period, tolerance) });
+  }
+  const same = (a, b) => Math.min(Math.abs(a - b), period - Math.abs(a - b)) <= tolerance;
+  let fresh = 0;
+  let overlap = 0;
+  for (let i = 1; i < windows.length; i++) {
+    const a = windows[i - 1].pcs;
+    const b = windows[i].pcs;
+    fresh += b.filter((x) => !a.some((y) => same(x, y))).length;
+    const shared = b.filter((x) => a.some((y) => same(x, y))).length;
+    const union = a.length + b.length - shared;
+    overlap += union ? shared / union : 1;
+  }
+  const n = windows.length;
+  return {
+    window,
+    sizes: windows.map((w) => w.pcs.length),
+    mean: n ? windows.reduce((s, w) => s + w.pcs.length, 0) / n : 0,
+    circulation: n > 1 ? fresh / ((n - 1) * window) : 0,
+    consistency: n > 1 ? overlap / (n - 1) : 1,
+  };
+}
+
+// Centricity (ours): how concentrated the duration-weighted pitch-class
+// distribution is. The bass and each voice's last note weigh double.
+function centricity(slices, events, period, tolerance) {
+  const weights = [];
+  const add = (pitch, w) => {
+    const pc = fold(pitch * 100, period);
+    const near = weights.find((x) => Math.min(Math.abs(x.pc - pc), period - Math.abs(x.pc - pc)) <= tolerance);
+    if (near) near.w += w;
+    else weights.push({ pc, w });
+  };
+  for (let i = 0; i < slices.length; i++) {
+    const s = slices[i];
+    const span = i + 1 < slices.length ? slices[i + 1].t - s.t : Math.max(...s.notes.map((n) => n.event.t + n.event.dur - s.t));
+    for (const n of s.notes) add(n.pitch, span * (n.voice === s.bass ? 2 : 1));
+  }
+  for (const notes of lines(events).values()) add(notes[notes.length - 1].pitch, notes[notes.length - 1].dur);
+  const total = weights.reduce((s, x) => s + x.w, 0);
+  if (!total) return { center: null, share: 0, entropy: 0 };
+  weights.sort((a, b) => b.w - a.w);
+  const entropy = weights.length > 1
+    ? -weights.reduce((s, x) => s + (x.w / total) * Math.log2(x.w / total), 0) / Math.log2(weights.length)
+    : 0;
+  return { center: weights[0].pc, share: weights[0].w / total, entropy };
+}
+
+// Evenness (ours, after ch. 3): cents from each slice's pitch classes to the
+// nearest perfectly even chord of the same size; 0 = an equal division.
+function evenness(slices, period, tolerance) {
+  const distances = [];
+  for (const s of slices) {
+    const pcs = pitchClasses(s.notes.map((n) => n.pitch), period, tolerance);
+    if (pcs.length < 2) continue;
+    const n = pcs.length;
+    let best = Infinity;
+    for (let r = 0; r < n; r++) {
+      const rotated = pcs.map((_, i) => pcs[(r + i) % n] + (r + i >= n ? period : 0));
+      const offsets = rotated.map((p, i) => p - (i * period) / n);
+      const o = offsets.reduce((a, b) => a + b, 0) / n;
+      best = Math.min(best, offsets.reduce((sum, x) => sum + Math.abs(x - o), 0));
+    }
+    distances.push(best);
+  }
+  return { mean: distances.length ? distances.reduce((a, b) => a + b, 0) / distances.length : null, slices: distances.length };
+}
+
+// Voice-leading size between consecutive slices, over the voices sounding in
+// both (entries, exits and holes are counted apart, never folded in).
+function voiceLeading(slices, norm) {
+  const sizes = [];
+  let entries = 0;
+  let exits = 0;
+  for (let i = 1; i < slices.length; i++) {
+    const before = new Map(slices[i - 1].notes.map((n) => [n.voice, n.pitch]));
+    const after = new Map(slices[i].notes.map((n) => [n.voice, n.pitch]));
+    const moves = [];
+    for (const [v, p] of after) {
+      if (before.has(v)) moves.push(Math.abs(p - before.get(v)) * 100);
+      else entries++;
+    }
+    for (const v of before.keys()) if (!after.has(v)) exits++;
+    if (!moves.length) continue;
+    let size;
+    if (norm === "euclidean") size = Math.sqrt(moves.reduce((s, m) => s + m * m, 0));
+    else if (norm === "chebyshev") size = Math.max(...moves);
+    else size = moves.reduce((s, m) => s + m, 0);
+    sizes.push(size);
+  }
+  return {
+    norm, sizes,
+    mean: sizes.length ? sizes.reduce((a, b) => a + b, 0) / sizes.length : 0,
+    entries: entries + (slices.length ? slices[0].notes.length : 0), exits,
+  };
+}
+
+// Boundary events: unisons inside a slice, and crossings between slices.
+function boundary(slices, motion) {
+  let unisons = 0;
+  for (const s of slices) unisons += s.pairs.filter((p) => Math.abs(p.cents) < 1).length;
+  const crossings = motion.reduce((sum, m) => sum + m.moves.filter((x) => x.crossed).length, 0);
+  return { unisons, crossings };
+}
+
+// ---------------------------------------------------------------- the report
+
+function modelFor(options, system) {
+  const c = options.consonance;
+  if (c && typeof c.classify === "function") return c;
+  return consonance.fromSpec(c, system);
+}
+
+function analyze(rendered, options = {}) {
+  const events = (rendered.events || []).filter((e) => e.dur > 0);
+  const system = options.system || scales.fromSpec(undefined);
+  const meter = meterOf(options.meter || rendered.meter);
+  const model = modelFor(options, system);
+  const period = system.period_cents || 1200;
+  const tolerance = options.pcTolerance === undefined ? 15 : options.pcTolerance;
+  const slices = buildSlices(events, model, meter, options.fourthsFree);
+  const motion = [];
+  for (let i = 1; i < slices.length; i++) motion.push({ from: i - 1, to: i, moves: motionBetween(slices[i - 1], slices[i]) });
+  const length = events.reduce((m, e) => Math.max(m, e.t + e.dur), 0);
+  const byVoice = lines(events);
+  const metrics = {
+    conjunct: conjunct(byVoice, system),
+    dissonance: dissonanceCurve(slices),
+    harmonicConsistency: harmonicConsistency(slices, period, tolerance),
+    macroharmony: macroharmony(events, length, options.window || meter.beats, period, tolerance),
+    centricity: centricity(slices, events, period, tolerance),
+    evenness: evenness(slices, period, tolerance),
+    voiceLeading: voiceLeading(slices, options.vlNorm || "taxicab"),
+    boundary: boundary(slices, motion),
+    period,
+  };
+  const context = { events, byVoice, slices, motion, system, meter, model, options };
+  const judged = rules.judge(context, options.profile);
+  return {
+    model: model.name,
+    profile: judged.profile,
+    meter,
+    slices,
+    motion,
+    metrics,
+    violations: judged.violations,
+    hard: judged.violations.filter((v) => v.hard).length,
+    cost: judged.violations.reduce((sum, v) => sum + (v.hard ? 0 : v.cost), 0),
+  };
+}
+
+exports.analyze = analyze;
+exports.buildSlices = buildSlices;
+exports.motionBetween = motionBetween;
+exports.position = position;
+exports.meterOf = meterOf;
+exports.scaleSteps = scaleSteps;
+exports.pitchClasses = pitchClasses;
+exports.chordType = chordType;
+exports.DEFAULT_METER = DEFAULT_METER;
+  };
+
   var cache = {};
   function load(name) {
     if (!Object.prototype.hasOwnProperty.call(cache, name)) {
@@ -2070,7 +3230,13 @@ __cg_require.local = 1;
 //   savespec <full path>          status saved ...                      the current spec
 //                                 (not "save": [v8] calls a save() function when the patch is saved)
 //   info                          status ...
+//   profile <name>                rules <name>, then as analysis below  the rules the piano roll
+//                                                                        marks (canon, florid,
+//                                                                        fux-strict, spectral, free)
 // Whenever the melody changes: melody <file> | melody preset <name> | melody spec <name>.
+// After every render (and every profile), the analysis (M3 part F): the dict cg.report gets
+// the verdict (violations, the dissonance curve), then roll refresh (for the piano roll)
+// and analysis <profile> rules: <n> faults / cost <x> (its own selector: the panel prints it).
 // Errors come out as: error <message>. Every output starts with a selector.
 
 autowatch = 1;
@@ -2084,6 +3250,8 @@ const tuningLibrary = __cg_require("cg-tuning");
 const mpe = __cg_require("cg-mpe");
 const files = __cg_require("cg-file");
 const io = __cg_require("cg-io");
+const analyzer = __cg_require("cg-analyze");
+const ruleLibrary = __cg_require("cg-rules");
 
 const TRANSFORMS = ["P", "I", "R", "RI"];
 const LINES = ["top", "bottom", "track"];
@@ -2097,6 +3265,7 @@ const MPE_TO = { drift: 1, midi: 2 }; // the patch's [gate 2] outlets
 // dict is held for the script's whole life.
 const specDict = new Dict("cg.spec"); // the current spec, for the answer finder
 const eventsDict = new Dict("cg.events"); // the rendered events
+const reportDict = new Dict("cg.report"); // the analysis, for the piano roll
 const held = new Map(); // dicts read by name (usespec)
 function heldDict(name) {
   if (!held.has(name)) held.set(name, new Dict(name));
@@ -2111,6 +3280,7 @@ let rendered = null;
 let midi = null; // the last .mid file: { name, parsed }
 let presetIndex = 0; // the preset last picked (null after loadspec)
 const midiOptions = { line: "top", map: "exact", quantize: 0, track: -1 };
+let rules = "canon"; // the rule profile the analysis uses
 
 function presets() {
   outlet(0, "menu", "clear");
@@ -2329,6 +3499,17 @@ function info() {
   attempt(announce);
 }
 
+// The rules the piano roll marks. An unknown name is refused, and the menu
+// shows the rules still in use.
+function profile(name) {
+  attempt(() => {
+    ruleLibrary.resolve(String(name)); // throws on an unknown profile
+    rules = String(name);
+    if (rendered) analysis();
+  });
+  outlet(0, "rules", rules);
+}
+
 // ---------------------------------------------------------------- helpers
 
 // Sets a MIDI option (a name, or its index in `names`), then re-reads the
@@ -2474,6 +3655,12 @@ function update() {
   if (selected >= canonVoices().length) selected = 0;
   showEditor();
   announce();
+  // The canon plays whether or not it can be analyzed.
+  try {
+    analysis();
+  } catch (e) {
+    outlet(0, "error", "analysis: " + (e && e.message ? e.message : String(e)));
+  }
   if (mpeIndex.length) {
     const used = new Set([...channels.values()].filter((ch) => ch !== null)).size;
     outlet(0, "status", "mpe:", mpeIndex.length - overflow, "notes on", used, `channels (2-16, bend +/-${range})`,
@@ -2482,6 +3669,26 @@ function update() {
   }
 }
 update.local = 1;
+
+// Judge the rendered canon (cg-analyze) with the spec's scale system, meter and
+// consonance model, and the chosen rules; write the verdict for the piano roll.
+function analysis() {
+  const group = spec.groups ? spec.groups[0] : spec;
+  const system = scaleLibrary.fromSpec(group.system || spec.system);
+  const report = analyzer.analyze(rendered, { system, meter: spec.meter, consonance: spec.consonance, profile: rules });
+  reportDict.parse(JSON.stringify({
+    name: rendered.name, profile: rules, model: report.model, hard: report.hard, cost: report.cost,
+    meter: report.meter, period: report.metrics.period,
+    violations: report.violations.map((v) => ({
+      t: v.t, bar: v.bar, beat: v.beat, rule: v.rule, voices: v.voices || [], hard: Boolean(v.hard), detail: v.detail || "",
+    })),
+    curve: report.metrics.dissonance.points,
+  }));
+  outlet(0, "roll", "refresh");
+  outlet(0, "analysis", rules, "rules:", report.hard, report.hard === 1 ? "fault" : "faults", "/ cost",
+    Math.round(report.cost * 100) / 100);
+}
+analysis.local = 1;
 
 function showEditor() {
   const v = voiceAt(selected);

@@ -121,8 +121,23 @@ class Patch:
                 b["box"]["presentation_rect"] = list(b["box"]["patching_rect"])
         return ids
 
-    def connect(self, src, outlet, dst, inlet):
-        self.lines.append({"patchline": {"source": [src, outlet], "destination": [dst, inlet]}})
+    def connect(self, src, outlet, dst, inlet, midpoints=None):
+        """A patch cord; midpoints [x1, y1, x2, y2, ...] bend it (a segmented cord)."""
+        line = {"source": [src, outlet], "destination": [dst, inlet]}
+        if midpoints:
+            line["midpoints"] = [float(v) for v in midpoints]
+        self.lines.append({"patchline": line})
+
+    def box_rect(self, box_id):
+        return next(b["box"]["patching_rect"] for b in self.boxes if b["box"]["id"] == box_id)
+
+    def port(self, box_id, index, outlet):
+        """Where a cord meets a box's inlet (top) or outlet (bottom), roughly as Max draws it."""
+        box = next(b["box"] for b in self.boxes if b["box"]["id"] == box_id)
+        x, y, w, h = box["patching_rect"]
+        n = box["numoutlets"] if outlet else box["numinlets"]
+        px = x + 3.5 + (index * (w - 7) / (n - 1) if n > 1 else 0)
+        return px, (y + h if outlet else y)
 
     def to_json(self):
         p = {
@@ -375,7 +390,9 @@ def canon():
     the MPE notes. Outlet 3: the MPE notes as MIDI bytes, for the panel's
     [midiout]. MPE goes to Drift or to MIDI out, never both ([gate 2]).
     [r cg.canon.in] takes the same messages as the inlet, from elsewhere: the
-    answer finder sends stop, usespec cg.audition, then play (M3)."""
+    answer finder sends stop, usespec cg.audition, then play (M3). Each note's
+    index goes to [s cg.playhead] as it plays, and -1 on stop: the piano roll
+    follows it (M3 part F)."""
     p = Patch(rect=(80, 80, 900, 720))
     p.note(GENERATED_NOTE, 20, 10, 700, 1)
     inl = p.obj("route play stop", 20, 115, 2, 3)
@@ -433,6 +450,9 @@ def canon():
     p.connect(head, 1, kind, 0)
     p.connect(kind, 1, note, 0)
     p.connect(note, 0, bank, 0)
+    # The piano roll's playhead: the index of the note now playing; -1 on stop.
+    playhead = p.obj("s cg.playhead", 70, 330, 1, 0)
+    p.connect(index, 0, playhead, 0)
 
     # MPE: rows marked "mpe" (and the zone setup) to cg.mpe.out, then through
     # [gate 2] to one destination: Drift inside Max (second oscillator on, no
@@ -470,6 +490,9 @@ def canon():
     p.connect(halt, 0, stop_voices, 0)
     p.connect(stop_voices, 0, bank, 0)
     p.connect(halt, 0, panic, 0)
+    hide = p.msg("-1", 160, 150)
+    p.connect(halt, 0, hide, 0)
+    p.connect(hide, 0, playhead, 0)
     p.connect(route, 3, panic, 0)  # the script's panic, before a change of destination
     p.connect(panic, 0, mpe, 0)
 
@@ -739,155 +762,255 @@ def panel_tuning():
 
 
 def panel_canon():
-    """The M2 canon panel: pick a preset and a tuning, play it through the Hz
-    voices or MPE, load your own melody from a .mid file (it stays across
-    presets), and edit one voice at a time."""
-    p = Patch(rect=(60, 60, 860, 750))
-    p.note(HAND_NOTE, 20, 10, 780, 2)
-    p.note("CANONS (M2). Turn audio on (speaker). Pick a preset, then play. The tuning menu plays the same "
-           "canon in another scale system. The voice editor changes one voice at a time; every change "
-           "re-renders (stop first if you don't want the change mid-play).", 20, 55, 780, 2)
-    engine = p.obj("cg.canon", 20, 530, 1, 4, ["", "signal", "signal", "int"])
+    """The canon panel (M2, tidied in M3): pick a preset and a tuning, play it
+    through the Hz voices or MPE, load your own melody from a .mid file (it
+    stays across presets), edit one voice at a time, and see it in the piano
+    roll with the analysis's markers (M3 part F). No presentation mode:
+    everything stays visible, laid out so the controls area holds controls only.
 
-    p.comment("preset:", 20, 100)
-    presets = p.ui("umenu", 80, 100, 360, 22, 1, 3, ["int", "", ""])
-    pick = p.obj("prepend preset", 460, 100, 2, 1)
-    p.connect(presets, 0, pick, 0)
-    p.connect(pick, 0, engine, 0)
-    p.comment("tuning:", 20, 130)
-    tunings = p.ui("umenu", 80, 130, 360, 22, 1, 3, ["int", "", ""])
-    retune = p.obj("prepend tuning", 460, 130, 2, 1)
-    p.connect(tunings, 0, retune, 0)
-    p.connect(retune, 0, engine, 0)
+      - Controls sit on a 30 px grid on the left, in titled sections.
+      - Each control's cord leaves through the gap under its row and drops
+        into its object in the wiring column on the right.
+      - Those objects reach cg.canon along a trunk at the right edge.
+      - cg.canon's replies set the controls by scripting name, through one
+        [thispatcher] (script send <name> ...), so no cord runs back into the
+        controls area."""
+    GRID, TOP = 30, 70
+    COL_X, COL_W = 640, 420
+    TRUNK = COL_X + COL_W + 15  # the forward trunk, down to cg.canon
+    UP = TRUNK + 12  # the audio trunk, up from cg.canon to the volume
+    p = Patch(rect=(40, 40, UP + 30, 940))
+    row = lambda i: TOP + GRID * i  # noqa: E731
+    p.note(HAND_NOTE, 20, 5, 890, 2)
+    p.comment("Pick a preset, turn audio on (the speaker, top right), play. Every edit re-renders at once.", 20, 48)
 
-    play = p.msg("play", 20, 165)
-    stop = p.msg("stop", 70, 165)
-    p.connect(play, 0, engine, 0)
-    p.connect(stop, 0, engine, 0)
-    p.comment("tempo:", 130, 165)
-    tempo = p.ui("number", 180, 165, 50, 22, 1, 2, ["", "bang"])
-    set_tempo = p.obj("prepend tempo", 240, 165, 2, 1)
-    p.connect(tempo, 0, set_tempo, 0)
-    p.connect(set_tempo, 0, engine, 0)
-    p.comment("volume:", 360, 165)
-    volume = p.ui("flonum", 420, 165, 50, 22, 1, 2, ["", "bang"], format=6)
-    p.comment("output:", 490, 165)
-    output = p.ui("umenu", 550, 165, 170, 22, 1, 3, ["int", "", ""],
+    slots = {}  # slot j (beside row j, 3 px lower) -> width used
+
+    def place(make, w, y_min, h=22):
+        """The first slot at or below y_min with room for w px (over as many
+        slots as h needs, all of them starting from the same x)."""
+        span = -(-(h + 8) // GRID)
+        j = 0
+        while row(j) + 3 < y_min or any(slots.get(j + k, 0) != slots.get(j, 0) and k for k in range(span)) \
+                or any(slots.get(j + k, 0) + w > COL_W for k in range(span)):
+            j += 1
+        x = COL_X + slots.get(j, 0)
+        for k in range(span):
+            slots[j + k] = slots.get(j, 0) + w + 10 if k == 0 else max(slots.get(j + k, 0), x - COL_X + w + 10)
+        return make(x, row(j) + 3)
+
+    def obj(text, y_min, ins=2, outs=1, outtypes=None, w=None):
+        w = w or max(40, 7 * len(text) + 14)
+        return place(lambda x, y: p.obj(text, x, y, ins, outs, outtypes, w=w), w, y_min)
+
+    def message(text, y_min, w=None, lines=1):
+        w = w or max(30, 7 * len(text) + 16)
+        h = 8 + 14 * lines
+
+        def make(x, y):
+            box = p.msg(text, x, y, w=w)
+            p.boxes[-1]["box"]["patching_rect"][3] = float(h)
+            return box
+        return place(make, w, y_min, h)
+
+    lanes = {}  # control row -> lanes used under it
+
+    def lane(control):
+        """A free lane in the gap under the control's row (one per cord)."""
+        x, y, w, h = p.box_rect(control)
+        r = round((y - TOP) / GRID)
+        n = lanes.get(r, 0)
+        lanes[r] = n + 1
+        return row(r) + max(h, 22) + 2 + min(n, 5)
+
+    def out_of(control, outlet, dst, text_y=None):
+        """A control's cord: down into its lane, along it, then down into dst."""
+        ox, oy = p.port(control, outlet, True)
+        ix, iy = p.port(dst, 0, False)
+        y = text_y if text_y is not None else lane(control)
+        p.connect(control, outlet, dst, 0, [ox, y, ix, y])
+
+    forward = []  # objects whose output goes to cg.canon (along the trunk)
+
+    def send(control, message_name, outlet=0):
+        y = lane(control)
+        prepend = obj(f"prepend {message_name}", y + 2)
+        out_of(control, outlet, prepend, y)
+        forward.append(prepend)
+        return prepend
+
+    def named(box, name):
+        next(b["box"] for b in p.boxes if b["box"]["id"] == box)["varname"] = name
+        return box
+
+    def header(text, i):
+        p.comment(text, 20, row(i), fontface=1, w=6.5 * len(text) + 30)
+
+    # PLAY
+    header("PLAY", 0)
+    p.comment("preset", 20, row(1))
+    presets = named(p.ui("umenu", 80, row(1), 360, 22, 1, 3, ["int", "", ""]), "presets")
+    send(presets, "preset")
+    p.comment("tuning", 20, row(2))
+    tunings = named(p.ui("umenu", 80, row(2), 360, 22, 1, 3, ["int", "", ""]), "tunings")
+    send(tunings, "tuning")
+    play = p.msg("play", 20, row(3))
+    stop = p.msg("stop", 70, row(3))
+    p.comment("tempo", 130, row(3))
+    tempo = named(p.ui("number", 175, row(3), 50, 22, 1, 2, ["", "bang"]), "tempo")
+    p.comment("volume", 240, row(3))
+    volume = named(p.ui("flonum", 290, row(3), 50, 22, 1, 2, ["", "bang"], format=6), "volume")
+    for m in (play, stop):
+        forward.append(m)  # a message box is its own message
+    send(tempo, "tempo")
+    y = lane(volume)
+    left = obj("*~ 0.7", y + 2, 2, 1, ["signal"])
+    right = obj("*~ 0.7", y + 2, 2, 1, ["signal"])
+    vx, vy = p.port(volume, 0, True)
+    for gain in (left, right):
+        gx, gy = p.port(gain, 1, False)
+        p.connect(volume, 0, gain, 1, [vx, y, gx, y])
+    p.comment("output", 20, row(4))
+    output = p.ui("umenu", 80, row(4), 230, 22, 1, 3, ["int", "", ""],
                   items=["Hz", "voices", ",", "MPE", "to", "Drift", "(inside", "Max)", ",", "MPE", "to", "MIDI", "out"])
-    set_output = p.obj("prepend output", 730, 165, 2, 1)
-    p.connect(output, 0, set_output, 0)
-    p.connect(set_output, 0, engine, 0)
-
-    load_button = p.ui("button", 20, 200, 22, 22, 1, 1, ["bang"])
-    p.comment("load a spec...", 46, 201)
-    dialog = p.obj("opendialog", 150, 200, 1, 2, ["", "bang"])
-    load = p.obj("prepend loadspec", 250, 200, 2, 1)
-    p.connect(load_button, 0, dialog, 0)
-    p.connect(dialog, 0, load, 0)
-    p.connect(load, 0, engine, 0)
-    save_button = p.ui("button", 400, 200, 22, 22, 1, 1, ["bang"])
-    p.comment("save the spec...", 426, 201)
-    save_dialog = p.obj("savedialog", 545, 200, 1, 2, ["", "bang"])
-    save = p.obj("prepend savespec", 640, 200, 2, 1)
-    p.connect(save_button, 0, save_dialog, 0)
-    p.connect(save_dialog, 0, save, 0)
-    p.connect(save, 0, engine, 0)
-
-    # Your melody: a .mid file becomes the dux of every canon in the spec.
-    midi_button = p.ui("button", 20, 240, 22, 22, 1, 1, ["bang"])
-    p.comment("load a .mid...", 46, 241)
-    midi_dialog = p.obj("opendialog", 150, 240, 1, 2, ["", "bang"])
-    midi_load = p.obj("prepend loadmidi", 250, 240, 2, 1)
-    p.comment("your melody, kept across presets", 390, 241)
-    own = p.msg("presetmelody", 720, 240)
-    p.connect(own, 0, engine, 0)
-    p.connect(midi_button, 0, midi_dialog, 0)
-    p.connect(midi_dialog, 0, midi_load, 0)
-    p.connect(midi_load, 0, engine, 0)
-    p.comment("line:", 20, 270)
-    line = p.ui("umenu", 65, 270, 80, 22, 1, 3, ["int", "", ""], items=["top", ",", "bottom", ",", "track"])
-    p.comment("map:", 160, 270)
-    pitch_map = p.ui("umenu", 198, 270, 85, 22, 1, 3, ["int", "", ""], items=["exact", ",", "nearest", ",", "degree"])
-    p.comment("quantize:", 295, 270)
-    grid = p.ui("flonum", 366, 270, 50, 22, 1, 2, ["", "bang"], format=6)
-    p.comment("track:", 425, 270)
-    track = p.ui("number", 476, 270, 45, 22, 1, 2, ["", "bang"])
-    p.comment("(-1 = all)", 525, 270)
-    for box, message, x in [(line, "midiline", 65), (pitch_map, "midimap", 198),
-                            (grid, "midiquantize", 320), (track, "miditrack", 480)]:
-        send = p.obj(f"prepend {message}", x, 300, 2, 1)
-        p.connect(box, 0, send, 0)
-        p.connect(send, 0, engine, 0)
-
-    # The voice editor: pick a voice, then change its fields.
-    p.comment("VOICE EDITOR (canon voices; free voices are edited in the spec file)", 20, 335)
-    labels = ["voice", "name", "delay", "interval", "transform", "time scale", "register", "passes"]
-    xs = [20, 80, 240, 310, 380, 460, 540, 610]
-    for label, x in zip(labels, xs):
-        p.comment(label, x, 358)
-    boxes = [
-        p.ui("number", 20, 380, 50, 22, 1, 2, ["", "bang"]),
-        p.msg("", 80, 380, w=150),
-        p.ui("flonum", 240, 380, 60, 22, 1, 2, ["", "bang"], format=6),
-        p.ui("number", 310, 380, 60, 22, 1, 2, ["", "bang"]),
-        p.ui("umenu", 380, 380, 70, 22, 1, 3, ["int", "", ""], items=["P", ",", "I", ",", "R", ",", "RI"]),
-        p.ui("flonum", 460, 380, 70, 22, 1, 2, ["", "bang"], format=6),
-        p.ui("number", 540, 380, 60, 22, 1, 2, ["", "bang"]),
-        p.ui("number", 610, 380, 60, 22, 1, 2, ["", "bang"]),
-    ]
-    messages = ["select", None, "delay", "interval", "transform", "timescale", "register", "passes"]
-    for box, message, x in zip(boxes, messages, xs):
-        if message is None:
-            continue
-        send = p.obj(f"prepend {message}", x, 415 + 25 * (xs.index(x) % 2), 2, 1)
-        p.connect(box, 0, send, 0)
-        p.connect(send, 0, engine, 0)
-
-    # What the engine says: menus, the tempo, the editor's fields, the Max window.
-    route = p.obj("route menu tmenu bpm editor status error melody", 20, 570, 2, 8)
-    p.connect(engine, 0, route, 0)
-    p.connect(route, 0, presets, 0)
-    p.connect(route, 1, tunings, 0)
-    show_tempo = p.obj("prepend set", 130, 605, 2, 1)
-    p.connect(route, 2, show_tempo, 0)
-    p.connect(show_tempo, 0, tempo, 0)
-    fields = p.obj("unpack i s f i i f i i", 240, 605, 1, 8, ["int", "", "float", "int", "int", "float", "int", "int"])
-    p.connect(route, 3, fields, 0)
-    for k, (box, x) in enumerate(zip(boxes, xs)):
-        show = p.obj("prepend set", x, 650 + 25 * (k % 2), 2, 1)
-        p.connect(fields, k, show, 0)
-        p.connect(show, 0, box, 0)
-    status = p.obj("print canon", 380, 570, 1, 0)
-    problem = p.obj("print canon-error", 480, 570, 1, 0)
-    p.connect(route, 4, status, 0)
-    p.connect(route, 5, problem, 0)
-    melody = p.obj("print midi_file", 420, 605, 1, 0)
-    p.connect(route, 6, melody, 0)
-
-    # Audio: the volume scales both sides.
-    left = p.obj("*~ 0.7", 600, 530, 2, 1, ["signal"])
-    right = p.obj("*~ 0.7", 660, 530, 2, 1, ["signal"])
-    p.connect(engine, 1, left, 0)
-    p.connect(engine, 2, right, 0)
-    p.connect(volume, 0, left, 1)
-    p.connect(volume, 0, right, 1)
-    dac = p.ui("ezdac~", 620, 580, 45, 45, 2, 0, [])
+    send(output, "output")
+    dac = place(lambda x, y: p.ui("ezdac~", x, y, 28, 28, 2, 0, []), 28, row(5))
     p.connect(left, 0, dac, 0)
     p.connect(right, 0, dac, 1)
-    # On load: the volume, and the track box showing -1 (all tracks, the default).
-    start = p.obj("loadbang", 600, 470, 1, 1, ["bang"])
-    level = p.msg("0.7", 600, 500)
-    all_tracks = p.msg("set -1", 680, 500)
-    p.connect(start, 0, level, 0)
-    p.connect(level, 0, volume, 0)
-    p.connect(start, 0, all_tracks, 0)
-    p.connect(all_tracks, 0, track, 0)
 
-    # MPE to MIDI out: the port is chosen here, and saved with this panel.
-    midiout = p.obj("midiout", 720, 580, 1, 0)
+    # YOUR MELODY: a .mid file becomes the dux of every canon in the spec.
+    header("YOUR MELODY", 6)
+    midi_button = p.ui("button", 20, row(7), 22, 22, 1, 1, ["bang"])
+    p.comment("load a .mid...", 46, row(7))
+    own = p.msg("presetmelody", 150, row(7))
+    forward.append(own)
+    p.comment("back to the preset's own melody", 255, row(7))
+    y = lane(midi_button)
+    midi_dialog = obj("opendialog", y + 2, 1, 2, ["", "bang"])
+    out_of(midi_button, 0, midi_dialog, y)
+    load_midi = obj("prepend loadmidi", p.box_rect(midi_dialog)[1] + 27)
+    p.connect(midi_dialog, 0, load_midi, 0)
+    forward.append(load_midi)
+    p.comment("line", 20, row(8))
+    line = p.ui("umenu", 58, row(8), 80, 22, 1, 3, ["int", "", ""], items=["top", ",", "bottom", ",", "track"])
+    p.comment("map", 148, row(8))
+    pitch_map = p.ui("umenu", 180, row(8), 85, 22, 1, 3, ["int", "", ""], items=["exact", ",", "nearest", ",", "degree"])
+    p.comment("quantize", 275, row(8))
+    grid = p.ui("flonum", 340, row(8), 50, 22, 1, 2, ["", "bang"], format=6)
+    p.comment("track", 398, row(8))
+    track = named(p.ui("number", 443, row(8), 45, 22, 1, 2, ["", "bang"]), "track")
+    p.comment("(-1 = all)", 494, row(8))
+    for box, message_name in [(line, "midiline"), (pitch_map, "midimap"), (grid, "midiquantize"), (track, "miditrack")]:
+        send(box, message_name)
+
+    # SPEC FILE
+    header("SPEC FILE", 10)
+    load_button = p.ui("button", 20, row(11), 22, 22, 1, 1, ["bang"])
+    p.comment("load a spec...", 46, row(11))
+    save_button = p.ui("button", 200, row(11), 22, 22, 1, 1, ["bang"])
+    p.comment("save the spec...", 226, row(11))
+    for button, dialog, message_name in [(load_button, "opendialog", "loadspec"), (save_button, "savedialog", "savespec")]:
+        y = lane(button)
+        box = obj(dialog, y + 2, 1, 2, ["", "bang"])
+        out_of(button, 0, box, y)
+        prepend = obj(f"prepend {message_name}", p.box_rect(box)[1] + 27)
+        p.connect(box, 0, prepend, 0)
+        forward.append(prepend)
+
+    # VOICE EDITOR: pick a voice, then change its fields.
+    header("VOICE EDITOR (canon voices; free voices are edited in the spec file)", 13)
+    fields = [  # label, x, the box, its message (the name isn't sent)
+        ("voice", 20, p.ui("number", 20, row(15), 45, 22, 1, 2, ["", "bang"]), "select"),
+        ("name", 70, p.msg("", 70, row(15), w=120), None),
+        ("delay", 200, p.ui("flonum", 200, row(15), 50, 22, 1, 2, ["", "bang"], format=6), "delay"),
+        ("interval", 255, p.ui("number", 255, row(15), 50, 22, 1, 2, ["", "bang"]), "interval"),
+        ("transform", 325, p.ui("umenu", 325, row(15), 65, 22, 1, 3, ["int", "", ""],
+                                items=["P", ",", "I", ",", "R", ",", "RI"]), "transform"),
+        ("time scale", 400, p.ui("flonum", 400, row(15), 60, 22, 1, 2, ["", "bang"], format=6), "timescale"),
+        ("register", 480, p.ui("number", 480, row(15), 50, 22, 1, 2, ["", "bang"]), "register"),
+        ("passes", 550, p.ui("number", 550, row(15), 45, 22, 1, 2, ["", "bang"]), "passes"),
+    ]
+    EDIT_NAMES = ["voice", "name", "delay", "interval", "transform", "timescale", "register", "passes"]
+    for (label, x, box, message_name), name in zip(fields, EDIT_NAMES):
+        p.comment(label, x, row(14))
+        named(box, name)
+        if message_name:
+            send(box, message_name)
+
+    # PIANO ROLL: what the canon panel renders and plays, with the analysis.
+    header("PIANO ROLL", 17)
+    p.comment("rules", 120, row(17))
+    rules = named(p.ui("umenu", 165, row(17), 110, 22, 1, 3, ["int", "", ""],
+                       items=["canon", ",", "florid", ",", "fux-strict", ",", "spectral", ",", "free"]), "rules")
+    send(rules, "profile", outlet=1)  # the menu's item text
+    p.comment("red = fault, amber = soft; click a marker", 285, row(17))
+    roll = named(p._add(p._place({
+        "maxclass": "v8ui", "filename": "cg.roll.bundle.js",
+        "textfile": {"filename": "cg.roll.bundle.js", "flags": 0, "embed": 0, "autowatch": 1},
+        "numinlets": 1, "numoutlets": 1, "outlettype": [""], "parameter_enable": 0,
+    }, 20, row(18), 580, 260)), "roll")
+    # The roll's own messages (a clicked marker) to the Max window.
+    roll_says = obj("print roll", row(18) + 260 + 6, 1, 0)
+    out_of(roll, 0, roll_says, row(18) + 263)
+
+    # The engine, at the foot of the forward trunk.
+    engine = obj("cg.canon", row(19), 1, 4, ["", "signal", "signal", "int"])
+    ex, ey = p.port(engine, 0, False)
+    for box in forward:
+        bx, by = p.port(box, 0, True)
+        y = lane(box) if box in (play, stop, own) else by + 3
+        p.connect(box, 0, engine, 0, [bx, y, TRUNK, y, TRUNK, ey - 4, ex, ey - 4])
+    # Audio: up the second trunk to the volume's [*~].
+    for outlet, gain in ((1, left), (2, right)):
+        ox, oy = p.port(engine, outlet, True)
+        gx, gy = p.port(gain, 0, False)
+        p.connect(engine, outlet, gain, 0, [ox, oy + 3 + outlet, UP, oy + 3 + outlet, UP, gy - 3, gx, gy - 3])
+    midiout = obj("midiout", row(19), 1, 0)
     p.connect(engine, 3, midiout, 0)
-    p.note("MIDI out: double-click to choose the port (e.g. an IAC bus into a Live MPE instrument). "
-           "It's saved with this panel.", 720, 610, 130, 5)
+
+    # cg.canon's replies: each sets its control by name ([thispatcher] script send).
+    route = obj("route menu tmenu bpm editor rules roll", row(20), 2, 7)
+    p.connect(engine, 0, route, 0)
+    script = []
+    for outlet, text in enumerate(["prepend script send presets", "prepend script send tunings",
+                                   "prepend script send tempo set"]):
+        box = obj(text, row(21))
+        p.connect(route, outlet, box, 0)
+        script.append(box)
+    editor = message(", ".join(f"script send {name} set ${k + 1}" for k, name in enumerate(EDIT_NAMES)), row(22),
+                     w=COL_W, lines=4)
+    p.connect(route, 3, editor, 0)
+    script.append(editor)
+    for outlet, text in ((4, "prepend script send rules setsymbol"), (5, "prepend script send roll")):
+        box = obj(text, row(23))
+        p.connect(route, outlet, box, 0)
+        script.append(box)
+    # The playhead: the note now playing, from the player (scheduler) to the roll.
+    playhead = obj("r cg.playhead", row(23), 0, 1)
+    later = obj("deferlow", row(23), 1, 1)
+    to_roll = obj("prepend script send roll playhead", row(23))
+    p.connect(playhead, 0, later, 0)
+    p.connect(later, 0, to_roll, 0)
+    script.append(to_roll)
+    # On load: the volume, the track box showing -1 (all tracks, the default), and
+    # the rules menu showing canon (the analysis's default).
+    start = obj("loadbang", row(23), 1, 1, ["bang"])
+    defaults = message("script send volume 0.7, script send track set -1, script send rules set 0", row(23),
+                       w=COL_W, lines=2)
+    p.connect(start, 0, defaults, 0)
+    script.append(defaults)
+    scripting = obj("thispatcher", max(p.box_rect(b)[1] + p.box_rect(b)[3] for b in script) + 8, 1, 2, ["", ""])
+    for box in script:
+        p.connect(box, 0, scripting, 0)
+    rest = obj("route status error melody analysis", row(21), 2, 5)
+    p.connect(route, 6, rest, 0)
+    for outlet, name in enumerate(["canon", "canon-error", "midi_file", "analysis"]):
+        p.connect(rest, outlet, obj(f"print {name}", row(22), 1, 0), 0)
+
+    last = max(j for j in slots)
+    p.note("Replies set the controls by their scripting names (Inspector: Scripting Name) through "
+           "[thispatcher]. MIDI out: double-click [midiout] to choose the port (e.g. an IAC bus into a "
+           "Live MPE instrument); it's saved with this panel.", COL_X, row(last + 1) + 3, COL_W, 4)
     return p
 
 

@@ -523,6 +523,11 @@ lower 10th), and how his canon for Haydn has two solutions.
   `cg.panel.tuning`, `cg.panel.canon`, and `cg.panel.finder` (the answer finder, M3). The
   finder reads the canon panel's spec from the dict `cg.spec`, and plays a picked result
   through the canon panel (`[s cg.canon.in]`, `usespec`).
+- The piano roll (M3 part F) lives in the canon panel: `[v8ui]` `cg.roll` draws
+  `cg.events` and `cg.report` (the canon wrapper analyzes every render), follows the
+  player through `[s cg.playhead]`, and names a clicked marker. Its layout is the pure
+  module `cg-roll`. The canon panel keeps its controls on the left and its wiring in a
+  column on the right; replies set controls by scripting name through `[thispatcher]`.
 - `cg.engine` (generated) hosts the `[v8]` wrappers and named dicts:
   - `cg.spec`: the canon spec
   - `cg.events`: the rendered events

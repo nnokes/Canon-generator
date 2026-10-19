@@ -11,8 +11,28 @@ const vm = require("vm");
 const ROOT = path.resolve(__dirname, "..");
 
 // Max calls a script's global functions by message name, except functions
-// marked with .local = 1.
-const MAX_GLOBALS = new Set(["outlet", "post", "error", "Dict", "File", "Task", "console"]);
+// marked with .local = 1. A [v8ui]'s paint, onclick and onresize are called by
+// Max itself, not sent as messages.
+const MAX_GLOBALS = new Set(["outlet", "post", "error", "Dict", "File", "Task", "console",
+  "paint", "onclick", "onresize"]);
+
+// Stand-in for a [v8ui]'s mgraphics: it records every drawing call as
+// [name, ...args], and counts redraw requests. size is the box's [w, h].
+class SimGraphics {
+  constructor(width = 800, height = 260) {
+    this.size = [width, height];
+    this.calls = [];
+    this.redraws = 0;
+    for (const name of ["set_source_rgba", "rectangle", "fill", "stroke", "move_to", "line_to", "close_path",
+      "set_line_width", "select_font_face", "set_font_size", "show_text"]) {
+      this[name] = (...args) => this.calls.push([name, ...args]);
+    }
+  }
+  init() {}
+  redraw() {
+    this.redraws++;
+  }
+}
 
 // Stand-in for Max's File: isopen, position, eof (the length; setting it
 // truncates), readline(maxchars) without the line ending, readbytes(count),
@@ -134,6 +154,7 @@ function loadBundle(name) {
     Dict: SimDict,
     File: SimFile,
     Task: BundleTask,
+    mgraphics: new SimGraphics(),
     console,
   };
   vm.createContext(context);
@@ -149,6 +170,13 @@ function loadBundle(name) {
       }
       sent.length = 0;
       context[message](...args);
+      return sent.slice();
+    },
+    // Calls a function Max calls itself (a [v8ui]'s paint, onclick, onresize)
+    // and returns what came out of the outlets.
+    call(fn, ...args) {
+      sent.length = 0;
+      context[fn](...args);
       return sent.slice();
     },
     // Runs the script's Tasks as Max's scheduler would, up to `limit` ticks or

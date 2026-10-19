@@ -40,7 +40,13 @@
 //   savespec <full path>          status saved ...                      the current spec
 //                                 (not "save": [v8] calls a save() function when the patch is saved)
 //   info                          status ...
+//   profile <name>                rules <name>, then as analysis below  the rules the piano roll
+//                                                                        marks (canon, florid,
+//                                                                        fux-strict, spectral, free)
 // Whenever the melody changes: melody <file> | melody preset <name> | melody spec <name>.
+// After every render (and every profile), the analysis (M3 part F): the dict cg.report gets
+// the verdict (violations, the dissonance curve), then roll refresh (for the piano roll)
+// and analysis <profile> rules: <n> faults / cost <x> (its own selector: the panel prints it).
 // Errors come out as: error <message>. Every output starts with a selector.
 
 autowatch = 1;
@@ -54,6 +60,8 @@ const tuningLibrary = require("cg-tuning");
 const mpe = require("cg-mpe");
 const files = require("cg-file");
 const io = require("cg-io");
+const analyzer = require("cg-analyze");
+const ruleLibrary = require("cg-rules");
 
 const TRANSFORMS = ["P", "I", "R", "RI"];
 const LINES = ["top", "bottom", "track"];
@@ -67,6 +75,7 @@ const MPE_TO = { drift: 1, midi: 2 }; // the patch's [gate 2] outlets
 // dict is held for the script's whole life.
 const specDict = new Dict("cg.spec"); // the current spec, for the answer finder
 const eventsDict = new Dict("cg.events"); // the rendered events
+const reportDict = new Dict("cg.report"); // the analysis, for the piano roll
 const held = new Map(); // dicts read by name (usespec)
 function heldDict(name) {
   if (!held.has(name)) held.set(name, new Dict(name));
@@ -81,6 +90,7 @@ let rendered = null;
 let midi = null; // the last .mid file: { name, parsed }
 let presetIndex = 0; // the preset last picked (null after loadspec)
 const midiOptions = { line: "top", map: "exact", quantize: 0, track: -1 };
+let rules = "canon"; // the rule profile the analysis uses
 
 function presets() {
   outlet(0, "menu", "clear");
@@ -299,6 +309,17 @@ function info() {
   attempt(announce);
 }
 
+// The rules the piano roll marks. An unknown name is refused, and the menu
+// shows the rules still in use.
+function profile(name) {
+  attempt(() => {
+    ruleLibrary.resolve(String(name)); // throws on an unknown profile
+    rules = String(name);
+    if (rendered) analysis();
+  });
+  outlet(0, "rules", rules);
+}
+
 // ---------------------------------------------------------------- helpers
 
 // Sets a MIDI option (a name, or its index in `names`), then re-reads the
@@ -444,6 +465,12 @@ function update() {
   if (selected >= canonVoices().length) selected = 0;
   showEditor();
   announce();
+  // The canon plays whether or not it can be analyzed.
+  try {
+    analysis();
+  } catch (e) {
+    outlet(0, "error", "analysis: " + (e && e.message ? e.message : String(e)));
+  }
   if (mpeIndex.length) {
     const used = new Set([...channels.values()].filter((ch) => ch !== null)).size;
     outlet(0, "status", "mpe:", mpeIndex.length - overflow, "notes on", used, `channels (2-16, bend +/-${range})`,
@@ -452,6 +479,26 @@ function update() {
   }
 }
 update.local = 1;
+
+// Judge the rendered canon (cg-analyze) with the spec's scale system, meter and
+// consonance model, and the chosen rules; write the verdict for the piano roll.
+function analysis() {
+  const group = spec.groups ? spec.groups[0] : spec;
+  const system = scaleLibrary.fromSpec(group.system || spec.system);
+  const report = analyzer.analyze(rendered, { system, meter: spec.meter, consonance: spec.consonance, profile: rules });
+  reportDict.parse(JSON.stringify({
+    name: rendered.name, profile: rules, model: report.model, hard: report.hard, cost: report.cost,
+    meter: report.meter, period: report.metrics.period,
+    violations: report.violations.map((v) => ({
+      t: v.t, bar: v.bar, beat: v.beat, rule: v.rule, voices: v.voices || [], hard: Boolean(v.hard), detail: v.detail || "",
+    })),
+    curve: report.metrics.dissonance.points,
+  }));
+  outlet(0, "roll", "refresh");
+  outlet(0, "analysis", rules, "rules:", report.hard, report.hard === 1 ? "fault" : "faults", "/ cost",
+    Math.round(report.cost * 100) / 100);
+}
+analysis.local = 1;
 
 function showEditor() {
   const v = voiceAt(selected);

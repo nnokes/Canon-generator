@@ -28,10 +28,12 @@ canons hidden in it, for two voices or for N.
 - Started 2026-10-15. Parts A–E are built: 136 tests.
 - **Max session 1** (below): step 1, the MPE pitch check carried in from M2, **passed**
   (median +0.23 cents, implied bend range 1.99).
-- Session 1, steps 2, 3 and 5 are done: the finder works on your melody in Max, a click
-  plays the result, and the Haydn transcription is confirmed against the book.
-- **Next:** a 3-voice list in Max (on the round), and the time-slice budget (step 4).
-  Then part F, the piano roll.
+- Session 1 is done: the finder works on your melody in Max (2 and 3 voices), a click
+  plays the result, the Haydn transcription is confirmed against the book, and the
+  time-slice budget is recorded (provisionally: 400 ms still felt smooth; recheck in M4).
+- **Part F is built:** the piano roll, in a tidied canon panel. 158 tests.
+- **Next:** Max session 2 (below): look at the roll and the new canon panel. Then M3
+  closes.
 
 ---
 
@@ -357,14 +359,79 @@ edited is regenerated: the new finder panel is new, and your canon panel is unto
    - repeat with 10, 20, 50, 100 and 200
    - report the largest value at which the interface and the audio stay smooth, and the
      `done` line (its last number is the measured ms per slice)
+
+   **First try (2026-10-18):** no stutter at 5, 10, 100, 200 or 1000 ms, but the whole
+   search took only 39–52 ms (6 slices of 6.3 ms at 5; one slice at 100 and above), so
+   no setting could stutter.
+
+   **What time slicing does:** Max runs its interface and `[v8]` JavaScript on one main
+   thread. The finder's search runs from a `Task`: each call works for at most the time
+   slice, then hands back to Max, which redraws and takes clicks before the next call.
+   Smaller slices are smoother; bigger ones finish a little sooner.
+
+   **Second try (2026-10-19), a longer search** (the round, 3 voices, intervals −14 to 14,
+   delays 0.5 to 16 every 0.5; about 2.7 s and 9,400 renders in Node): **400 ms still felt
+   smooth.**
+   - **Recorded budget: 400 ms, provisional.** The finder's default stays 20 ms, well
+     inside it.
+   - **Recheck later:** in M4, where the generator's searches run longer, and on a slower
+     machine. M4's exit criterion holds each slice within the budget recorded here.
 5. **Check my transcription:** compare bars 9–12 of the canon for Haydn
    (`tests/fixtures/mann/ex239.json`: D5 | B4 G4 B4 | C5 E5 | D5) with Mann p. 261.
    **Done (2026-10-18):** you compared Ex. 239 and Ex. 241, bar by bar, with my reading,
    and all of it matches.
 6. Paste anything from `finder` or `canon-error`, and anything that sounds wrong.
 
-## Part F. The piano roll (after session 1)
-- [ ] `[v8ui]`: voice colours, violation markers and the dissonance curve
+## Part F. The piano roll: built
+- [x] **`code/lib/cg-roll.js`** (engine; `tests/roll.test.js`): the roll's layout as a
+  list of drawing primitives, so everything is tested in Node:
+  - each note a rectangle in its voice's colour; time left to right, pitch upward, with
+    microtones placed exactly
+  - bar lines and numbers from the meter; a faint guide at each period from middle C
+  - **violation markers:** a diamond on each named voice's note at the violation's time,
+    red for a fault and amber for a soft rule; a rule with no voice gets one on the top
+    edge. A click names it (`bar 5 beat 4: parallel-perfect / voice 1 and voice 3
+    (fault): 0 -> 0 cents / parallel`).
+  - **the dissonance curve:** the analyzer's per-slice score above the bass, held to the
+    next slice, scaled to its own top (each model scores on its own scale)
+  - the playhead, drawn over a cached layout (laid out once per render, not per note)
+- [x] **`code/cg.canon.v8.js`:** every render is analyzed (the spec's system, meter and
+  consonance; rules `canon` by default) into the dict **`cg.report`**, then `roll
+  refresh` and an `analysis` line. `profile <name>` re-analyzes without re-rendering
+  (2–22 ms on the presets).
+- [x] **`code/cg.roll.v8ui.js`:** reads `cg.events` and `cg.report` on `refresh`,
+  `playhead <i>` follows the player (`cg.canon` sends each note's index to `[s
+  cg.playhead]`, and −1 on stop), and a click on a marker shows its rule in the caption
+  and the Max window.
+- [x] **The canon panel, tidied** (no presentation mode; everything visible):
+  - controls only on the left, in titled sections (PLAY, YOUR MELODY, SPEC FILE, VOICE
+    EDITOR, PIANO ROLL) on a 30 px grid
+  - every control's cord leaves through the gap under its row into the **wiring column**
+    on the right, then along a trunk at the right edge to `cg.canon`
+  - `cg.canon`'s replies set the controls **by scripting name** through one
+    `[thispatcher]` (`script send presets ...`), so no cord runs back across the controls
+  - the PIANO ROLL section: the roll (580 × 260) and a **rules** menu (canon, florid,
+    fux-strict, spectral, free)
+- [x] **Tests:** the layout (`tests/roll.test.js`); the report and `profile`; the roll
+  drawing through a recording `mgraphics` in the `[v8]` simulation; the playhead feed;
+  the canon panel (controls area holds no objects, each control reaches `cg.canon`,
+  every `script send` names a control, cords leave below their row). Tests: 158.
+
+## Max session 2
+**First:** the canon panel was remade, so discard your copy: in the repo folder run `git
+checkout -- patchers/cg.panel.canon.maxpat`, then `git pull`. Your MIDI-out port choice
+went with it: double-click `[midiout]` (wiring column) to choose it again.
+1. Open `patchers/cg.panel.canon.maxpat`. Check the layout reads clearly: controls on the
+   left, the wiring in the right-hand column, no cords across the controls.
+2. Play the round. The roll shows each voice in its colour, the playhead moves with the
+   music, and markers and the dissonance curve show.
+3. Switch **rules** to fux-strict: more markers (the round isn't first species), and the
+   `analysis` line in the Max window says how many.
+4. Click a red marker: its rule shows in the roll's caption and in the Max window
+   (`roll:`). Does it match what you hear at that spot?
+5. Load your clip, then pick a result in the finder (4 voices, x2 ticked). The roll
+   follows both.
+6. Paste anything from `canon-error` or `roll`, and anything that looks wrong.
 
 ## Results
 
@@ -374,4 +441,6 @@ edited is regenerated: the new finder panel is new, and your canon panel is unto
 | your melody in Max (session 1) | **PASS for 2 and 3 voices:** your Live clip gives a ranked list (1 clean of 152), the menu fills, and a click plays the result in the canon panel. The round gives 18 three-voice sets (1 clean), and picked sets play. 4 voices on the clip: no set at x1 (no three followers fit each other pairwise). | Transform and time-scale toggles on the panel, and a reason when no set is found. At x2 the clip gives 10 clean 4-voice sets (Node); to be seen in Max. |
 | answer finder (Part D) | **PASS** (Node, `tests/finder.test.js`): Ex. 201 gives all eight of Albrechtsberger's answers (plus the unison), and only their octave equivalents besides; Ex. 239–240 gives both solutions. The Haydn transcription is confirmed against p. 261 (session 1). | Fourths screened as upper voices until the whole set; a 6/4 hard only on strong beats and in the first and last bars (Mann p. 228) |
 | Fux golden tests (Part C) | **PASS** (Node, `tests/analyze.test.js`): Fig. 5 clean; Fig. 6 exactly the mode error at bar 1 and the hidden fifth from bar 2 to 3, clean once corrected; Figs. 7–8 hidden fifths in direct motion, parallel fifths once filled in | Rules as `docs/controls.md` lists them |
+| time-slice budget (session 1, step 4) | **400 ms felt smooth** on a 2.7 s search (the first try's searches were too short to stutter) | **Provisional: 400 ms.** The default stays 20. Recheck in M4 (longer searches) and on a slower machine. |
+| piano roll (Part F) | Built; tested in Node (layout, drawing calls, the canon panel's wiring) | To be seen in Max (session 2) |
 | roughness curve (Part A) | **PASS** (Node, `tests/consonance.test.js`): minima at 6/5, 5/4, 4/3, 3/2, 5/3, 2/1 within 2 cents (plus 7/6, 7/5, 7/4), fifth and octave smoother than the third, seconds roughest | Sethares's shape for a harmonic timbre |

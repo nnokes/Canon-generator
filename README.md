@@ -7,7 +7,8 @@ just intonation, Scala files, and harmonic and inharmonic spectra.
 
 > **Status:** M0 (scaffold and spikes), M1 (scale systems) and M2 (the canon renderer)
 > are done. M3, analysis and the answer finder, is under way
-> ([`docs/M3-checklist.md`](docs/M3-checklist.md)). To play the preset canons, open
+> ([`docs/M3-checklist.md`](docs/M3-checklist.md)). To play the preset canons and see
+> them in the piano roll, with the analysis's markers, open
 > `patchers/cg.panel.canon.maxpat`; to find the canons hidden in its melody, also open
 > `patchers/cg.panel.finder.maxpat`; for the scale systems, `patchers/cg.panel.tuning.maxpat`.
 
