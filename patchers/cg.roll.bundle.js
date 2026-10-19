@@ -257,15 +257,21 @@ __cg_require.local = 1;
 // and plays: each voice's notes in its colour, the analysis's violation
 // markers (red: a fault; amber: a soft rule), and the dissonance curve. It
 // reads the dicts cg.events and cg.report, which the canon wrapper writes on
-// every render, then sends roll refresh.
+// every render, then sends roll rendered. It also reads them once when the
+// script loads, so a roll opened after a render shows it at once.
 //
 // Messages            Outlet 0
-//   refresh                                read cg.events and cg.report again, and redraw
+//   rendered                               read cg.events and cg.report again, and redraw
 //   playhead <i>                           a line at event i's time (the player's index); -1 hides it
 //   clear                                  show nothing
 //   (a click on a marker)  status <text>   the marker's rule, also shown in the caption
+// Errors: error <message> from a message; a drawing error is posted to the Max
+// window and shown in the caption.
 // The layout is worked out once per render (or resize), not once per note: the
 // playhead is drawn over it.
+// No global function here may share a name with a Max built-in: jsui's
+// refresh(), for one (M3 session 2: the roll drew nothing while this script
+// defined refresh). A test checks every wrapper.
 
 autowatch = 1;
 inlets = 1;
@@ -282,23 +288,34 @@ const eventsDict = new Dict("cg.events"); // written by the canon wrapper
 const reportDict = new Dict("cg.report"); // written by the canon wrapper
 
 let view = { events: [] };
-let caption = null; // a clicked marker's text, until the next refresh
+let caption = null; // a clicked marker's text (or a drawing error), until the next render
 let playheadT = null; // beats, or null
 let cache = null; // { width, height, items, markers, frame }
 
-function read(dict) {
-  const text = dict.stringify();
-  return text ? JSON.parse(text) : null;
+function attempt(action) {
+  try {
+    action();
+  } catch (e) {
+    outlet(0, "error", String(e && e.message ? e.message : e));
+  }
 }
-read.local = 1;
+attempt.local = 1;
 
-function refresh() {
-  const rendered = read(eventsDict);
-  const report = read(reportDict);
+function readDict(dict) {
+  const text = dict.stringify();
+  const value = text ? JSON.parse(text) : null;
+  return value && Object.keys(value).length ? value : null;
+}
+readDict.local = 1;
+
+// The canon now in the dicts (none yet: an empty roll).
+function loadDicts() {
+  const played = readDict(eventsDict);
+  const report = readDict(reportDict);
   view = {
-    name: rendered ? rendered.name : "",
-    voices: rendered ? rendered.voices : [],
-    events: rendered ? rendered.events.map(([t, dur, pitch, , voice]) => ({ t, dur, pitch, voice })) : [],
+    name: played ? played.name : "",
+    voices: played && played.voices ? played.voices : [],
+    events: played && played.events ? played.events.map(([t, dur, pitch, , voice]) => ({ t, dur, pitch, voice })) : [],
     meter: report ? report.meter : undefined,
     period: report ? report.period : undefined,
     report,
@@ -306,12 +323,19 @@ function refresh() {
   caption = null;
   playheadT = null;
   cache = null;
+}
+loadDicts.local = 1;
+
+function rendered() {
+  attempt(loadDicts);
   mgraphics.redraw();
 }
 
 function playhead(index) {
-  const e = view.events[index];
-  playheadT = index >= 0 && e ? e.t : null;
+  attempt(() => {
+    const e = view.events[index];
+    playheadT = index >= 0 && e ? e.t : null;
+  });
   mgraphics.redraw();
 }
 
@@ -324,12 +348,24 @@ function clear() {
 }
 
 function paint() {
-  const [width, height] = size();
-  if (!cache || cache.width !== width || cache.height !== height) {
-    cache = { width, height, ...roll.layout({ ...view, caption }, { width, height }) };
+  try {
+    const [width, height] = boxSize();
+    if (!cache || cache.width !== width || cache.height !== height) {
+      cache = { width, height, ...roll.layout({ ...view, caption }, { width, height }) };
+    }
+    for (const item of cache.items) drawItem(item);
+    if (playheadT !== null && cache.frame) drawItem(roll.playheadLine(cache.frame, playheadT));
+  } catch (e) {
+    const message = String(e && e.message ? e.message : e);
+    post("roll: " + message + "\n");
+    cache = null;
+    const g = mgraphics;
+    g.set_source_rgba(0.85, 0.12, 0.12, 1);
+    g.select_font_face("Arial");
+    g.set_font_size(11);
+    g.move_to(4, 13);
+    g.show_text("roll: " + message);
   }
-  for (const item of cache.items) draw(item);
-  if (playheadT !== null && cache.frame) draw(roll.playheadLine(cache.frame, playheadT));
 }
 
 function onclick(x, y) {
@@ -348,14 +384,14 @@ function onresize() {
 
 // The box's size: mgraphics.size, or the box's rect where that's missing (as
 // in nnokes/cento's piano roll).
-function size() {
+function boxSize() {
   if (mgraphics.size) return mgraphics.size;
   const rect = box.rect;
   return [rect[2] - rect[0], rect[3] - rect[1]];
 }
-size.local = 1;
+boxSize.local = 1;
 
-function draw(item) {
+function drawItem(item) {
   const g = mgraphics;
   g.set_source_rgba(item.color[0], item.color[1], item.color[2], item.color[3]);
   if (item.op === "rect") {
@@ -384,4 +420,7 @@ function draw(item) {
     g.show_text(item.text);
   }
 }
-draw.local = 1;
+drawItem.local = 1;
+
+// Whatever the canon panel rendered before this script loaded.
+attempt(loadDicts);

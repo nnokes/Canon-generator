@@ -3235,7 +3235,7 @@ __cg_require.local = 1;
 //                                                                        fux-strict, spectral, free)
 // Whenever the melody changes: melody <file> | melody preset <name> | melody spec <name>.
 // After every render (and every profile), the analysis (M3 part F): the dict cg.report gets
-// the verdict (violations, the dissonance curve), then roll refresh (for the piano roll)
+// the verdict (violations, the dissonance curve), then roll rendered (for the piano roll)
 // and analysis <profile> rules: <n> faults / cost <x> (its own selector: the panel prints it).
 // Errors come out as: error <message>. Every output starts with a selector.
 
@@ -3684,7 +3684,7 @@ function analysis() {
     })),
     curve: report.metrics.dissonance.points,
   }));
-  outlet(0, "roll", "refresh");
+  outlet(0, "roll", "rendered");
   outlet(0, "analysis", rules, "rules:", report.hard, report.hard === 1 ? "fault" : "faults", "/ cost",
     Math.round(report.cost * 100) / 100);
 }

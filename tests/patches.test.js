@@ -274,14 +274,16 @@ test("the canon panel: controls on the left only; each reaches cg.canon; replies
     for (const [, name] of box.text.matchAll(/script send (\S+)/g)) assert.ok(names.has(name), `${name} is a scripting name`);
     assert.ok(from(box).includes(scripting), `${box.text} reaches [thispatcher]`);
   }
-  // The piano roll: the [v8ui], named roll; the playhead comes in from the player.
+  // The piano roll, by cord (M3 session 2): its renders from the route, and the
+  // playhead from the player, deferred to the main thread first.
   const roll = [...boxes.values()].find((b) => b.maxclass === "v8ui");
-  assert.equal(roll.varname, "roll");
   assert.equal(roll.textfile.filename, "cg.roll.bundle.js");
+  assert.deepEqual(from(byText("route menu tmenu bpm editor rules roll"), 5), [roll]);
   const later = from(byText("r cg.playhead"))[0];
   assert.equal(later.text, "deferlow", "from the scheduler to the main thread first");
-  assert.deepEqual(from(later).map((b) => b.text), ["prepend script send roll playhead"]);
-  assert.deepEqual(from(byText("route menu tmenu bpm editor rules roll"), 5).map((b) => b.text), ["prepend script send roll"]);
+  assert.deepEqual(from(later).map((b) => b.text), ["prepend playhead"]);
+  assert.deepEqual(from(from(later)[0]), [roll]);
+  assert.ok(!scripts.some((b) => /script send roll/.test(b.text)), "the roll gets cords, not script sends");
 });
 
 test("the finder panel opens in presentation mode, with each setting wired both ways", () => {

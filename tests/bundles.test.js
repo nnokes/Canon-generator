@@ -523,7 +523,7 @@ test("cg.canon writes its spec to the dict cg.spec on every render, for the find
 test("cg.canon: every render is analyzed into cg.report for the piano roll; profile changes the rules", () => {
   const bundle = loadBundle("cg.canon");
   const out = bundle.send("preset", 0); // the round
-  assert.deepEqual(select(out, "roll"), [["refresh"]]);
+  assert.deepEqual(select(out, "roll"), [["rendered"]]);
   const report = JSON.parse(new SimDict("cg.report").stringify());
   assert.equal(report.profile, "canon");
   assert.equal(report.model, "fux12");
@@ -553,13 +553,17 @@ test("cg.roll: draws what the canon renders, follows the playhead, and names a c
   canonBundle.send("preset", 0); // the round
   const notes = JSON.parse(new SimDict("cg.events").stringify()).events.length;
   const bundle = loadBundle("cg.roll");
-  assert.deepEqual(bundle.handlers(), ["clear", "playhead", "refresh"]);
+  assert.deepEqual(bundle.handlers(), ["clear", "playhead", "rendered"]);
   const g = bundle.context.mgraphics;
-  bundle.send("refresh");
+  const named = (name) => g.calls.filter((c) => c[0] === name);
+  // A roll that loads after the canon rendered shows it at once, with no message (M3 session 2).
+  bundle.call("paint");
+  assert.equal(named("rectangle").length, notes + 2, "every note, plus the background and the curve's strip");
+  g.calls.length = 0;
+  bundle.send("rendered");
   assert.ok(g.redraws > 0, "a redraw is requested");
   bundle.call("paint");
-  const named = (name) => g.calls.filter((c) => c[0] === name);
-  assert.equal(named("rectangle").length, notes + 2, "every note, plus the background and the curve's strip");
+  assert.equal(named("rectangle").length, notes + 2);
   assert.ok(named("show_text").some((c) => /^4-voice round .*: canon rules: \d+ faults/.test(c[1])), "the caption");
   // The playhead: drawn over the cached layout, the only 2 px line.
   g.calls.length = 0;
@@ -585,6 +589,28 @@ test("cg.roll: draws what the canon renders, follows the playhead, and names a c
   g.calls.length = 0;
   bundle.call("paint");
   assert.deepEqual(named("show_text").map((c) => c[1]), ["nothing rendered yet"]);
+  // A drawing error is posted to the Max window and shown, not thrown.
+  const size = g.size;
+  g.size = null; // and no box in the simulation: the size can't be read
+  g.calls.length = 0;
+  assert.doesNotThrow(() => bundle.call("paint"));
+  assert.match(bundle.posted.at(-1), /^roll: .*box/);
+  assert.match(named("show_text").at(-1)[1], /^roll: /);
+  g.size = size;
+});
+
+// Max's own global functions can't be redefined safely: a [v8ui] that defined
+// refresh() (jsui's built-in) drew nothing at all (M3 session 2).
+test("no [v8] or [v8ui] wrapper defines a global function named after a Max built-in", () => {
+  const BUILT_IN = ["refresh", "post", "cpost", "error", "outlet", "messnamed", "arrayfromargs", "assist",
+    "declareattribute", "embedmessage", "notifyclients", "setinletassist", "setoutletassist", "include", "compile"];
+  const code = path.join(__dirname, "..", "code");
+  for (const file of fs.readdirSync(code).filter((f) => /\.v8(ui)?\.js$/.test(f))) {
+    const source = fs.readFileSync(path.join(code, file), "utf8");
+    for (const [, name] of source.matchAll(/^function (\w+)\s*\(/gm)) {
+      assert.ok(!BUILT_IN.includes(name), `${file}: function ${name} is a Max built-in`);
+    }
+  }
 });
 
 test("cg.finder: searches the canon panel's melody in time slices, lists results, and a pick plays in the canon", () => {

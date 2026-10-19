@@ -527,7 +527,8 @@ lower 10th), and how his canon for Haydn has two solutions.
   `cg.events` and `cg.report` (the canon wrapper analyzes every render), follows the
   player through `[s cg.playhead]`, and names a clicked marker. Its layout is the pure
   module `cg-roll`. The canon panel keeps its controls on the left and its wiring in a
-  column on the right; replies set controls by scripting name through `[thispatcher]`.
+  column on the right; replies set controls by scripting name through `[thispatcher]`,
+  except the roll, which gets real cords.
 - `cg.engine` (generated) hosts the `[v8]` wrappers and named dicts:
   - `cg.spec`: the canon spec
   - `cg.events`: the rendered events

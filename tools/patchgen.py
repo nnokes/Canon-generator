@@ -774,12 +774,15 @@ def panel_canon():
       - Those objects reach cg.canon along a trunk at the right edge.
       - cg.canon's replies set the controls by scripting name, through one
         [thispatcher] (script send <name> ...), so no cord runs back into the
-        controls area."""
+        controls area. The piano roll is the exception: it gets real cords (its
+        renders and the playhead), up a third trunk and in along the gap above
+        it (M3 session 2: with no cord, it was easy to miss and hard to debug)."""
     GRID, TOP = 30, 70
     COL_X, COL_W = 640, 420
     TRUNK = COL_X + COL_W + 15  # the forward trunk, down to cg.canon
     UP = TRUNK + 12  # the audio trunk, up from cg.canon to the volume
-    p = Patch(rect=(40, 40, UP + 30, 940))
+    ROLL_UP = UP + 12  # the roll's trunk, up from the replies to the roll
+    p = Patch(rect=(40, 40, ROLL_UP + 30, 940))
     row = lambda i: TOP + GRID * i  # noqa: E731
     p.note(HAND_NOTE, 20, 5, 890, 2)
     p.comment("Pick a preset, turn audio on (the speaker, top right), play. Every edit re-renders at once.", 20, 48)
@@ -981,17 +984,22 @@ def panel_canon():
                      w=COL_W, lines=4)
     p.connect(route, 3, editor, 0)
     script.append(editor)
-    for outlet, text in ((4, "prepend script send rules setsymbol"), (5, "prepend script send roll")):
-        box = obj(text, row(23))
-        p.connect(route, outlet, box, 0)
-        script.append(box)
-    # The playhead: the note now playing, from the player (scheduler) to the roll.
+    rules_box = obj("prepend script send rules setsymbol", row(23))
+    p.connect(route, 4, rules_box, 0)
+    script.append(rules_box)
+    # The roll, by cord: its renders, and the playhead (the note now playing, from
+    # the player in the scheduler, deferred to the main thread). Up the roll's
+    # trunk, then left along the gap above the roll into its inlet.
     playhead = obj("r cg.playhead", row(23), 0, 1)
     later = obj("deferlow", row(23), 1, 1)
-    to_roll = obj("prepend script send roll playhead", row(23))
+    to_roll = obj("prepend playhead", row(23))
     p.connect(playhead, 0, later, 0)
     p.connect(later, 0, to_roll, 0)
-    script.append(to_roll)
+    rx, ry = p.port(roll, 0, False)
+    gap = ry - 3
+    for source, outlet, drop in ((route, 5, 4), (to_roll, 0, 3)):
+        sx, sy = p.port(source, outlet, True)
+        p.connect(source, outlet, roll, 0, [sx, sy + drop, ROLL_UP, sy + drop, ROLL_UP, gap, rx, gap])
     # On load: the volume, the track box showing -1 (all tracks, the default), and
     # the rules menu showing canon (the analysis's default).
     start = obj("loadbang", row(23), 1, 1, ["bang"])

@@ -397,10 +397,10 @@ edited is regenerated: the new finder panel is new, and your canon panel is unto
   - the playhead, drawn over a cached layout (laid out once per render, not per note)
 - [x] **`code/cg.canon.v8.js`:** every render is analyzed (the spec's system, meter and
   consonance; rules `canon` by default) into the dict **`cg.report`**, then `roll
-  refresh` and an `analysis` line. `profile <name>` re-analyzes without re-rendering
+  rendered` and an `analysis` line. `profile <name>` re-analyzes without re-rendering
   (2–22 ms on the presets).
-- [x] **`code/cg.roll.v8ui.js`:** reads `cg.events` and `cg.report` on `refresh`,
-  `playhead <i>` follows the player (`cg.canon` sends each note's index to `[s
+- [x] **`code/cg.roll.v8ui.js`:** reads `cg.events` and `cg.report` when it loads and on
+  `rendered`, `playhead <i>` follows the player (`cg.canon` sends each note's index to `[s
   cg.playhead]`, and −1 on stop), and a click on a marker shows its rule in the caption
   and the Max window.
 - [x] **The canon panel, tidied** (no presentation mode; everything visible):
@@ -409,21 +409,41 @@ edited is regenerated: the new finder panel is new, and your canon panel is unto
   - every control's cord leaves through the gap under its row into the **wiring column**
     on the right, then along a trunk at the right edge to `cg.canon`
   - `cg.canon`'s replies set the controls **by scripting name** through one
-    `[thispatcher]` (`script send presets ...`), so no cord runs back across the controls
+    `[thispatcher]` (`script send presets ...`), so no cord runs back across the controls.
+    The roll is the exception: it gets real cords (its renders and the playhead), up a
+    trunk and in along the gap above it.
   - the PIANO ROLL section: the roll (580 × 260) and a **rules** menu (canon, florid,
     fux-strict, spectral, free)
 - [x] **Tests:** the layout (`tests/roll.test.js`); the report and `profile`; the roll
   drawing through a recording `mgraphics` in the `[v8]` simulation; the playhead feed;
   the canon panel (controls area holds no objects, each control reaches `cg.canon`,
-  every `script send` names a control, cords leave below their row). Tests: 158.
+  every `script send` names a control, cords leave below their row); no wrapper defines a
+  function named after a Max built-in. Tests: 159.
 
 ## Max session 2
-**First:** the canon panel was remade, so discard your copy: in the repo folder run `git
+**First round (2026-10-19):** the layout reads much better and the audio plays, but **the
+roll showed nothing**, and no cord went into its `[v8ui]`.
+- **The probable cause:** the roll's script defined a global function `refresh` (its
+  message for "a new render"). `refresh()` is a built-in in jsui, and redefining it can
+  stop the whole script loading in `[v8ui]`: then there's no `paint`, not even the
+  background. cento's working roll never uses that name.
+- **The missing cord was by design** (its messages went through `[thispatcher]`), but it
+  made the roll easy to miss and hard to debug.
+- **Fixed:**
+  - the message is `rendered` now, and a test fails if any wrapper defines a function
+    named after a Max built-in
+  - the roll reads the dicts when its script loads too, so it shows a render it missed
+  - real cords into the roll: its renders from the route, and the playhead
+  - a drawing error is posted to the Max window (`roll: ...`) and shown in the roll
+
+**Second round:** the canon panel was remade again, so discard your copy: in the repo folder run `git
 checkout -- patchers/cg.panel.canon.maxpat`, then `git pull`. Your MIDI-out port choice
 went with it: double-click `[midiout]` (wiring column) to choose it again.
 1. Open `patchers/cg.panel.canon.maxpat`. Check the layout reads clearly: controls on the
    left, the wiring in the right-hand column, no cords across the controls.
-2. Play the round. The roll shows each voice in its colour, the playhead moves with the
+2. **Before playing,** the roll already shows the round. Check the preset menu lists the
+   presets and the voice editor shows voice 0 (the script sends work).
+   Then play the round. The roll shows each voice in its colour, the playhead moves with the
    music, and markers and the dissonance curve show.
 3. Switch **rules** to fux-strict: more markers (the round isn't first species), and the
    `analysis` line in the Max window says how many.
@@ -431,7 +451,9 @@ went with it: double-click `[midiout]` (wiring column) to choose it again.
    (`roll:`). Does it match what you hear at that spot?
 5. Load your clip, then pick a result in the finder (4 voices, x2 ticked). The roll
    follows both.
-6. Paste anything from `canon-error` or `roll`, and anything that looks wrong.
+6. Paste anything from `canon-error` or `roll`, and anything that looks wrong. If the roll
+   is still blank, paste every line in the Max window that mentions `v8ui`, `roll` or
+   `cg.roll`.
 
 ## Results
 
