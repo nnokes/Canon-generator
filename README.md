@@ -7,7 +7,8 @@ just intonation, Scala files, and harmonic and inharmonic spectra.
 
 > **Status:** M0 (scaffold and spikes), M1 (scale systems), M2 (the canon renderer) and
 > M3 (analysis, the answer finder and the piano roll;
-> [`docs/M3-checklist.md`](docs/M3-checklist.md)) are done. M4, the generator, is next.
+> [`docs/M3-checklist.md`](docs/M3-checklist.md)) are done. M4, the generator, is under way
+> ([`docs/M4-checklist.md`](docs/M4-checklist.md)).
 > To play the preset canons and see them in the piano roll, with the analysis's markers,
 > open `patchers/cg.panel.canon.maxpat`; to find the canons hidden in its melody, also
 > open `patchers/cg.panel.finder.maxpat`; for the scale systems,
@@ -38,6 +39,8 @@ just intonation, Scala files, and harmonic and inharmonic spectra.
 - [`docs/M2-checklist.md`](docs/M2-checklist.md): the canon renderer (done).
 - [`docs/M3-checklist.md`](docs/M3-checklist.md): analysis, consonance models, the
   answer finder and the piano roll (done).
+- [`docs/M4-checklist.md`](docs/M4-checklist.md): the generator and the edits toggle (in
+  progress).
 - [`docs/controls.md`](docs/controls.md): every rule and consonance model, with its source.
 
 ## Development
