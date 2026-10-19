@@ -47,29 +47,41 @@ profile with no hard faults: the generator and the analyzer judge with the same 
   section, so finding and generating share one window. Results play through the canon
   panel and show in its piano roll, as the finder's do.
 
-## Part A. The constraint model (engine)
+## Part A. The constraint model (engine: `code/lib/cg-constraints.js`): done
 The search needs to check a rule the moment it can be checked, not after the whole canon
 exists.
-- [ ] **Rhythm fixed, pitches variable.** The canon's rhythm doesn't depend on the dux's
-  pitches, so the skeleton is rendered once: for every slice, which dux note each voice
-  plays (the rendered events already carry their dux index). First species is the simple
-  case: one note per bar.
-- [ ] **Constraints with index sets:**
-  - each slice: the dux notes sounding in it, plus their neighbours where a rule needs
-    them (a passing note needs the notes either side)
-  - each pair of consecutive slices: the motion rules
-  - each pair and triple of consecutive dux notes: the melodic rules
-  - the opening and the close: the begin, end, mode-final and penultimate rules
-- [ ] **A constraint is checked as soon as all its indices are assigned** (§3.5). This
-  covers followers that lag (the ordinary case), followers that overtake the leader, and
-  retrograde voices, which pair early and late notes.
-- [ ] **One set of rules.** A check runs `cg-rules` on a small window built with
-  `cg-analyze`'s own slice and motion functions, so generating and analyzing can't
-  disagree (Anton's idea: one rule set to compose and to diagnose). Every finished canon
-  then gets the full analysis.
-- [ ] **Tests:**
-  - for random duxes, the incremental verdict equals the full analysis's, rule by rule
-  - the Fux and Mann goldens give the same faults as in M3
+- [x] **Rhythm fixed, pitches variable.** The canon's rhythm doesn't depend on the dux's
+  pitches, so the skeleton is rendered once: every event, the dux note it plays and its
+  time. Each event's pitch, for each degree its note could take, comes from a table
+  rendered once per candidate degree (and per first note, when a voice inverts around
+  it). If a canon's rhythm ever changed with its pitches, the model says so instead of
+  guessing.
+- [x] **Checks, one or two per slice** before the ending:
+  - **now:** the slice, the motion into it, the melodic rules on the notes that start
+    there, and the begin rules, on a window of the 4 slices before it and each voice's
+    last 4 notes
+  - **next:** the rules that read the following note (a dissonance's resolution,
+    `dissonance-treatment`): the same window plus the next slice
+  - each counts only what the analyzer reports **at that slice**, so every violation of
+    the whole canon is counted once
+- [x] **A check is ready as soon as every dux note in its window has a pitch** (§3.5).
+  In first species with the follower a bar behind, the check at bar *k* + 1 needs the
+  dux only up to note *k*.
+- [x] **One set of rules.** A check runs `cg-rules` through `cg-analyze` on its window,
+  told the whole canon's edges (`options.edges`: its first and last slices with two
+  voices), so the begin rules and the 6/4's "first or last bar" judge the canon, not
+  the window. Without edges the analyzer behaves exactly as in M3.
+- [x] **Judged on the whole canon only:** the rules about the end (`end-perfect`,
+  `penultimate`, `mode-final`) and the ending's slices (the cadence is built on the
+  last notes): `full(dux)` analyzes the finished canon.
+- [x] **Tests** (`tests/constraints.test.js`):
+  - for random duxes, every check reports exactly what the whole canon's analysis
+    reports at its slice, rule by rule: first species at the fifth, octave and lower
+    fourth (240 violations over 8 rules compared), and Ex. 201's florid rhythm under
+    the canon rules (dissonances caught by the next checks)
+  - the real Ex. 201 passes every check at each of Albrechtsberger's answers
+  - an inverting follower's pitches follow the first note
+  - a check takes about 0.1 ms
 
 ## Part B. The search (engine: `code/lib/cg-generate.js`)
 - [ ] **Depth-first, with backtracking.**
@@ -156,7 +168,7 @@ a round, a 32-note canon at several slice sizes, and a repair of your clip.
 
 | Check | Result | Decision |
 |---|---|---|
-| incremental checks = full analysis (Part A) | | |
+| incremental checks = full analysis (Part A) | **PASS** (Node, `tests/constraints.test.js`): every check equals the whole canon's analysis at its slice, for random duxes, first species and florid | The analyzer takes the canon's edges; end rules judged on the whole canon |
 | same seed, same canon (Part B) | | |
 | 2-voice canons at the 8ve, 5th, 4th; delays 1–4 bars (Part C) | | |
 | `fux-relaxed` (Part D) | | |

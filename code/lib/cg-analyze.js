@@ -24,6 +24,10 @@
 //   final        the mode's final as a pitch (fux rules); default: voice 0's last note
 //   fourthsFree  judge every pair as upper voices (a fourth is consonant): for
 //                screening part of a texture whose real bass isn't there yet
+//   edges        { first, last }: the times of the whole canon's first and last
+//                slices with two or more voices, when the events are a window of
+//                it (the generator's incremental checks, M4)
+//   metrics      false: the rules only (the generator's checks; metrics: null)
 
 const tuning = require("cg-tuning");
 const scales = require("cg-scales");
@@ -362,7 +366,7 @@ function analyze(rendered, options = {}) {
   for (let i = 1; i < slices.length; i++) motion.push({ from: i - 1, to: i, moves: motionBetween(slices[i - 1], slices[i]) });
   const length = events.reduce((m, e) => Math.max(m, e.t + e.dur), 0);
   const byVoice = lines(events);
-  const metrics = {
+  const metrics = options.metrics === false ? null : {
     conjunct: conjunct(byVoice, system),
     dissonance: dissonanceCurve(slices),
     harmonicConsistency: harmonicConsistency(slices, period, tolerance),

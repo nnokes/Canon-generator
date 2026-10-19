@@ -1616,6 +1616,21 @@ function noteOf(slice, voice) {
 
 const multi = (slices) => slices.filter((s) => s.notes.length > 1);
 
+// The canon's first and last slices with two or more voices, and those between.
+// A window of a larger canon (the generator's incremental checks, M4) gives
+// the canon's own as options.edges { first, last } (times); a slice outside
+// the window is null. Otherwise they're the slices' own.
+function edges(c) {
+  const all = multi(c.slices);
+  const e = c.options.edges;
+  if (!e) return { first: all[0] || null, last: all[all.length - 1] || null, inner: all.slice(1, -1), all };
+  const at = (t) => all.find((s) => time.eq(s.t, t)) || null;
+  return { first: at(e.first), last: at(e.last), inner: all.filter((s) => time.lt(e.first, s.t) && time.lt(s.t, e.last)), all };
+}
+
+// The bar (from 1) a time falls in.
+const barOf = (c, t) => Math.floor(t / c.meter.beats + time.EPS) + 1;
+
 // Whether time t falls on a strong beat of the meter.
 function analyzePosition(c, t) {
   const bar = Math.floor(t / c.meter.beats + time.EPS);
@@ -1664,8 +1679,9 @@ RULES.dissonance = (c) => {
 RULES["dissonance-treatment"] = (c) => {
   const out = [];
   const sounding = multi(c.slices);
-  const firstBar = sounding.length ? sounding[0].bar : 0;
-  const lastBar = sounding.length ? sounding[sounding.length - 1].bar : 0;
+  const span = c.options.edges;
+  const firstBar = span ? barOf(c, span.first) : sounding.length ? sounding[0].bar : 0;
+  const lastBar = span ? barOf(c, span.last) : sounding.length ? sounding[sounding.length - 1].bar : 0;
   c.slices.forEach((s, si) => {
     const prev = si > 0 ? c.slices[si - 1] : null;
     for (const p of s.pairs) {
@@ -1731,13 +1747,12 @@ RULES["hidden-perfect"] = (c) => motionRules(c).hidden;
 // Fux p. 28: begin and end on perfect consonances. With three or more voices the
 // final chord may hold a third (Fux p. 112).
 RULES["begin-perfect"] = (c) => {
-  const s = multi(c.slices)[0];
+  const s = edges(c).first;
   if (!s) return [];
   return s.above.filter((x) => !isPerfect(x)).map((x) => violation("begin-perfect", s, [s.bass, x.voice], `${Math.round(x.cents)} cents`));
 };
 RULES["end-perfect"] = (c) => {
-  const all = multi(c.slices);
-  const s = all[all.length - 1];
+  const s = edges(c).last;
   if (!s) return [];
   const allowed = (x) => isPerfect(x) || (s.notes.length > 2 && isImperfect(x));
   return s.above.filter((x) => !allowed(x)).map((x) => violation("end-perfect", s, [s.bass, x.voice], `${Math.round(x.cents)} cents`));
@@ -1746,8 +1761,9 @@ RULES["end-perfect"] = (c) => {
 // Fux p. 31: stay in the mode of the given melody. The lowest voice sounds the
 // final at the beginning and the end. The final: options.final, or voice 0's last note.
 RULES["mode-final"] = (c, params) => {
-  const all = multi(c.slices);
-  if (!all.length) return [];
+  const { first, last } = edges(c);
+  const ends = [...new Set([first, last].filter(Boolean))];
+  if (!ends.length) return [];
   let final = c.options.final;
   if (final === undefined) {
     const line = c.byVoice.get(0) || [...c.byVoice.values()][0];
@@ -1755,13 +1771,12 @@ RULES["mode-final"] = (c, params) => {
   }
   const tolerance = params.tolerance || 15;
   const out = [];
-  for (const s of [all[0], all[all.length - 1]]) {
+  for (const s of ends) {
     const bass = noteOf(s, s.bass);
     if (folded((bass.pitch - final) * 100, c.period) > tolerance
       && c.period - folded((bass.pitch - final) * 100, c.period) > tolerance) {
       out.push(violation("mode-final", s, [s.bass], `the bass is ${Math.round(folded((bass.pitch - final) * 100, c.period))} cents from the final`));
     }
-    if (all.length === 1) break;
   }
   return out;
 };
@@ -1770,10 +1785,9 @@ RULES["mode-final"] = (c, params) => {
 // third (cantus above), the outer voices closing by contrary step. In 12-EDO the
 // sizes are checked (fux12 and ratio); in other tunings, the class and the steps.
 RULES.penultimate = (c) => {
-  const all = multi(c.slices);
-  if (all.length < 2) return [];
-  const last = all[all.length - 1];
-  const pen = all[all.length - 2];
+  const { all, last } = edges(c);
+  const pen = last ? all[all.indexOf(last) - 1] : null;
+  if (!last || !pen) return [];
   // The outer voices of the penultimate slice; at a final unison they may swap.
   const lo = pen.bass;
   const hi = pen.notes[pen.notes.length - 1].voice;
@@ -1795,9 +1809,8 @@ RULES.penultimate = (c) => {
 
 // Fux p. 28: imperfect consonances are preferred between the beginning and the end.
 RULES["prefer-imperfect"] = (c) => {
-  const all = multi(c.slices);
   const out = [];
-  for (const s of all.slice(1, -1)) {
+  for (const s of edges(c).inner) {
     for (const x of s.above) if (isPerfect(x)) out.push(violation("prefer-imperfect", s, [s.bass, x.voice], "perfect inside"));
   }
   return out;
@@ -2096,6 +2109,10 @@ exports.rules = () => Object.keys(RULES);
 //   final        the mode's final as a pitch (fux rules); default: voice 0's last note
 //   fourthsFree  judge every pair as upper voices (a fourth is consonant): for
 //                screening part of a texture whose real bass isn't there yet
+//   edges        { first, last }: the times of the whole canon's first and last
+//                slices with two or more voices, when the events are a window of
+//                it (the generator's incremental checks, M4)
+//   metrics      false: the rules only (the generator's checks; metrics: null)
 
 const tuning = require("cg-tuning");
 const scales = require("cg-scales");
@@ -2434,7 +2451,7 @@ function analyze(rendered, options = {}) {
   for (let i = 1; i < slices.length; i++) motion.push({ from: i - 1, to: i, moves: motionBetween(slices[i - 1], slices[i]) });
   const length = events.reduce((m, e) => Math.max(m, e.t + e.dur), 0);
   const byVoice = lines(events);
-  const metrics = {
+  const metrics = options.metrics === false ? null : {
     conjunct: conjunct(byVoice, system),
     dissonance: dissonanceCurve(slices),
     harmonicConsistency: harmonicConsistency(slices, period, tolerance),
