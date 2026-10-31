@@ -23,7 +23,8 @@ as few notes as it can so that a canon works (§3.6).
 "Valid" means the finished canon passes the M3 analyzer (`cg-analyze`) under its rule
 profile with no hard faults: the generator and the analyzer judge with the same rules.
 
-**Status:** started 2026-10-19.
+**Status:** started 2026-10-19. Parts A, B, C and G (for two voices) are built: 185
+tests. Next: Max session 1 (below), then parts D, E and F.
 
 ---
 
@@ -177,23 +178,67 @@ exists.
   finds a one-note fix that passes and names the broken rule. With the toggle off, the
   melody comes back unchanged.
 
-## Part G. Max: Generate in the finder panel
-- [ ] **A Generate section** in `cg.panel.finder`:
-  - the dux: final, length and range
-  - the followers: voices, interval and delay (or "round" for the block method)
-  - rules, seed, budget, and the time slice it shares with the finder
-  - Generate and Stop, a results list, and a status line
-- [ ] **Click a result** and it plays through the canon panel and shows in its piano
-  roll (`usespec`, as finder results do).
-- [ ] **The edits toggle:** allow edits, max edits, and a repair of the picked result;
-  the status line lists the changed notes and the rules they fixed.
-- [ ] **Tests:** the wrapper's messages and time slicing in the `[v8]` simulation; the
-  panel's wiring.
-- [ ] **Recheck the time-slice budget** with a 32-note canon.
+## Part G. Max: Generate in the finder panel (built first, at your request, for two voices)
+- [x] **`code/cg.generate.v8.js`** (bundled to `patchers/cg.generate.bundle.js`):
+  - glue around `cg-generate.strict()`, modelled on the finder's wrapper: each box sends
+    its own message, every setting echoes back (`show <name> <value>`), and a refused
+    value snaps back
+  - **mode:** Fux's six modes in 12-EDO, each on its final (ionian C4, dorian D4, phrygian
+    E4, lydian F4, mixolydian G3, aeolian A3), or `panel`: the canon panel's own tuning
+    (from `cg.spec`), degree 0 the final
+  - the dux's length (`notes`) and range (`below` / `above` the final, in steps); the
+    follower's `interval` (steps) and `delay` (bars); `profile`; the close (`cadence`
+    6|8 or 3|1); `seed` and `count` (one canon per seed); `taste`; `slicems`; `budget`
+    (20,000 candidate notes per canon: a canon that exists is found in far fewer)
+  - **run:** one search per seed, in time slices from a `Task`, as the finder runs; the
+    search now yields after every note it tries (about a millisecond), so a slice of a
+    few ms is honoured. Repeats are dropped. Menu items read `2. seed 3: C5 B4 D5 C5 ...
+    / cost 1.5` (note names in 12-EDO, degrees elsewhere; no commas). A seed that found
+    nothing gets a status line: the blocking rule, or the budget.
+  - **pick:** the canon's spec to the dict `cg.generated`, then `audition cg.generated`
+- [x] **`cg.generate.maxpat`** (generated): the twin of `cg.finder`: settings at load,
+  `[deferlow]`, and a pick that plays at once (stop, `usespec cg.generated`, play, to
+  `[s cg.canon.in]`).
+- [x] **A GENERATE column** in `cg.panel.finder` (presentation mode, on the finder's rows):
+  mode, notes, range, follower, rules and close, seed, canons and taste, run and stop,
+  the canons menu (click to hear), a status line, and how to read it. The finder's time
+  slice box drives both.
+- [x] **Click a canon** and it plays through the canon panel and shows in its piano roll.
+- [x] **Found while building it:**
+  - **taste, stronger:** leaps cost by their size, a return to a note just left costs,
+    and rocking between two notes costs most. The lines are now mostly steps (at the
+    fifth a bar later: F4 C5 B4 D5 C5 B4 A4 G4 F4 E4 D4 C4). The octave a bar later can
+    only move by leaps: a step makes a 7th or 9th against the follower. So the default
+    follower is the fifth, a bar later.
+  - **ficta in any octave tuning:** a close in 31-EDO D dorian never passed (its sixth
+    was minor, and a 12-tone semitone isn't a 31-EDO pitch). The leading note is now
+    raised by the tuning's own semitone (116 cents in 31-EDO).
+- [x] **Tests:** the wrapper's messages, echoes and refusals; a run in 1 ms slices whose
+  canons pass `fux-strict` and play through `usespec`; no canon names `repeat`; `mode
+  panel` in 31-EDO D dorian; the patch's pick order; the column's wiring both ways and
+  the shared time slice. Tests: 185.
+- [ ] **The edits toggle** (Part F): allow edits, max edits, and a repair of the picked
+  result.
+- [ ] **More voices and rounds** (Parts D, E): their controls.
+- [ ] **Recheck the time-slice budget** with a 32-note canon (session 1, below).
 
-## Max session 1 (after parts C–G)
-To be written when the parts are built: generate canons at the octave, fifth and fourth,
-a round, a 32-note canon at several slice sizes, and a repair of your clip.
+## Max session 1: hear the generated canons
+**First:** the finder panel was remade (it's wider now, with GENERATE on the right), so
+discard your copy: in the repo folder run `git checkout -- patchers/cg.panel.finder.maxpat`,
+then `git pull`.
+1. Open `patchers/cg.panel.canon.maxpat` and `patchers/cg.panel.finder.maxpat`.
+2. In GENERATE, keep the defaults (ionian, 12 notes, the fifth a bar later, 4 canons) and
+   click **run**. The canons menu fills; the status line says how many. Click each: it
+   plays in the canon panel, and the roll shows no red markers (amber ones are soft).
+3. Try other settings, a click on **run** after each:
+   - the octave (interval 7) a bar later: leaps only (see How to read it)
+   - the fourth below (interval −3), and the fifth (4) two bars later
+   - modes: dorian (listen for the C sharp at the close), phrygian
+   - a seed that finds none: the status line names the rule
+4. **The time-slice budget:** set notes to 32 and canons to 8, then run at time slices
+   of 20 and 400, dragging a box while it runs. Note whether it stays smooth, and the
+   `done` lines.
+5. **How do they sound?** That decides the taste cost and the next part.
 
 ## Results
 
@@ -205,4 +250,5 @@ a round, a 32-note canon at several slice sizes, and a repair of your clip.
 | `fux-relaxed` (Part D) | | |
 | rounds by the block method (Part E) | | |
 | edits toggle golden test (Part F) | | |
+| generated canons in Max (Part G) | | To be heard: session 1 |
 | 32-note canon in Max within the slice budget (Part G) | | |

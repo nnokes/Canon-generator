@@ -796,3 +796,101 @@ test("cg.finder: with 3+ voices it says how many followers and pairs got through
   assert.match(lines[1], /^finder: \d+ of 16 followers pass against the dux alone, \d+ pairs of them work together$/);
   assert.match(lines[2], /^finder: no sets: no two passing followers fit each other/);
 });
+
+// ---------------------------------------------------------------- the generator (M4 part G)
+
+test("cg.generate exposes exactly its documented messages, and echoes every setting", () => {
+  const bundle = loadBundle("cg.generate");
+  assert.deepEqual(bundle.handlers(), [
+    "above", "below", "budget", "cadence", "count", "delay", "info", "interval", "mode", "notes", "pick", "profile",
+    "run", "seed", "settings", "slicems", "stop", "taste",
+  ]);
+  assert.deepEqual(select(bundle.send("settings"), "show"), [
+    ["mode", "ionian"], ["notes", 12], ["below", 3], ["above", 9], ["interval", 4], ["delay", 1],
+    ["profile", "fux-strict"], ["cadence", "6|8"], ["seed", 1], ["count", 4], ["taste", 1], ["slicems", 20],
+  ]);
+  // A refused value is reported, and the box snaps back to what the generator holds.
+  for (const [message, value, kept, why] of [
+    ["notes", 1, 12, /notes: a whole number from 2 to 64/], ["mode", "locrian", "ionian", /mode: one of ionian/],
+    ["cadence", "7-6|8", "6|8", /cadence: one of 6\|8 3\|1/], ["profile", "baroque", "fux-strict", /unknown rule profile/],
+    ["delay", 1.5, 1, /delay: whole bars/],
+  ]) {
+    const out = bundle.send(message, value);
+    assert.match(errors(out)[0], why);
+    assert.deepEqual(select(out, "show"), [[message, kept]]);
+  }
+  assert.deepEqual(select(bundle.send("mode", "dorian"), "show"), [["mode", "dorian"]]);
+  assert.deepEqual(select(bundle.send("taste", 0), "show"), [["taste", 0]]);
+  assert.match(errors(bundle.send("pick", 0))[0], /no canon 0: generate first/);
+});
+
+test("cg.generate: writes canons in time slices, lists them, and a pick plays in the canon panel", () => {
+  const canonBundle = loadBundle("cg.canon");
+  canonBundle.send("preset", 0); // tempo 100, from cg.spec
+  const bundle = loadBundle("cg.generate");
+  bundle.send("notes", 8);
+  bundle.send("count", 3);
+  bundle.send("slicems", 1);
+  const started = bundle.send("run");
+  assert.deepEqual(errors(started), []);
+  assert.deepEqual(select(started, "results"), [["clear"]]);
+  const { out, ticks } = bundle.tick();
+  assert.ok(ticks > 1, `a 1 ms slice yields to Max between steps (${ticks} ticks)`);
+  const shown = select(out, "results");
+  const listed = shown.filter((r) => r[0] === "append").map((r) => r[1]);
+  assert.ok(listed.length >= 1 && listed.length <= 3, listed.join("\n"));
+  for (const item of listed) {
+    assert.match(item, /^\d+\. seed \d+: [A-G][b#]?\d( [A-G][b#]?\d)* \/ cost [\d.]+$/);
+    assert.ok(!/[,;]/.test(item), "no commas or semicolons: Max splits menu items on them");
+  }
+  assert.deepEqual(shown.at(-1), ["set", 0], "the menu shows the first canon, without playing it");
+  assert.match(select(out, "progress").at(-1).join(" "), /^done: \d+ canons? from 3 seeds in \d+ ms$/);
+  // Each canon passes fux-strict, analyzed afresh; a pick plays it in the canon panel.
+  listed.forEach((item, i) => {
+    assert.deepEqual(select(bundle.send("pick", i), "audition"), [["cg.generated"]]);
+    const spec = JSON.parse(new SimDict("cg.generated").stringify());
+    assert.equal(spec.tempo, 100, "the canon panel's tempo");
+    assert.match(spec.name, /^generated: seed \d+ \/ upper 5th after 1 bar$/);
+    const rendered = canonEngine.render(spec);
+    const report = require("cg-analyze").analyze(rendered, {
+      system: require("cg-scales").fromSpec(spec.system), meter: spec.meter, profile: "fux-strict", final: 60,
+    });
+    assert.equal(report.hard, 0, `${item}: ${report.violations.filter((v) => v.hard).map((v) => v.rule).join(" ")}`);
+    const played = canonBundle.send("usespec", "cg.generated");
+    assert.deepEqual(errors(played), []);
+    assert.equal(rows(played).length, rendered.events.length);
+  });
+});
+
+test("cg.generate: a setting with no canon says which rule blocks it", () => {
+  loadBundle("cg.canon").send("preset", 0);
+  const bundle = loadBundle("cg.generate");
+  bundle.send("below", 0);
+  bundle.send("above", 0); // one degree: the dux can only repeat itself
+  bundle.send("count", 1);
+  bundle.send("notes", 6);
+  bundle.send("run");
+  const { out } = bundle.tick();
+  assert.deepEqual(select(out, "results").slice(-2), [["append", "(none found: see the status line)"], ["set", 0]]);
+  assert.ok(select(out, "status").some((line) => line.join(" ") === "generate: seed 1 found none: blocked by repeat"));
+});
+
+test("cg.generate: mode panel writes in the canon panel's tuning (31-EDO D dorian)", () => {
+  const canonBundle = loadBundle("cg.canon");
+  canonBundle.send("preset", 0);
+  canonBundle.send("tuning", 5); // 31-EDO D Dorian
+  const bundle = loadBundle("cg.generate");
+  bundle.send("mode", "panel");
+  bundle.send("notes", 8);
+  bundle.send("count", 1);
+  bundle.send("run");
+  const listed = select(bundle.tick().out, "results").filter((r) => r[0] === "append").map((r) => r[1]);
+  assert.equal(listed.length, 1, listed.join("\n"));
+  assert.match(listed[0], /^1\. seed 1: -?\d+( -?\d+)* \/ cost/, "degrees, not note names, outside 12-EDO");
+  bundle.send("pick", 0);
+  const spec = JSON.parse(new SimDict("cg.generated").stringify());
+  assert.deepEqual(spec.system, JSON.parse(new SimDict("cg.spec").stringify()).system);
+  // Without the canon panel's spec, mode panel says what to do.
+  new SimDict("cg.spec").clear();
+  assert.match(errors(bundle.send("run"))[0], /mode panel: open the canon panel first/);
+});

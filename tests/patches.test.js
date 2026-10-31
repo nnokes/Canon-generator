@@ -235,6 +235,44 @@ test("cg.finder: a pick plays at once: stop, then usespec, then play, to the can
   for (const o of [0, 1, 2]) assert.deepEqual(from(from(order, o)[0]).map((b) => b.text), ["s cg.canon.in"]);
 });
 
+test("cg.generate: a pick plays at once: stop, then usespec, then play, to the canon", () => {
+  const { byText, from } = wiring("patchers/cg.generate.maxpat");
+  assert.deepEqual(from(byText("v8 cg.generate.bundle.js")).map((b) => b.text), ["deferlow"]);
+  assert.deepEqual(from(byText("loadbang")).map((b) => b.text), ["settings"], "the panel's boxes get the real values");
+  const order = byText("t b l b");
+  assert.deepEqual([2, 1, 0].map((o) => from(order, o)[0].text), ["stop", "prepend usespec", "play"]);
+  for (const o of [0, 1, 2]) assert.deepEqual(from(from(order, o)[0]).map((b) => b.text), ["s cg.canon.in"]);
+});
+
+test("the finder panel's GENERATE column: each setting wired both ways to cg.generate; the time slice drives both", () => {
+  const { boxes, byText, from } = wiring("patchers/cg.panel.finder.maxpat");
+  const generator = byText("cg.generate");
+  const finderEngine = byText("cg.finder");
+  const shows = byText("route mode notes below above interval delay profile cadence seed count taste slicems");
+  assert.ok(shows, "show <name> sets each control");
+  shows.text.split(/\s+/).slice(1).forEach((name, i) => {
+    const control = from(from(shows, i)[0])[0];
+    assert.ok(control.presentation, `${name}: its control is in the presentation`);
+    const prepend = from(control).find((b) => b.text === `prepend ${name}`);
+    assert.ok(prepend, `${name}: the control sends its own message`);
+    assert.ok(from(prepend).includes(generator), `${name}: to cg.generate`);
+  });
+  const slice = byText("prepend slicems");
+  assert.ok(from(slice).includes(generator) && from(slice).includes(finderEngine), "one time slice for both");
+  const runs = [...boxes.values()].filter((b) => b.maxclass === "message" && b.text === "run");
+  assert.ok(runs.some((b) => from(b).includes(generator)) && runs.some((b) => from(b).includes(finderEngine)));
+  const route = from(generator)[0];
+  assert.equal(route.text, "route results progress error show");
+  const menu = from(route, 0)[0];
+  assert.equal(menu.maxclass, "umenu");
+  assert.ok(menu.presentation, "the canons fill a menu you can see");
+  assert.ok(from(menu).some((b) => b.text === "prepend pick" && from(b).includes(generator)), "a click picks");
+  const shown = [...boxes.values()].filter((b) => b.presentation && b.maxclass === "comment").map((b) => b.text).join("\n");
+  for (const words of ["Generate: new canons", "A seed is a canon", "None found", "Taste (ours", "6|8"]) {
+    assert.ok(shown.includes(words), `the column explains ${words}`);
+  }
+});
+
 test("cg.canon sends the playing note's index to [s cg.playhead], and -1 on stop, for the piano roll", () => {
   const { byText, from } = wiring("patchers/cg.canon.maxpat");
   const playhead = byText("s cg.playhead");

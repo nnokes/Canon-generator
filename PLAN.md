@@ -529,6 +529,9 @@ lower 10th), and how his canon for Haydn has two solutions.
   module `cg-roll`. The canon panel keeps its controls on the left and its wiring in a
   column on the right; replies set controls by scripting name through `[thispatcher]`,
   except the roll, which gets real cords.
+- The generator (M4) lives in the finder panel as a GENERATE column: `cg.generate`
+  writes first-species canons in time slices, and a picked one plays through the canon
+  panel (`usespec cg.generated`), as the finder's picks do.
 - `cg.engine` (generated) hosts the `[v8]` wrappers and named dicts:
   - `cg.spec`: the canon spec
   - `cg.events`: the rendered events

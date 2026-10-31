@@ -50,7 +50,8 @@ const FORMULAS = {
   // octave, or a minor third closing to the unison, by contrary step (M4). In a
   // mode where it isn't that size (dorian, mixolydian, aeolian), the voice that
   // leads to the final by step is raised a semitone (musica ficta: C sharp in
-  // D dorian); in phrygian it already is. 12-tone tunings only.
+  // D dorian); in phrygian it already is. Octave tunings, by their own
+  // semitone (116 cents in 31-EDO).
   "6|8": { upper: (m) => [m - 1, m], lower: () => [1, 0], lengths: [1, 2], apart: 1, ficta: { raise: "upper", cents: 900 } },
   "3|1": { upper: () => [1, 0], lower: () => [-1, 0], lengths: [1, 2], apart: 0, ficta: { raise: "lower", cents: 300 } },
 };
@@ -350,20 +351,38 @@ function coda(plan, events, at) {
   return out;
 }
 
+// The tuning's own semitone: of the sizes between two of its steps, the one
+// nearest 100 cents (12-EDO 100, 31-EDO 116, 19-EDO 126), within 40 cents;
+// none for a tuning without an octave period.
+function semitoneOf(system) {
+  if (system.period_cents !== 1200) return null;
+  const steps = system.steps_cents || [];
+  let best = null;
+  for (const a of steps) {
+    for (const b of steps) {
+      const d = ((b - a) % 1200 + 1200) % 1200;
+      if (d > 0 && (best === null || Math.abs(d - 100) < Math.abs(best - 100))) best = d;
+    }
+  }
+  return best !== null && Math.abs(best - 100) <= 40 ? best : null;
+}
+
 // Musica ficta for a first-species close: if the penultimate interval isn't the
-// formula's (a major sixth, a minor third), raise the voice that leads to the
-// final to a semitone below it. Only in tunings with a 1200-cent period.
+// formula's (a major sixth, a minor third, to the nearest semitone), raise the
+// voice that leads to the final to the tuning's own semitone below it (C sharp
+// in D dorian: 100 cents below D in 12-EDO, 116 in 31-EDO). Octave tunings only.
 function ficta(rule, events, low, high, at) {
-  if (low.system.period_cents !== 1200 || high.system.period_cents !== 1200) return;
+  const semitone = semitoneOf(rule.raise === "upper" ? high.system : low.system);
+  if (semitone === null) return;
   const pen = (cv) => events.find((e) => e.voice === cv.index && time.eq(e.t, at));
   const fin = (cv) => events.find((e) => e.voice === cv.index && time.lt(at, e.t));
   const [lo, hi] = [pen(low), pen(high)];
   if (!lo || !hi) return;
   const size = (((hi.pitch - lo.pitch) * 100) % 1200 + 1200) % 1200;
-  if (Math.abs(size - rule.cents) < 1) return;
+  if (Math.round(size / 100) === rule.cents / 100) return;
   const leader = rule.raise === "upper" ? hi : lo;
   const target = fin(rule.raise === "upper" ? high : low);
-  if (target) leader.pitch = target.pitch - 1;
+  if (target) leader.pitch = target.pitch - semitone / 100;
 }
 
 function firstDegree(plan) {

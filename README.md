@@ -11,8 +11,8 @@ just intonation, Scala files, and harmonic and inharmonic spectra.
 > ([`docs/M4-checklist.md`](docs/M4-checklist.md)).
 > To play the preset canons and see them in the piano roll, with the analysis's markers,
 > open `patchers/cg.panel.canon.maxpat`; to find the canons hidden in its melody, also
-> open `patchers/cg.panel.finder.maxpat`; for the scale systems,
-> `patchers/cg.panel.tuning.maxpat`.
+> open `patchers/cg.panel.finder.maxpat` (its GENERATE column writes new canons); for the
+> scale systems, `patchers/cg.panel.tuning.maxpat`.
 
 ## What it will do
 - **Render** canons with **N voices**. Each voice has its own **delay**, **interval of

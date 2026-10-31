@@ -642,6 +642,46 @@ def finder():
     return p
 
 
+def generate():
+    """cg.generate (M4 part G): the generator. Inlet: messages (see
+    code/cg.generate.v8.js). It writes new first-species canons in time slices.
+    At load it sends its settings out (show ...), so the panel's boxes show
+    them. A picked canon plays at once: stop, usespec cg.generated, then play,
+    to the canon panel through [s cg.canon.in]. Everything goes out through
+    [deferlow], as the finder's does. Outlet: results (for a umenu), progress,
+    show, done, status, error."""
+    p = Patch(rect=(80, 80, 680, 380))
+    p.note(GENERATED_NOTE, 20, 10, 600, 1)
+    inlet = p.inlet(20, 50, "messages: run, stop, settings, mode, notes, below, above, interval, delay, profile, "
+                    "cadence, seed, count, taste, slicems, budget, pick, info", 0)
+    load = p.obj("loadbang", 110, 50, 1, 1, ["bang"])
+    ask = p.msg("settings", 110, 80)
+    v8 = p.obj("v8 cg.generate.bundle.js", 20, 115, 1, 1)
+    later = p.obj("deferlow", 20, 150, 1, 1)
+    route = p.obj("route audition", 20, 185, 2, 2)
+    order = p.obj("t b l b", 20, 220, 1, 3, ["bang", "", "bang"])
+    play = p.msg("play", 20, 255)
+    usespec = p.obj("prepend usespec", 70, 255, 2, 1)
+    stop = p.msg("stop", 190, 255)
+    send = p.obj("s cg.canon.in", 20, 300, 1, 0)
+    out = p.outlet(330, 300, "results (for a umenu), progress, show, done, status, error", 0)
+    p.connect(inlet, 0, v8, 0)
+    p.connect(load, 0, ask, 0)
+    p.connect(ask, 0, v8, 0)
+    p.connect(v8, 0, later, 0)
+    p.connect(later, 0, route, 0)
+    p.connect(route, 0, order, 0)
+    p.connect(order, 2, stop, 0)  # right to left: stop first,
+    p.connect(order, 1, usespec, 0)  # then load the pick,
+    p.connect(order, 0, play, 0)  # then play it
+    for m in (stop, usespec, play):
+        p.connect(m, 0, send, 0)
+    p.connect(route, 1, out, 0)
+    p.note("A picked canon plays through the canon panel's own player: keep the canon panel open.",
+           330, 115, 300, 2)
+    return p
+
+
 GENERATED = {
     "patchers/cg.engine.maxpat": engine,
     "patchers/cg.tuning.maxpat": tuning,
@@ -650,6 +690,7 @@ GENERATED = {
     "patchers/cg.canon.maxpat": canon,
     "patchers/cg.check.mpe.maxpat": check_mpe,
     "patchers/cg.finder.maxpat": finder,
+    "patchers/cg.generate.maxpat": generate,
 }
 
 
@@ -1028,8 +1069,9 @@ def panel_finder():
     only the labelled controls, and below them how to read what the finder says
     (cost, faults, the status line, the rules, the time slice). Each box sends
     its own message, and the finder echoes every setting back (show ...), so the
-    boxes show what it holds."""
-    p = Patch(rect=(60, 60, 840, 860), presentation=True)
+    boxes show what it holds. On the right, GENERATE (M4 part G): new canons
+    from the rules, played the same way; the time slice is shared."""
+    p = Patch(rect=(60, 60, 1340, 860), presentation=True)
     present = p.present
 
     present(p.comment("Answer finder: the canons hidden in a melody", 20, 10, fontsize=16.0, fontface=1, w=420))
@@ -1151,9 +1193,81 @@ def panel_finder():
         "screen refresh.",
     ])
 
+    # GENERATE (M4 part G): a column on the right, on the same rows.
+    gx = 840
+    gen = {}  # setting -> its control
+
+    def gen_number(name, x, y, **limits):
+        box = p.ui("number", x, y, 50, 22, 1, 2, ["", "bang"], **limits)
+        present(box)
+        gen[name] = box
+        return box
+
+    def gen_menu(name, x, y, w, items):
+        box = p.ui("umenu", x, y, w, 22, 1, 3, ["int", "", ""], items=[i for item in items for i in (item, ",")][:-1])
+        present(box)
+        gen[name] = box
+        return box
+
+    present(p.comment("Generate: new canons from the rules", gx, 10, fontsize=16.0, fontface=1, w=420))
+    present(p.note("First species (one note per bar) under Fux's strict rules. Click a canon to hear it in the "
+                   "canon panel and see it in its piano roll.", gx, 40, 460, 2))
+    present(p.comment("Mode", gx, 95))
+    gen_menu("mode", gx + 150, 95, 110, ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "panel"])
+    hint("panel = the canon panel's tuning", gx + 270, 95)
+    present(p.comment("Notes in the melody", gx, 130))
+    gen_number("notes", gx + 150, 130, minimum=2, maximum=64)
+    hint("one per bar", gx + 205, 130)
+    present(p.comment("Range below / above", gx, 165))
+    gen_number("below", gx + 150, 165, minimum=0, maximum=14)
+    hint("/", gx + 205, 165)
+    gen_number("above", gx + 240, 165, minimum=0, maximum=21)
+    hint("scale steps from the final", gx + 295, 165)
+    present(p.comment("Follower", gx, 200))
+    gen_number("interval", gx + 150, 200, minimum=-21, maximum=21)
+    hint("steps, after", gx + 205, 200)
+    gen_number("delay", gx + 300, 200, minimum=0, maximum=16)
+    hint("bars", gx + 355, 200)
+    present(p.comment("Rules", gx, 235))
+    gen_menu("profile", gx + 150, 235, 110, ["fux-strict", "canon", "florid", "spectral", "free"])
+    hint("close", gx + 270, 235)
+    gen_menu("cadence", gx + 315, 235, 60, ["6|8", "3|1"])
+    present(p.comment("Seed", gx, 270))
+    gen_number("seed", gx + 150, 270)
+    hint("canons", gx + 205, 270)
+    gen_number("count", gx + 255, 270, minimum=1, maximum=32)
+    hint("taste", gx + 310, 270)
+    gen["taste"] = p.ui("toggle", gx + 356, 270, 22, 22, 1, 1, ["int"])
+    present(gen["taste"])
+    gen_run = p.msg("run", gx + 388, 270)
+    gen_stop = p.msg("stop", gx + 430, 270)
+    present(gen_run, gen_stop)
+    present(p.comment("Canons: click one to hear it in the canon panel", gx, 310))
+    gen_results = p.ui("umenu", gx, 335, 460, 22, 1, 3, ["int", "", ""])
+    present(gen_results)
+    present(p.comment("Status", gx, 370))
+    gen_line = p.msg("", gx + 55, 370, w=405)
+    present(gen_line)
+    present(p.comment("How to read it", gx, 410, fontface=1))
+    gen_bottom = 435
+    for text in [
+        "A canon reads like  2. seed 3: C5 B4 D5 C5 ... / cost 1.5  : its seed, then the melody's first notes. "
+        "A seed is a canon: the same settings and seed give the same canon. Canons = how many seeds to try, "
+        "from the seed up.",
+        "Every canon here passes the hard rules. cost: the soft rules, added up (lower is smoother). Taste (ours, "
+        "not Fux's) steers the melody toward steps, away from leaps, repeats and rocking between two notes.",
+        "None found: the status line names the rule that blocked it (or the budget). Try another interval, "
+        "delay or range. The octave a bar later can only move by leaps: a step would make a 7th or 9th.",
+        "The close: 6|8, a major sixth opening to the octave, or 3|1, a minor third closing to the unison "
+        "(Fux), with the leading note raised where the mode needs it (C sharp in D dorian).",
+    ]:
+        lines = -(-len(text) // 64)
+        present(p.note(text, gx, gen_bottom, 460, lines))
+        gen_bottom += 14 + 14 * lines + 8
+
     # The wiring, below; presentation mode hides it. Boxes flow left to right,
     # wrapping at the panel's width.
-    top = max(left, right) + 20
+    top = max(left, right, gen_bottom) + 20
     p.note(HAND_NOTE, 20, top, 760, 2)
     engine = p.obj("cg.finder", 20, top + 50, 1, 1)
     p.connect(run, 0, engine, 0)
@@ -1212,6 +1326,46 @@ def panel_finder():
         setter = flow("prepend setsymbol" if name == "profile" else "prepend set", 2, 1)
         p.connect(shows, i, setter, 0)
         p.connect(setter, 0, rows[name], 0)
+
+    # The generator: its own messages in, its replies back to its column; the
+    # finder's time slice box drives it too.
+    at["x"], at["y"] = 20, at["y"] + 60
+    generator = flow("cg.generate", 1, 1)
+    at["x"], at["y"] = 20, at["y"] + 40
+    p.connect(gen_run, 0, generator, 0)
+    p.connect(gen_stop, 0, generator, 0)
+    menus = {"mode", "profile", "cadence"}  # these send their item's text
+    for name, box in gen.items():
+        prepend = flow(f"prepend {name}", 2, 1)
+        p.connect(box, 1 if name in menus else 0, prepend, 0)
+        p.connect(prepend, 0, generator, 0)
+    slice_prepend = next(b["box"]["id"] for b in p.boxes if b["box"].get("text") == "prepend slicems")
+    p.connect(slice_prepend, 0, generator, 0)
+    gen_pick = flow("prepend pick", 2, 1)
+    p.connect(gen_results, 0, gen_pick, 0)
+    p.connect(gen_pick, 0, generator, 0)
+    at["x"], at["y"] = 20, at["y"] + 45
+    gen_route = flow("route results progress error show", 2, 5)
+    p.connect(generator, 0, gen_route, 0)
+    p.connect(gen_route, 0, gen_results, 0)
+    gen_progress = flow("prepend set", 2, 1)
+    p.connect(gen_route, 1, gen_progress, 0)
+    p.connect(gen_progress, 0, gen_line, 0)
+    gen_failed = flow("prepend set error:", 2, 1)
+    p.connect(gen_route, 2, gen_failed, 0)
+    p.connect(gen_failed, 0, gen_line, 0)
+    gen_report = flow("print generate", 1, 0)
+    p.connect(gen_route, 2, gen_report, 0)
+    p.connect(gen_route, 4, gen_report, 0)
+    shown = list(gen) + ["slicems"]
+    at["x"], at["y"] = 20, at["y"] + 40
+    gen_shows = flow("route " + " ".join(shown), 2, len(shown) + 1)
+    p.connect(gen_route, 3, gen_shows, 0)
+    at["x"], at["y"] = 20, at["y"] + 40
+    for i, name in enumerate(shown):
+        setter = flow("prepend setsymbol" if name in menus else "prepend set", 2, 1)
+        p.connect(gen_shows, i, setter, 0)
+        p.connect(setter, 0, rows["slicems"] if name == "slicems" else gen[name], 0)
     return p
 
 

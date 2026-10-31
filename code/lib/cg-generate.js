@@ -8,8 +8,9 @@
 // rules as soon as the notes it needs have pitches, and every finished canon
 // is analyzed whole.
 //
-//   search(options) is a generator: it yields { phase, nodes, depth, best } as it
-//   goes and returns the result, so a [v8] wrapper can run it in time slices.
+//   search(options) is a generator: it yields { phase, nodes, depth, best } after each
+//   note it tries (about a millisecond each) and returns the result, so a [v8]
+//   wrapper can run it in time slices.
 //   generate(options) runs it to the end.
 //   strict(settings) turns musical settings (a final, a length, followers at
 //   intervals and delays in bars) into options for a first-species canon (M4
@@ -146,7 +147,6 @@ function* search(input) {
   } else {
     // Depth-first with backtracking: a stack of each step's remaining candidates.
     const stack = [candidates(0)];
-    let sinceYield = 0;
     while (stack.length) {
       if (nodes >= options.budget) { complete = false; break; }
       const p = stack.length - 1;
@@ -163,10 +163,9 @@ function* search(input) {
         continue;
       }
       stack.push(candidates(p + 1));
-      if (++sinceYield >= 64) {
-        sinceYield = 0;
-        yield progress(p + 1);
-      }
+      // Each step tries every degree (about a millisecond), so it yields after
+      // each one: a [v8] time slice of a few ms is honoured.
+      yield progress(p + 1);
     }
   }
 
@@ -190,25 +189,30 @@ function* search(input) {
 const MAJOR = { type: "edo", divisions: 12, mode: [0, 2, 4, 5, 7, 9, 11], ref: { step: 0, midi: 60 } };
 
 // Taste (ours, after Schottstaedt's penalties; not one of Fux's rules, and not
-// part of the analysis): a soft cost that orders the search's candidates away
-// from a dux that rocks between two notes, toward steps, with few repeats.
+// part of the analysis): a soft cost that orders the search's candidates toward
+// a singable line. Leaps cost by their size (a third a little, a fourth or fifth
+// more, beyond that most), a repeat costs, a return to a note just left costs,
+// and rocking between two notes (a b a) costs most.
 function melodicTaste(dux) {
   let cost = 0;
-  let a;
-  let b;
+  const seen = [];
   for (const d of dux) {
     if (d === undefined) {
-      a = b = undefined;
+      seen.length = 0;
       continue;
     }
+    const b = seen[seen.length - 1];
+    const a = seen[seen.length - 2];
     if (b !== undefined) {
       const k = Math.abs(d - b);
-      if (k === 0) cost += 0.3;
-      else if (k > 2) cost += 0.2;
+      if (k === 0) cost += 0.4;
+      else if (k === 2) cost += 0.1;
+      else if (k === 3 || k === 4) cost += 0.4;
+      else if (k > 4) cost += 0.9;
     }
-    if (a !== undefined && d === a && d !== b) cost += 0.5;
-    a = b;
-    b = d;
+    if (a !== undefined && d === a && d !== b) cost += 1;
+    if (seen.slice(-4, -2).includes(d)) cost += 0.3;
+    seen.push(d);
   }
   return cost;
 }
