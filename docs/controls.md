@@ -33,7 +33,7 @@ comes from (PLAN.md §3.3).
 | Profile | For | Rules |
 |---|---|---|
 | `free` | anything; reports only | none |
-| `fux-strict` | first species, note against note (Fux pp. 27–33) | hard: dissonance, parallel-perfect, hidden-perfect, begin-perfect, end-perfect, mode-final, penultimate, repeat, melodic-augmented, melodic-leap. Soft: prefer-imperfect (0.5), parallel-imperfect-run (1, max 3), leap-compensation (0.5) |
+| `fux-strict` | first species, note against note (Fux pp. 27–33) | hard: dissonance, parallel-perfect, hidden-perfect, begin-perfect, end-perfect, mode-final, penultimate, repeat, melodic-augmented, melodic-leap, cadence-approach. Soft: prefer-imperfect (0.5), parallel-imperfect-run (1, max 3), leap-compensation (0.5) |
 | `florid` | florid canons as Albrechtsberger writes them | hard: dissonance-treatment, parallel-perfect. Soft: hidden-perfect (1), melodic-augmented (1), melodic-leap (0.5), repeat (0.25) |
 | `canon` | the answer finder's default | `florid`, plus soft entry-rest (0.5) and phrase-seventh (1) |
 | `spectral` | spectral and inharmonic work | soft: parallel-perfect (2), hidden-perfect (0.5), roughness-ceiling (1) |
@@ -64,6 +64,7 @@ comes from (PLAN.md §3.3).
 | `melodic-augmented` | An augmented, diminished or chromatic melodic interval. Ours, generalized: a k-step leap whose size occurs only once in the mode's k-step spectrum while another size occurs more. In the diatonic scale that's exactly the tritone. | Fux p. 27n |
 | `melodic-leap` | A leap larger than a fifth, except the octave and the ascending minor sixth. Measured in cents. | Fux p. 27n |
 | `leap-compensation` | A leap larger than a third that isn't turned back, or two leaps in a row in one direction. | Fux p. 27n |
+| `cadence-approach` | At a close the renderer added: the note that leads to the final by a semitone (C sharp up to D in dorian, B up to C in ionian, F down to E in phrygian) is reached **by step**; and where it was raised by ficta, its natural form (C for C sharp) doesn't sound in that voice in the two notes before it, or in any voice in the slice just before (a false relation). The close's notes carry their written degree, so steps count from the note as written: F to C sharp is an augmented fifth, not a sixth. | ours, after Fux's first-species closes (pp. 28–29) and musica ficta (M4 session 1) |
 | `entry-rest` | A voice coming back after a rest shorter than `beats` (1). "Let voices rest alternately, so that rests set up the entrances." | Mann pp. 216–217 |
 | `phrase-seventh` | A phrase (a run of notes between rests) starting a 7th or 9th from the end of the phrase before. Checked in heptatonic modes. | Mann p. 217 |
 | `roughness-ceiling` | The model's score above `ceiling` (0.6) in a slice, or above `windowCeiling` (0.4) on average over a window. | PLAN §3.3, the `spectral` profile |

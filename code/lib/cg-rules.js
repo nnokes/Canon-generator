@@ -73,6 +73,9 @@ function neighbours(byVoice, event) {
 }
 
 const steps = (system, a, b) => tuning.quantize(system, b).degree - tuning.quantize(system, a).degree;
+// A note's degree: as written, where the renderer says (a close's raised
+// leading note is still the degree it raises), else the nearest.
+const degreeOf = (system, e) => (e.degree !== undefined ? e.degree : tuning.quantize(system, e.pitch).degree);
 const isStep = (system, a, b) => a && b && Math.abs(steps(system, a.pitch, b.pitch)) === 1;
 // Two notes touch if one ends where the next starts (no rest between).
 const touches = (a, b) => a && b && time.eq(a.t + a.dur, b.t);
@@ -304,7 +307,7 @@ RULES["melodic-augmented"] = (c, params) => {
       if (!touches(line[i - 1], line[i])) continue;
       const cents = Math.abs(line[i].pitch - line[i - 1].pitch) * 100;
       if (cents < 1) continue;
-      const k = Math.abs(steps(c.system, line[i - 1].pitch, line[i].pitch)) % count;
+      const k = Math.abs(degreeOf(c.system, line[i]) - degreeOf(c.system, line[i - 1])) % count;
       const inPeriod = cents % period;
       const regular = k === 0 ? inPeriod < tolerance || period - inPeriod < tolerance
         : (spectrum.get(k) || []).some((size) => Math.abs(size - inPeriod) <= tolerance);
@@ -354,6 +357,40 @@ RULES["leap-compensation"] = (c) => {
       } else if (Math.abs(first) > 1 && Math.abs(second) > 1 && Math.sign(first) === Math.sign(second)) {
         out.push(violation("leap-compensation", s, [line[i].voice], "two leaps one way"));
       }
+    }
+  }
+  return out;
+};
+
+// Ours, after Fux's first-species closes (pp. 28-29) and musica ficta: the note
+// that leads to the final by a semitone (C sharp up to D in dorian, B up to C in
+// ionian, F down to E in phrygian) is reached by step, and, where it was raised,
+// its natural form (C for C sharp) doesn't sound
+// in that voice in the two notes before it, or in any voice in the slice just
+// before it (a false relation). At a close the renderer added (its notes are
+// marked coda). M4 session 1: generated dorian canons skipped into the C sharp.
+RULES["cadence-approach"] = (c) => {
+  const out = [];
+  for (const line of c.byVoice.values()) {
+    const i = line.findIndex((e) => e.coda);
+    if (i < 1 || i + 1 >= line.length) continue;
+    const lead = line[i];
+    const rise = (line[i + 1].pitch - lead.pitch) * 100;
+    if (!(Math.abs(rise) > 50 && Math.abs(rise) < 150)) continue; // not a leading note
+    const s = c.slices.find((x) => time.eq(x.t, lead.t));
+    const prev = line[i - 1];
+    if (touches(prev, lead) && Math.abs(degreeOf(c.system, lead) - degreeOf(c.system, prev)) !== 1) {
+      out.push(violation("cadence-approach", s, [lead.voice], "the leading note is reached by a skip"));
+    }
+    const natural = tuning.degreeToPitch(c.system, degreeOf(c.system, lead));
+    const same = (p) => folded((p - natural) * 100, c.period) < 15 || c.period - folded((p - natural) * 100, c.period) < 15;
+    if (same(lead.pitch)) continue; // not raised: no natural form to clash with
+    if (line.slice(Math.max(0, i - 2), i).some((e) => same(e.pitch))) {
+      out.push(violation("cadence-approach", s, [lead.voice], "its natural form just before (a chromatic clash)"));
+    }
+    const before = c.slices[c.slices.indexOf(s) - 1];
+    if (before && before.notes.some((n) => n.voice !== lead.voice && same(n.pitch))) {
+      out.push(violation("cadence-approach", s, [lead.voice], "its natural form in another voice just before (a false relation)"));
     }
   }
   return out;
@@ -426,6 +463,7 @@ const PROFILES = {
     "begin-perfect": H(), "end-perfect": H(), "mode-final": H(), penultimate: H(),
     repeat: H(), "melodic-augmented": H(), "melodic-leap": H(),
     "prefer-imperfect": S(0.5), "parallel-imperfect-run": S(1, { max: 3 }), "leap-compensation": S(0.5),
+    "cadence-approach": H(),
   },
   // Florid canons, as Albrechtsberger writes them (ours: species 2-4's dissonance
   // treatment, brought forward from M5 for the answer finder). Melodic faults

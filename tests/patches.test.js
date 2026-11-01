@@ -268,9 +268,14 @@ test("the finder panel's GENERATE column: each setting wired both ways to cg.gen
   assert.ok(menu.presentation, "the canons fill a menu you can see");
   assert.ok(from(menu).some((b) => b.text === "prepend pick" && from(b).includes(generator)), "a click picks");
   const shown = [...boxes.values()].filter((b) => b.presentation && b.maxclass === "comment").map((b) => b.text).join("\n");
-  for (const words of ["Generate: new canons", "A seed is a canon", "None found", "Taste (ours", "6|8"]) {
-    assert.ok(shown.includes(words), `the column explains ${words}`);
+  for (const words of ["Generate: new melodies, written as canons", "A seed is a canon", "None found", "Taste (ours",
+    "6|8", "doesn't read the canon panel's melody", "Answer finder: canons hidden in the canon panel's melody"]) {
+    assert.ok(shown.includes(words), `the panel explains ${words}`);
   }
+  // Two tools in one window, with a line between them.
+  const divider = [...boxes.values()].find((b) => b.maxclass === "panel");
+  assert.ok(divider && divider.presentation, "a divider in the presentation");
+  assert.ok(divider.presentation_rect[0] > 780 && divider.presentation_rect[0] < 840, "between the columns");
 });
 
 test("cg.canon sends the playing note's index to [s cg.playhead], and -1 on stop, for the piano roll", () => {

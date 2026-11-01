@@ -304,10 +304,14 @@ function coda(plan, events, at) {
   const lengths = shape.lengths.map((k) => k * dur);
   const starts = lengths.map((_, i) => lengths.slice(0, i).reduce((a, b) => a + b, 0));
   const total = lengths.reduce((a, b) => a + b, 0);
+  // A close's notes carry their written degree (with the voice's register), so
+  // the rules count steps from the note as written: a raised C (C sharp, by
+  // ficta) is still a C.
+  const written = (cv, d) => d + cv.register * tuning.size(cv.system);
   const line = (cv, degrees) => degrees.map((d, i) => ({
     t: at + starts[i], dur: lengths[i],
     pitch: tuning.degreeToPitch(cv.system, d) + 12 * cv.register,
-    vel: cv.vel, voice: cv.index, index: -1, pass: 0, coda: true,
+    vel: cv.vel, voice: cv.index, index: -1, pass: 0, coda: true, degree: written(cv, d),
   }));
   for (const { cv } of parts) {
     check(cv.system.period_cents !== null, `${cv.system.name}: a free cadence needs a repeating scale system`);
@@ -345,7 +349,7 @@ function coda(plan, events, at) {
     }
     out.push({
       t: at, dur: total, pitch: tuning.degreeToPitch(cv.system, best) + 12 * cv.register,
-      vel: cv.vel, voice: cv.index, index: -1, pass: 0, coda: true,
+      vel: cv.vel, voice: cv.index, index: -1, pass: 0, coda: true, degree: written(cv, best),
     });
   }
   return out;

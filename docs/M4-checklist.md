@@ -223,6 +223,28 @@ exists.
 - [ ] **Recheck the time-slice budget** with a 32-note canon (session 1, below).
 
 ## Max session 1: hear the generated canons
+**First round (2026-11-01):**
+- **Dorian closes skipped into the C sharp.** Of eight D-dorian canons, one reached the
+  raised leading note by step: the others came by a skip (E to C sharp, A to C sharp), an
+  augmented-fifth outline (F A C sharp), a tritone outline (G B C sharp), or with the C
+  natural just before (C B C sharp).
+  - **Why:** the close is a formula after the dux, judged by the general rules only, and
+    the augmented-interval rule counted steps from the nearest degree: C sharp sits between
+    C and D, so F to C sharp read as a sixth.
+  - **Fixed:** the close's notes carry their written degree, so F to C sharp is an
+    augmented fifth; and a new hard rule in `fux-strict`, `cadence-approach`: the note
+    leading to the final by a semitone is reached by step, without its natural form just
+    before in that voice or (a false relation) in another. Now every dorian, mixolydian and
+    aeolian close comes by step (B or D to C sharp; E or G to F sharp; A to G sharp), and
+    phrygian's F falls to E by step; about 1,000 candidates for four canons.
+- **Answer finder vs Generate wasn't clear.** They're two tools in one window: the titles
+  now say what each works on ("canons hidden in the canon panel's melody"; "new melodies,
+  written as canons"), with a line between them, and Generate's notes say it doesn't read
+  your melody, and that a click replaces what the canon panel plays (your .mid stays
+  loaded).
+
+**Second round:** discard the finder panel again (`git checkout --
+patchers/cg.panel.finder.maxpat`), then `git pull`.
 **First:** the finder panel was remade (it's wider now, with GENERATE on the right), so
 discard your copy: in the repo folder run `git checkout -- patchers/cg.panel.finder.maxpat`,
 then `git pull`.
@@ -250,5 +272,5 @@ then `git pull`.
 | `fux-relaxed` (Part D) | | |
 | rounds by the block method (Part E) | | |
 | edits toggle golden test (Part F) | | |
-| generated canons in Max (Part G) | | To be heard: session 1 |
+| generated canons in Max (Part G) | First round: dorian closes skipped into the C sharp | `cadence-approach` (hard), written degrees in the close; second round to hear |
 | 32-note canon in Max within the slice budget (Part G) | | |

@@ -1074,10 +1074,15 @@ def panel_finder():
     p = Patch(rect=(60, 60, 1340, 860), presentation=True)
     present = p.present
 
-    present(p.comment("Answer finder: the canons hidden in a melody", 20, 10, fontsize=16.0, fontface=1, w=420))
-    present(p.note("Open the canon panel too: the finder searches the melody it plays (a preset's, or your .mid), "
-                   "and plays there the result you click. How to read the results: at the bottom.",
+    present(p.comment("Answer finder: canons hidden in the canon panel's melody", 20, 10, fontsize=16.0, fontface=1,
+                      w=600))
+    present(p.note("Searches the melody the canon panel plays (a preset's, or your .mid) for the canons hidden in "
+                   "it, and plays there the result you click. How to read the results: at the bottom.",
                    20, 40, 760, 2))
+    # Two tools in one window (M4 session 1: their relation wasn't clear): a line between them.
+    divider = p.ui("panel", 830, 10, 2, 780, 1, 0, [], bgcolor=[0.6, 0.6, 0.6, 1.0],
+                   bgfillcolor_type="color", bgfillcolor_color=[0.6, 0.6, 0.6, 1.0], border=0)
+    present(divider)
 
     rows = {}  # setting -> its control
 
@@ -1209,9 +1214,9 @@ def panel_finder():
         gen[name] = box
         return box
 
-    present(p.comment("Generate: new canons from the rules", gx, 10, fontsize=16.0, fontface=1, w=420))
-    present(p.note("First species (one note per bar) under Fux's strict rules. Click a canon to hear it in the "
-                   "canon panel and see it in its piano roll.", gx, 40, 460, 2))
+    present(p.comment("Generate: new melodies, written as canons", gx, 10, fontsize=16.0, fontface=1, w=460))
+    present(p.note("Writes a new melody and its canon (Fux, first species). It doesn't read the canon panel's "
+                   "melody: a click plays the canon there.", gx, 40, 460, 2))
     present(p.comment("Mode", gx, 95))
     gen_menu("mode", gx + 150, 95, 110, ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "panel"])
     hint("panel = the canon panel's tuning", gx + 270, 95)
@@ -1256,10 +1261,12 @@ def panel_finder():
         "from the seed up.",
         "Every canon here passes the hard rules. cost: the soft rules, added up (lower is smoother). Taste (ours, "
         "not Fux's) steers the melody toward steps, away from leaps, repeats and rocking between two notes.",
+        "A click replaces what the canon panel plays; your .mid stays loaded (presetmelody or a preset brings "
+        "it back). The finder, on the left, searches that melody, not these.",
         "None found: the status line names the rule that blocked it (or the budget). Try another interval, "
         "delay or range. The octave a bar later can only move by leaps: a step would make a 7th or 9th.",
         "The close: 6|8, a major sixth opening to the octave, or 3|1, a minor third closing to the unison "
-        "(Fux), with the leading note raised where the mode needs it (C sharp in D dorian).",
+        "(Fux), with the leading note raised where the mode needs it (C sharp in D dorian) and reached by step.",
     ]:
         lines = -(-len(text) // 64)
         present(p.note(text, gx, gen_bottom, 460, lines))

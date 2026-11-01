@@ -154,3 +154,28 @@ test("strict settings: the defaults, and a canon in another mode keeps its final
   });
   assert.equal(again.hard, 0);
 });
+
+test("the generator's closes: the leading note by step, never with its natural form just before (M4 session 1)", () => {
+  const MODES = { dorian: [[0, 2, 3, 5, 7, 9, 10], 62], mixolydian: [[0, 2, 4, 5, 7, 9, 10], 55], aeolian: [[0, 2, 3, 5, 7, 8, 10], 57] };
+  for (const [name, [mode, midi]] of Object.entries(MODES)) {
+    for (const interval of [4, 7, -3]) {
+      for (const seed of [1, 2, 3]) {
+        const system = { type: "edo", divisions: 12, mode, ref: { step: 0, midi } };
+        const result = generator.generate(generator.strict({ system, length: 10, followers: [{ interval, delay: 1 }], seed }));
+        assert.equal(result.found, true, `${name} ${interval} seed ${seed}`);
+        const events = canon.render(result.spec).events;
+        const voices = [...new Set(events.map((e) => e.voice))].map((v) => events.filter((e) => e.voice === v).sort((a, b) => a.t - b.t));
+        const lead = voices.find((l) => {
+          const i = l.findIndex((e) => e.coda);
+          return Math.abs(l[i + 1].pitch - l[i].pitch - 1) < 0.01;
+        });
+        const i = lead.findIndex((e) => e.coda);
+        const raised = lead[i].pitch;
+        assert.equal(Math.abs(lead[i].pitch - lead[i - 1].pitch) <= 2, true, `${name} ${interval} seed ${seed}: by step`);
+        const natural = (p) => Math.abs(((p - (raised - 1)) % 12 + 12) % 12) < 0.01;
+        assert.ok(!lead.slice(i - 2, i).some((e) => natural(e.pitch)), `${name} ${interval} seed ${seed}: no chromatic clash`);
+        assert.equal(result.report.hard, 0);
+      }
+    }
+  }
+});

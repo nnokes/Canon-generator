@@ -217,3 +217,59 @@ test("Fux Figs. 7-8 (pp. 32-33): the hidden fifths that diminution reveals", () 
     }
   }
 });
+
+// ---------------------------------------------------------------- M4: the approach to the leading note
+
+// A two-voice first-species close in D dorian (degree 0 = D4): the upper voice's
+// last notes, then C sharp (C raised, by ficta) to D; the lower voice E to D.
+// Close notes carry coda and their written degree, as the renderer marks them.
+const D_DORIAN = scales.fromSpec({ type: "edo", divisions: 12, mode: [0, 2, 3, 5, 7, 9, 10], ref: { step: 0, midi: 62 } });
+function close(upper, lower, { lead = [73, 6], final = [74, 7], low = [[64, 1], [62, 0]] } = {}) {
+  const out = [];
+  const add = (voice, pitches) => pitches.forEach((p, i) => out.push({ t: 4 * i, dur: 4, pitch: p, voice }));
+  add(0, lower);
+  add(1, upper);
+  const at = 4 * upper.length;
+  out.push({ t: at, dur: 4, pitch: low[0][0], voice: 0, coda: true, degree: low[0][1] });
+  out.push({ t: at + 4, dur: 8, pitch: low[1][0], voice: 0, coda: true, degree: low[1][1] });
+  out.push({ t: at, dur: 4, pitch: lead[0], voice: 1, coda: true, degree: lead[1] });
+  out.push({ t: at + 4, dur: 8, pitch: final[0], voice: 1, coda: true, degree: final[1] });
+  return analyze.analyze({ events: out }, {
+    system: D_DORIAN, meter: { beats: 4, strong: [0] }, profile: { base: "fux-strict", only: ["cadence-approach", "melodic-augmented"] },
+  }).violations.map((v) => `${v.rule}: ${v.detail}`);
+}
+
+test("cadence-approach: the raised leading note by step, and no natural form just before it", () => {
+  // By step: from D or from B. Clean.
+  assert.deepEqual(close([77, 74], [65, 62]), [], "F5 D5 C#5 D5");
+  assert.deepEqual(close([74, 71], [62, 67]), [], "D5 B4 C#5 D5");
+  // By a skip: from E (a third) or from A.
+  assert.deepEqual(close([77, 76], [65, 67]), ["cadence-approach: the leading note is reached by a skip"], "E5 C#5");
+  assert.deepEqual(close([77, 69], [65, 65]), ["cadence-approach: the leading note is reached by a skip"], "A4 C#5");
+  // From F: a skip, and an augmented fifth counted from the written C.
+  assert.deepEqual(close([74, 65], [62, 62]).sort(), [
+    "cadence-approach: the leading note is reached by a skip", "melodic-augmented: 800 cents over 4 steps"]);
+  // C natural two notes before, in the same voice: a chromatic clash.
+  assert.deepEqual(close([72, 71], [65, 67]), ["cadence-approach: its natural form just before (a chromatic clash)"]);
+  // C natural in the other voice just before: a false relation.
+  assert.deepEqual(close([77, 74], [65, 60]), ["cadence-approach: its natural form in another voice just before (a false relation)"]);
+});
+
+test("cadence-approach: an unraised leading note (ionian B) by step; phrygian's F falling to E", () => {
+  const ionian = scales.fromSpec({ type: "edo", divisions: 12, mode: [0, 2, 4, 5, 7, 9, 11], ref: { step: 0, midi: 60 } });
+  const judge = (system, events_) => analyze.analyze({ events: events_ }, {
+    system, meter: { beats: 4, strong: [0] }, profile: { base: "fux-strict", only: ["cadence-approach"] },
+  }).violations.map((v) => v.detail);
+  const make = (prev, lead, fin) => [
+    { t: 0, dur: 4, pitch: prev, voice: 1 },
+    { t: 4, dur: 4, pitch: lead[0], voice: 1, coda: true, degree: lead[1] },
+    { t: 8, dur: 8, pitch: fin[0], voice: 1, coda: true, degree: fin[1] },
+    { t: 0, dur: 4, pitch: 50, voice: 0 }, { t: 4, dur: 4, pitch: 50, voice: 0, coda: true, degree: -6 },
+    { t: 8, dur: 8, pitch: 48, voice: 0, coda: true, degree: -7 },
+  ];
+  assert.deepEqual(judge(ionian, make(72, [71, 6], [72, 7])), [], "C5 B4 C5: by step, not raised");
+  assert.deepEqual(judge(ionian, make(67, [71, 6], [72, 7])), ["the leading note is reached by a skip"], "G4 B4 C5");
+  const phrygian = scales.fromSpec({ type: "edo", divisions: 12, mode: [0, 1, 3, 5, 7, 8, 10], ref: { step: 0, midi: 64 } });
+  assert.deepEqual(judge(phrygian, make(67, [65, 1], [64, 0])), [], "G4 F4 E4: by step");
+  assert.deepEqual(judge(phrygian, make(72, [65, 1], [64, 0])), ["the leading note is reached by a skip"], "C5 F4 E4");
+});
