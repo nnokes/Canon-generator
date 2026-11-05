@@ -11,9 +11,9 @@
 		"classnamespace": "box",
 		"rect": [
 			60.0,
-			60.0,
-			1340.0,
-			860.0
+			40.0,
+			1360.0,
+			1081.0
 		],
 		"openinpresentation": 1,
 		"default_fontsize": 12.0,
@@ -100,7 +100,7 @@
 						830.0,
 						10.0,
 						2.0,
-						780.0
+						1041.0
 					],
 					"id": "obj-3",
 					"presentation": 1,
@@ -108,7 +108,7 @@
 						830.0,
 						10.0,
 						2.0,
-						780.0
+						1041.0
 					]
 				}
 			},
@@ -121,7 +121,7 @@
 					"patching_rect": [
 						20.0,
 						95.0,
-						49.0,
+						55.0,
 						20.0
 					],
 					"id": "obj-4",
@@ -129,7 +129,7 @@
 					"presentation_rect": [
 						20.0,
 						95.0,
-						49.0,
+						55.0,
 						20.0
 					]
 				}
@@ -164,13 +164,13 @@
 			{
 				"box": {
 					"maxclass": "comment",
-					"text": "2 = the melody and one follower. 3 or more = sets of followers that fit together.",
+					"text": "2 = the melody and one follower; 3+ = sets that fit together",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
 						280.0,
 						95.0,
-						536.5,
+						460.0,
 						20.0
 					],
 					"id": "obj-6",
@@ -178,7 +178,7 @@
 					"presentation_rect": [
 						280.0,
 						95.0,
-						536.5,
+						460.0,
 						20.0
 					]
 				}
@@ -192,7 +192,7 @@
 					"patching_rect": [
 						20.0,
 						130.0,
-						172.5,
+						197.5,
 						20.0
 					],
 					"id": "obj-7",
@@ -200,7 +200,7 @@
 					"presentation_rect": [
 						20.0,
 						130.0,
-						172.5,
+						197.5,
 						20.0
 					]
 				}
@@ -280,13 +280,13 @@
 			{
 				"box": {
 					"maxclass": "comment",
-					"text": "0 = unison, 7 = an octave up, -2 = a third down (in a 7-note scale)",
+					"text": "0 unison, 7 octave up, -2 third down (7-note scale)",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
 						368.0,
 						130.0,
-						445.5,
+						392.5,
 						20.0
 					],
 					"id": "obj-11",
@@ -294,7 +294,7 @@
 					"presentation_rect": [
 						368.0,
 						130.0,
-						445.5,
+						392.5,
 						20.0
 					]
 				}
@@ -308,7 +308,7 @@
 					"patching_rect": [
 						20.0,
 						165.0,
-						153.0,
+						175.0,
 						20.0
 					],
 					"id": "obj-12",
@@ -316,7 +316,7 @@
 					"presentation_rect": [
 						20.0,
 						165.0,
-						153.0,
+						175.0,
 						20.0
 					]
 				}
@@ -404,17 +404,17 @@
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
-						365.0,
+						363.0,
 						165.0,
-						42.5,
+						47.5,
 						20.0
 					],
 					"id": "obj-16",
 					"presentation": 1,
 					"presentation_rect": [
-						365.0,
+						363.0,
 						165.0,
-						42.5,
+						47.5,
 						20.0
 					]
 				}
@@ -449,13 +449,13 @@
 			{
 				"box": {
 					"maxclass": "comment",
-					"text": "0 = with the melody. every = the step between tries",
+					"text": "0 = with the melody; every = the step",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
 						470.0,
 						165.0,
-						341.5,
+						287.5,
 						20.0
 					],
 					"id": "obj-18",
@@ -463,7 +463,7 @@
 					"presentation_rect": [
 						470.0,
 						165.0,
-						341.5,
+						287.5,
 						20.0
 					]
 				}
@@ -477,7 +477,7 @@
 					"patching_rect": [
 						20.0,
 						200.0,
-						42.5,
+						47.5,
 						20.0
 					],
 					"id": "obj-19",
@@ -485,7 +485,7 @@
 					"presentation_rect": [
 						20.0,
 						200.0,
-						42.5,
+						47.5,
 						20.0
 					]
 				}
@@ -530,13 +530,13 @@
 			{
 				"box": {
 					"maxclass": "comment",
-					"text": "Perpetual canon (it loops)",
+					"text": "Perpetual (it loops)",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
 						370.0,
 						200.0,
-						179.0,
+						160.0,
 						20.0
 					],
 					"id": "obj-21",
@@ -544,7 +544,7 @@
 					"presentation_rect": [
 						370.0,
 						200.0,
-						179.0,
+						160.0,
 						20.0
 					]
 				}
@@ -582,7 +582,7 @@
 					"patching_rect": [
 						20.0,
 						235.0,
-						75.0,
+						85.0,
 						20.0
 					],
 					"id": "obj-23",
@@ -590,7 +590,7 @@
 					"presentation_rect": [
 						20.0,
 						235.0,
-						75.0,
+						85.0,
 						20.0
 					]
 				}
@@ -786,17 +786,17 @@
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
-						480.0,
+						470.0,
 						235.0,
-						81.5,
+						92.5,
 						20.0
 					],
 					"id": "obj-32",
 					"presentation": 1,
 					"presentation_rect": [
-						480.0,
+						470.0,
 						235.0,
-						81.5,
+						92.5,
 						20.0
 					]
 				}
@@ -834,7 +834,7 @@
 					"patching_rect": [
 						590.0,
 						235.0,
-						36.0,
+						40.0,
 						20.0
 					],
 					"id": "obj-34",
@@ -842,7 +842,7 @@
 					"presentation_rect": [
 						590.0,
 						235.0,
-						36.0,
+						40.0,
 						20.0
 					]
 				}
@@ -948,7 +948,7 @@
 					"patching_rect": [
 						20.0,
 						270.0,
-						101.0,
+						115.0,
 						20.0
 					],
 					"id": "obj-39",
@@ -956,7 +956,7 @@
 					"presentation_rect": [
 						20.0,
 						270.0,
-						101.0,
+						115.0,
 						20.0
 					]
 				}
@@ -997,7 +997,7 @@
 					"patching_rect": [
 						280.0,
 						270.0,
-						237.5,
+						272.5,
 						20.0
 					],
 					"id": "obj-41",
@@ -1005,7 +1005,7 @@
 					"presentation_rect": [
 						280.0,
 						270.0,
-						237.5,
+						272.5,
 						20.0
 					]
 				}
@@ -1063,13 +1063,13 @@
 			{
 				"box": {
 					"maxclass": "comment",
-					"text": "abandons the search",
+					"text": "stops the search",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
 						655.0,
 						270.0,
-						133.5,
+						130.0,
 						20.0
 					],
 					"id": "obj-44",
@@ -1077,7 +1077,7 @@
 					"presentation_rect": [
 						655.0,
 						270.0,
-						133.5,
+						130.0,
 						20.0
 					]
 				}
@@ -1091,7 +1091,7 @@
 					"patching_rect": [
 						20.0,
 						310.0,
-						322.0,
+						370.0,
 						20.0
 					],
 					"id": "obj-45",
@@ -1099,7 +1099,7 @@
 					"presentation_rect": [
 						20.0,
 						310.0,
-						322.0,
+						370.0,
 						20.0
 					]
 				}
@@ -1139,7 +1139,7 @@
 					"patching_rect": [
 						20.0,
 						370.0,
-						49.0,
+						55.0,
 						20.0
 					],
 					"id": "obj-47",
@@ -1147,7 +1147,7 @@
 					"presentation_rect": [
 						20.0,
 						370.0,
-						49.0,
+						55.0,
 						20.0
 					]
 				}
@@ -1187,7 +1187,7 @@
 					"patching_rect": [
 						20.0,
 						410.0,
-						101.0,
+						115.0,
 						20.0
 					],
 					"id": "obj-49",
@@ -1195,7 +1195,7 @@
 					"presentation_rect": [
 						20.0,
 						410.0,
-						101.0,
+						115.0,
 						20.0
 					]
 				}
@@ -1206,20 +1206,20 @@
 					"text": "A result reads like  3. lower 3rd / after 4: 1 fault / cost 1  (from the round). The 3. is its rank: fewest faults first, then the lowest cost. lower 3rd / after 4 is the follower: a 3rd below the melody, coming in 4 beats after it. With 3 or more voices, + joins the followers.",
 					"numinlets": 1,
 					"numoutlets": 0,
-					"linecount": 6,
+					"linecount": 5,
 					"patching_rect": [
 						20.0,
 						435.0,
-						370.0,
-						98.0
+						760.0,
+						84.0
 					],
 					"id": "obj-50",
 					"presentation": 1,
 					"presentation_rect": [
 						20.0,
 						435.0,
-						370.0,
-						98.0
+						760.0,
+						84.0
 					]
 				}
 			},
@@ -1232,16 +1232,16 @@
 					"linecount": 3,
 					"patching_rect": [
 						20.0,
-						541.0,
-						370.0,
+						525.0,
+						760.0,
 						56.0
 					],
 					"id": "obj-51",
 					"presentation": 1,
 					"presentation_rect": [
 						20.0,
-						541.0,
-						370.0,
+						525.0,
+						760.0,
 						56.0
 					]
 				}
@@ -1252,20 +1252,20 @@
 					"text": "cost: the soft rules, added up. Each break adds its weight: a hidden fifth or octave 1, a leap beyond a fifth 0.5, a voice coming back after less than a beat of rest 0.5. Lower is smoother; no cost shown = 0. Every rule and weight: docs/controls.md",
 					"numinlets": 1,
 					"numoutlets": 0,
-					"linecount": 5,
+					"linecount": 4,
 					"patching_rect": [
 						20.0,
-						605.0,
-						370.0,
-						84.0
+						587.0,
+						760.0,
+						70.0
 					],
 					"id": "obj-52",
 					"presentation": 1,
 					"presentation_rect": [
 						20.0,
-						605.0,
-						370.0,
-						84.0
+						587.0,
+						760.0,
+						70.0
 					]
 				}
 			},
@@ -1275,20 +1275,20 @@
 					"text": "Transforms: P = the melody as is, I = upside down, R = backwards, RI = both. Time scales: x2 = the follower at half speed (augmentation, as in a prolation canon), x0.5 = twice as fast. Each tick multiplies the search. In a result, I, R, RI or x2 marks a follower's transform or speed.",
 					"numinlets": 1,
 					"numoutlets": 0,
-					"linecount": 6,
+					"linecount": 5,
 					"patching_rect": [
 						20.0,
-						697.0,
-						370.0,
-						98.0
+						663.0,
+						760.0,
+						84.0
 					],
 					"id": "obj-53",
 					"presentation": 1,
 					"presentation_rect": [
 						20.0,
-						697.0,
-						370.0,
-						98.0
+						663.0,
+						760.0,
+						84.0
 					]
 				}
 			},
@@ -1298,20 +1298,20 @@
 					"text": "Status: done: 3 clean of 152 = 152 followers tried, 3 without faults. With 3 or more voices the finder tries each follower against the melody alone (pass alone), pairs the ones that pass (fit together), makes sets only of pairs that fit, and judges each set whole. stopped at the budget (in the Max window) = 20000 canons tried: narrow the ranges. No sets: the line says why.",
 					"numinlets": 1,
 					"numoutlets": 0,
-					"linecount": 8,
+					"linecount": 6,
 					"patching_rect": [
-						410.0,
-						435.0,
-						370.0,
-						126.0
+						20.0,
+						753.0,
+						760.0,
+						98.0
 					],
 					"id": "obj-54",
 					"presentation": 1,
 					"presentation_rect": [
-						410.0,
-						435.0,
-						370.0,
-						126.0
+						20.0,
+						753.0,
+						760.0,
+						98.0
 					]
 				}
 			},
@@ -1321,20 +1321,20 @@
 					"text": "Rules: canon = Albrechtsberger's florid canon rules (the default). florid = the same without the two canon rules (a beat's rest before a voice comes back; no phrase starting a 7th or 9th from the last). fux-strict = note against note: strict, few results. spectral = no hard rules; the cost comes from roughness and parallels. free = no rules: everything is clean. Perpetual: every voice loops, so where the melody wraps around is judged too.",
 					"numinlets": 1,
 					"numoutlets": 0,
-					"linecount": 9,
+					"linecount": 7,
 					"patching_rect": [
-						410.0,
-						569.0,
-						370.0,
-						140.0
+						20.0,
+						857.0,
+						760.0,
+						112.0
 					],
 					"id": "obj-55",
 					"presentation": 1,
 					"presentation_rect": [
-						410.0,
-						569.0,
-						370.0,
-						140.0
+						20.0,
+						857.0,
+						760.0,
+						112.0
 					]
 				}
 			},
@@ -1346,17 +1346,17 @@
 					"numoutlets": 0,
 					"linecount": 4,
 					"patching_rect": [
-						410.0,
-						717.0,
-						370.0,
+						20.0,
+						975.0,
+						760.0,
 						70.0
 					],
 					"id": "obj-56",
 					"presentation": 1,
 					"presentation_rect": [
-						410.0,
-						717.0,
-						370.0,
+						20.0,
+						975.0,
+						760.0,
 						70.0
 					]
 				}
@@ -1417,7 +1417,7 @@
 					"patching_rect": [
 						840.0,
 						95.0,
-						36.0,
+						40.0,
 						20.0
 					],
 					"id": "obj-59",
@@ -1425,7 +1425,7 @@
 					"presentation_rect": [
 						840.0,
 						95.0,
-						36.0,
+						40.0,
 						20.0
 					]
 				}
@@ -1456,7 +1456,7 @@
 						"panel"
 					],
 					"patching_rect": [
-						990.0,
+						1000.0,
 						95.0,
 						110.0,
 						22.0
@@ -1464,7 +1464,7 @@
 					"id": "obj-60",
 					"presentation": 1,
 					"presentation_rect": [
-						990.0,
+						1000.0,
 						95.0,
 						110.0,
 						22.0
@@ -1474,21 +1474,21 @@
 			{
 				"box": {
 					"maxclass": "comment",
-					"text": "panel = the canon panel's tuning",
+					"text": "panel = canon panel's tuning",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
-						1110.0,
+						1118.0,
 						95.0,
-						218.0,
+						220.0,
 						20.0
 					],
 					"id": "obj-61",
 					"presentation": 1,
 					"presentation_rect": [
-						1110.0,
+						1118.0,
 						95.0,
-						218.0,
+						220.0,
 						20.0
 					]
 				}
@@ -1502,7 +1502,7 @@
 					"patching_rect": [
 						840.0,
 						130.0,
-						133.5,
+						152.5,
 						20.0
 					],
 					"id": "obj-62",
@@ -1510,7 +1510,7 @@
 					"presentation_rect": [
 						840.0,
 						130.0,
-						133.5,
+						152.5,
 						20.0
 					]
 				}
@@ -1527,7 +1527,7 @@
 					"minimum": 2,
 					"maximum": 64,
 					"patching_rect": [
-						990.0,
+						1000.0,
 						130.0,
 						50.0,
 						22.0
@@ -1535,7 +1535,7 @@
 					"id": "obj-63",
 					"presentation": 1,
 					"presentation_rect": [
-						990.0,
+						1000.0,
 						130.0,
 						50.0,
 						22.0
@@ -1549,17 +1549,17 @@
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
-						1045.0,
+						1055.0,
 						130.0,
-						81.5,
+						92.5,
 						20.0
 					],
 					"id": "obj-64",
 					"presentation": 1,
 					"presentation_rect": [
-						1045.0,
+						1055.0,
 						130.0,
-						81.5,
+						92.5,
 						20.0
 					]
 				}
@@ -1573,7 +1573,7 @@
 					"patching_rect": [
 						840.0,
 						165.0,
-						133.5,
+						152.5,
 						20.0
 					],
 					"id": "obj-65",
@@ -1581,7 +1581,7 @@
 					"presentation_rect": [
 						840.0,
 						165.0,
-						133.5,
+						152.5,
 						20.0
 					]
 				}
@@ -1598,7 +1598,7 @@
 					"minimum": 0,
 					"maximum": 14,
 					"patching_rect": [
-						990.0,
+						1000.0,
 						165.0,
 						50.0,
 						22.0
@@ -1606,7 +1606,7 @@
 					"id": "obj-66",
 					"presentation": 1,
 					"presentation_rect": [
-						990.0,
+						1000.0,
 						165.0,
 						50.0,
 						22.0
@@ -1620,7 +1620,7 @@
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
-						1045.0,
+						1055.0,
 						165.0,
 						30.0,
 						20.0
@@ -1628,7 +1628,7 @@
 					"id": "obj-67",
 					"presentation": 1,
 					"presentation_rect": [
-						1045.0,
+						1055.0,
 						165.0,
 						30.0,
 						20.0
@@ -1647,7 +1647,7 @@
 					"minimum": 0,
 					"maximum": 21,
 					"patching_rect": [
-						1080.0,
+						1090.0,
 						165.0,
 						50.0,
 						22.0
@@ -1655,7 +1655,7 @@
 					"id": "obj-68",
 					"presentation": 1,
 					"presentation_rect": [
-						1080.0,
+						1090.0,
 						165.0,
 						50.0,
 						22.0
@@ -1665,21 +1665,21 @@
 			{
 				"box": {
 					"maxclass": "comment",
-					"text": "scale steps from the final",
+					"text": "steps from the final",
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
-						1135.0,
+						1145.0,
 						165.0,
-						179.0,
+						160.0,
 						20.0
 					],
 					"id": "obj-69",
 					"presentation": 1,
 					"presentation_rect": [
-						1135.0,
+						1145.0,
 						165.0,
-						179.0,
+						160.0,
 						20.0
 					]
 				}
@@ -1693,7 +1693,7 @@
 					"patching_rect": [
 						840.0,
 						200.0,
-						62.0,
+						70.0,
 						20.0
 					],
 					"id": "obj-70",
@@ -1701,7 +1701,7 @@
 					"presentation_rect": [
 						840.0,
 						200.0,
-						62.0,
+						70.0,
 						20.0
 					]
 				}
@@ -1718,7 +1718,7 @@
 					"minimum": -21,
 					"maximum": 21,
 					"patching_rect": [
-						990.0,
+						1000.0,
 						200.0,
 						50.0,
 						22.0
@@ -1726,7 +1726,7 @@
 					"id": "obj-71",
 					"presentation": 1,
 					"presentation_rect": [
-						990.0,
+						1000.0,
 						200.0,
 						50.0,
 						22.0
@@ -1740,17 +1740,17 @@
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
-						1045.0,
+						1055.0,
 						200.0,
-						88.0,
+						100.0,
 						20.0
 					],
 					"id": "obj-72",
 					"presentation": 1,
 					"presentation_rect": [
-						1045.0,
+						1055.0,
 						200.0,
-						88.0,
+						100.0,
 						20.0
 					]
 				}
@@ -1767,7 +1767,7 @@
 					"minimum": 0,
 					"maximum": 16,
 					"patching_rect": [
-						1140.0,
+						1160.0,
 						200.0,
 						50.0,
 						22.0
@@ -1775,7 +1775,7 @@
 					"id": "obj-73",
 					"presentation": 1,
 					"presentation_rect": [
-						1140.0,
+						1160.0,
 						200.0,
 						50.0,
 						22.0
@@ -1789,17 +1789,17 @@
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
-						1195.0,
+						1215.0,
 						200.0,
-						36.0,
+						40.0,
 						20.0
 					],
 					"id": "obj-74",
 					"presentation": 1,
 					"presentation_rect": [
-						1195.0,
+						1215.0,
 						200.0,
-						36.0,
+						40.0,
 						20.0
 					]
 				}
@@ -1813,7 +1813,7 @@
 					"patching_rect": [
 						840.0,
 						235.0,
-						42.5,
+						47.5,
 						20.0
 					],
 					"id": "obj-75",
@@ -1821,7 +1821,7 @@
 					"presentation_rect": [
 						840.0,
 						235.0,
-						42.5,
+						47.5,
 						20.0
 					]
 				}
@@ -1848,7 +1848,7 @@
 						"free"
 					],
 					"patching_rect": [
-						990.0,
+						1000.0,
 						235.0,
 						110.0,
 						22.0
@@ -1856,7 +1856,7 @@
 					"id": "obj-76",
 					"presentation": 1,
 					"presentation_rect": [
-						990.0,
+						1000.0,
 						235.0,
 						110.0,
 						22.0
@@ -1870,17 +1870,17 @@
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
-						1110.0,
+						1120.0,
 						235.0,
-						42.5,
+						47.5,
 						20.0
 					],
 					"id": "obj-77",
 					"presentation": 1,
 					"presentation_rect": [
-						1110.0,
+						1120.0,
 						235.0,
-						42.5,
+						47.5,
 						20.0
 					]
 				}
@@ -1901,7 +1901,7 @@
 						"3|1"
 					],
 					"patching_rect": [
-						1155.0,
+						1170.0,
 						235.0,
 						60.0,
 						22.0
@@ -1909,7 +1909,7 @@
 					"id": "obj-78",
 					"presentation": 1,
 					"presentation_rect": [
-						1155.0,
+						1170.0,
 						235.0,
 						60.0,
 						22.0
@@ -1925,7 +1925,7 @@
 					"patching_rect": [
 						840.0,
 						270.0,
-						36.0,
+						40.0,
 						20.0
 					],
 					"id": "obj-79",
@@ -1933,7 +1933,7 @@
 					"presentation_rect": [
 						840.0,
 						270.0,
-						36.0,
+						40.0,
 						20.0
 					]
 				}
@@ -1948,7 +1948,7 @@
 						"bang"
 					],
 					"patching_rect": [
-						990.0,
+						1000.0,
 						270.0,
 						50.0,
 						22.0
@@ -1956,7 +1956,7 @@
 					"id": "obj-80",
 					"presentation": 1,
 					"presentation_rect": [
-						990.0,
+						1000.0,
 						270.0,
 						50.0,
 						22.0
@@ -1970,17 +1970,17 @@
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
-						1045.0,
+						1055.0,
 						270.0,
-						49.0,
+						55.0,
 						20.0
 					],
 					"id": "obj-81",
 					"presentation": 1,
 					"presentation_rect": [
-						1045.0,
+						1055.0,
 						270.0,
-						49.0,
+						55.0,
 						20.0
 					]
 				}
@@ -1997,7 +1997,7 @@
 					"minimum": 1,
 					"maximum": 32,
 					"patching_rect": [
-						1095.0,
+						1112.0,
 						270.0,
 						50.0,
 						22.0
@@ -2005,7 +2005,7 @@
 					"id": "obj-82",
 					"presentation": 1,
 					"presentation_rect": [
-						1095.0,
+						1112.0,
 						270.0,
 						50.0,
 						22.0
@@ -2019,17 +2019,17 @@
 					"numinlets": 1,
 					"numoutlets": 0,
 					"patching_rect": [
-						1150.0,
+						1166.0,
 						270.0,
-						42.5,
+						47.5,
 						20.0
 					],
 					"id": "obj-83",
 					"presentation": 1,
 					"presentation_rect": [
-						1150.0,
+						1166.0,
 						270.0,
-						42.5,
+						47.5,
 						20.0
 					]
 				}
@@ -2043,7 +2043,7 @@
 						"int"
 					],
 					"patching_rect": [
-						1196.0,
+						1216.0,
 						270.0,
 						22.0,
 						22.0
@@ -2051,7 +2051,7 @@
 					"id": "obj-84",
 					"presentation": 1,
 					"presentation_rect": [
-						1196.0,
+						1216.0,
 						270.0,
 						22.0,
 						22.0
@@ -2068,7 +2068,7 @@
 						""
 					],
 					"patching_rect": [
-						1228.0,
+						1244.0,
 						270.0,
 						37.0,
 						22.0
@@ -2076,7 +2076,7 @@
 					"id": "obj-85",
 					"presentation": 1,
 					"presentation_rect": [
-						1228.0,
+						1244.0,
 						270.0,
 						37.0,
 						22.0
@@ -2093,7 +2093,7 @@
 						""
 					],
 					"patching_rect": [
-						1270.0,
+						1286.0,
 						270.0,
 						44.0,
 						22.0
@@ -2101,7 +2101,7 @@
 					"id": "obj-86",
 					"presentation": 1,
 					"presentation_rect": [
-						1270.0,
+						1286.0,
 						270.0,
 						44.0,
 						22.0
@@ -2117,7 +2117,7 @@
 					"patching_rect": [
 						840.0,
 						310.0,
-						315.5,
+						362.5,
 						20.0
 					],
 					"id": "obj-87",
@@ -2125,7 +2125,7 @@
 					"presentation_rect": [
 						840.0,
 						310.0,
-						315.5,
+						362.5,
 						20.0
 					]
 				}
@@ -2165,7 +2165,7 @@
 					"patching_rect": [
 						840.0,
 						370.0,
-						49.0,
+						55.0,
 						20.0
 					],
 					"id": "obj-89",
@@ -2173,7 +2173,7 @@
 					"presentation_rect": [
 						840.0,
 						370.0,
-						49.0,
+						55.0,
 						20.0
 					]
 				}
@@ -2213,7 +2213,7 @@
 					"patching_rect": [
 						840.0,
 						410.0,
-						101.0,
+						115.0,
 						20.0
 					],
 					"id": "obj-91",
@@ -2221,7 +2221,7 @@
 					"presentation_rect": [
 						840.0,
 						410.0,
-						101.0,
+						115.0,
 						20.0
 					]
 				}
@@ -2232,12 +2232,12 @@
 					"text": "A canon reads like  2. seed 3: C5 B4 D5 C5 ... / cost 1.5  : its seed, then the melody's first notes. A seed is a canon: the same settings and seed give the same canon. Canons = how many seeds to try, from the seed up.",
 					"numinlets": 1,
 					"numoutlets": 0,
-					"linecount": 4,
+					"linecount": 6,
 					"patching_rect": [
 						840.0,
 						435.0,
 						460.0,
-						70.0
+						98.0
 					],
 					"id": "obj-92",
 					"presentation": 1,
@@ -2245,7 +2245,7 @@
 						840.0,
 						435.0,
 						460.0,
-						70.0
+						98.0
 					]
 				}
 			},
@@ -2255,20 +2255,20 @@
 					"text": "Every canon here passes the hard rules. cost: the soft rules, added up (lower is smoother). Taste (ours, not Fux's) steers the melody toward steps, away from leaps, repeats and rocking between two notes.",
 					"numinlets": 1,
 					"numoutlets": 0,
-					"linecount": 4,
+					"linecount": 5,
 					"patching_rect": [
 						840.0,
-						513.0,
+						539.0,
 						460.0,
-						70.0
+						84.0
 					],
 					"id": "obj-93",
 					"presentation": 1,
 					"presentation_rect": [
 						840.0,
-						513.0,
+						539.0,
 						460.0,
-						70.0
+						84.0
 					]
 				}
 			},
@@ -2278,20 +2278,20 @@
 					"text": "A click replaces what the canon panel plays; your .mid stays loaded (presetmelody or a preset brings it back). The finder, on the left, searches that melody, not these.",
 					"numinlets": 1,
 					"numoutlets": 0,
-					"linecount": 3,
+					"linecount": 5,
 					"patching_rect": [
 						840.0,
-						591.0,
+						629.0,
 						460.0,
-						56.0
+						84.0
 					],
 					"id": "obj-94",
 					"presentation": 1,
 					"presentation_rect": [
 						840.0,
-						591.0,
+						629.0,
 						460.0,
-						56.0
+						84.0
 					]
 				}
 			},
@@ -2301,20 +2301,20 @@
 					"text": "None found: the status line names the rule that blocked it (or the budget). Try another interval, delay or range. The octave a bar later can only move by leaps: a step would make a 7th or 9th.",
 					"numinlets": 1,
 					"numoutlets": 0,
-					"linecount": 3,
+					"linecount": 5,
 					"patching_rect": [
 						840.0,
-						655.0,
+						719.0,
 						460.0,
-						56.0
+						84.0
 					],
 					"id": "obj-95",
 					"presentation": 1,
 					"presentation_rect": [
 						840.0,
-						655.0,
+						719.0,
 						460.0,
-						56.0
+						84.0
 					]
 				}
 			},
@@ -2324,20 +2324,20 @@
 					"text": "The close: 6|8, a major sixth opening to the octave, or 3|1, a minor third closing to the unison (Fux), with the leading note raised where the mode needs it (C sharp in D dorian) and reached by step.",
 					"numinlets": 1,
 					"numoutlets": 0,
-					"linecount": 4,
+					"linecount": 5,
 					"patching_rect": [
 						840.0,
-						719.0,
+						809.0,
 						460.0,
-						70.0
+						84.0
 					],
 					"id": "obj-96",
 					"presentation": 1,
 					"presentation_rect": [
 						840.0,
-						719.0,
+						809.0,
 						460.0,
-						70.0
+						84.0
 					]
 				}
 			},
@@ -2350,7 +2350,7 @@
 					"linecount": 2,
 					"patching_rect": [
 						20.0,
-						823.0,
+						1071.0,
 						760.0,
 						42.0
 					],
@@ -2368,7 +2368,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						873.0,
+						1121.0,
 						77.0,
 						22.0
 					],
@@ -2386,7 +2386,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						913.0,
+						1161.0,
 						112.0,
 						22.0
 					],
@@ -2404,7 +2404,7 @@
 					],
 					"patching_rect": [
 						142.0,
-						913.0,
+						1161.0,
 						154.0,
 						22.0
 					],
@@ -2422,7 +2422,7 @@
 					],
 					"patching_rect": [
 						306.0,
-						913.0,
+						1161.0,
 						140.0,
 						22.0
 					],
@@ -2440,7 +2440,7 @@
 					],
 					"patching_rect": [
 						456.0,
-						913.0,
+						1161.0,
 						133.0,
 						22.0
 					],
@@ -2458,7 +2458,7 @@
 					],
 					"patching_rect": [
 						599.0,
-						913.0,
+						1161.0,
 						119.0,
 						22.0
 					],
@@ -2476,7 +2476,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						948.0,
+						1196.0,
 						133.0,
 						22.0
 					],
@@ -2494,7 +2494,7 @@
 					],
 					"patching_rect": [
 						163.0,
-						948.0,
+						1196.0,
 						119.0,
 						22.0
 					],
@@ -2512,7 +2512,7 @@
 					],
 					"patching_rect": [
 						292.0,
-						948.0,
+						1196.0,
 						133.0,
 						22.0
 					],
@@ -2530,7 +2530,7 @@
 					],
 					"patching_rect": [
 						435.0,
-						948.0,
+						1196.0,
 						119.0,
 						22.0
 					],
@@ -2548,7 +2548,7 @@
 					],
 					"patching_rect": [
 						564.0,
-						948.0,
+						1196.0,
 						147.0,
 						22.0
 					],
@@ -2566,7 +2566,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						983.0,
+						1231.0,
 						147.0,
 						22.0
 					],
@@ -2584,7 +2584,7 @@
 					],
 					"patching_rect": [
 						177.0,
-						983.0,
+						1231.0,
 						147.0,
 						22.0
 					],
@@ -2602,7 +2602,7 @@
 					],
 					"patching_rect": [
 						334.0,
-						983.0,
+						1231.0,
 						154.0,
 						22.0
 					],
@@ -2620,7 +2620,7 @@
 					],
 					"patching_rect": [
 						498.0,
-						983.0,
+						1231.0,
 						161.0,
 						22.0
 					],
@@ -2638,7 +2638,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						1018.0,
+						1266.0,
 						147.0,
 						22.0
 					],
@@ -2656,7 +2656,7 @@
 					],
 					"patching_rect": [
 						177.0,
-						1018.0,
+						1266.0,
 						147.0,
 						22.0
 					],
@@ -2674,7 +2674,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						1063.0,
+						1311.0,
 						98.0,
 						22.0
 					],
@@ -2696,7 +2696,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						1103.0,
+						1351.0,
 						245.0,
 						22.0
 					],
@@ -2714,7 +2714,7 @@
 					],
 					"patching_rect": [
 						290.0,
-						1103.0,
+						1351.0,
 						91.0,
 						22.0
 					],
@@ -2732,7 +2732,7 @@
 					],
 					"patching_rect": [
 						395.0,
-						1103.0,
+						1351.0,
 						140.0,
 						22.0
 					],
@@ -2748,7 +2748,7 @@
 					"outlettype": [],
 					"patching_rect": [
 						550.0,
-						1103.0,
+						1351.0,
 						98.0,
 						22.0
 					],
@@ -2777,7 +2777,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						1143.0,
+						1391.0,
 						798.0,
 						22.0
 					],
@@ -2795,7 +2795,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						1183.0,
+						1431.0,
 						91.0,
 						22.0
 					],
@@ -2813,7 +2813,7 @@
 					],
 					"patching_rect": [
 						121.0,
-						1183.0,
+						1431.0,
 						91.0,
 						22.0
 					],
@@ -2831,7 +2831,7 @@
 					],
 					"patching_rect": [
 						222.0,
-						1183.0,
+						1431.0,
 						91.0,
 						22.0
 					],
@@ -2849,7 +2849,7 @@
 					],
 					"patching_rect": [
 						323.0,
-						1183.0,
+						1431.0,
 						91.0,
 						22.0
 					],
@@ -2867,7 +2867,7 @@
 					],
 					"patching_rect": [
 						424.0,
-						1183.0,
+						1431.0,
 						91.0,
 						22.0
 					],
@@ -2885,7 +2885,7 @@
 					],
 					"patching_rect": [
 						525.0,
-						1183.0,
+						1431.0,
 						91.0,
 						22.0
 					],
@@ -2903,7 +2903,7 @@
 					],
 					"patching_rect": [
 						626.0,
-						1183.0,
+						1431.0,
 						133.0,
 						22.0
 					],
@@ -2921,7 +2921,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						1218.0,
+						1466.0,
 						91.0,
 						22.0
 					],
@@ -2939,7 +2939,7 @@
 					],
 					"patching_rect": [
 						121.0,
-						1218.0,
+						1466.0,
 						91.0,
 						22.0
 					],
@@ -2960,7 +2960,7 @@
 					],
 					"patching_rect": [
 						222.0,
-						1218.0,
+						1466.0,
 						112.0,
 						22.0
 					],
@@ -2978,7 +2978,7 @@
 					],
 					"patching_rect": [
 						344.0,
-						1218.0,
+						1466.0,
 						91.0,
 						22.0
 					],
@@ -2996,7 +2996,7 @@
 					],
 					"patching_rect": [
 						445.0,
-						1218.0,
+						1466.0,
 						91.0,
 						22.0
 					],
@@ -3014,7 +3014,7 @@
 					],
 					"patching_rect": [
 						546.0,
-						1218.0,
+						1466.0,
 						91.0,
 						22.0
 					],
@@ -3032,7 +3032,7 @@
 					],
 					"patching_rect": [
 						647.0,
-						1218.0,
+						1466.0,
 						91.0,
 						22.0
 					],
@@ -3052,7 +3052,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						1253.0,
+						1501.0,
 						98.0,
 						22.0
 					],
@@ -3070,7 +3070,7 @@
 					],
 					"patching_rect": [
 						128.0,
-						1253.0,
+						1501.0,
 						91.0,
 						22.0
 					],
@@ -3088,7 +3088,7 @@
 					],
 					"patching_rect": [
 						229.0,
-						1253.0,
+						1501.0,
 						91.0,
 						22.0
 					],
@@ -3106,7 +3106,7 @@
 					],
 					"patching_rect": [
 						330.0,
-						1253.0,
+						1501.0,
 						91.0,
 						22.0
 					],
@@ -3124,7 +3124,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						1313.0,
+						1561.0,
 						91.0,
 						22.0
 					],
@@ -3142,7 +3142,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						1353.0,
+						1601.0,
 						98.0,
 						22.0
 					],
@@ -3160,7 +3160,7 @@
 					],
 					"patching_rect": [
 						128.0,
-						1353.0,
+						1601.0,
 						105.0,
 						22.0
 					],
@@ -3178,7 +3178,7 @@
 					],
 					"patching_rect": [
 						243.0,
-						1353.0,
+						1601.0,
 						105.0,
 						22.0
 					],
@@ -3196,7 +3196,7 @@
 					],
 					"patching_rect": [
 						358.0,
-						1353.0,
+						1601.0,
 						105.0,
 						22.0
 					],
@@ -3214,7 +3214,7 @@
 					],
 					"patching_rect": [
 						473.0,
-						1353.0,
+						1601.0,
 						126.0,
 						22.0
 					],
@@ -3232,7 +3232,7 @@
 					],
 					"patching_rect": [
 						609.0,
-						1353.0,
+						1601.0,
 						105.0,
 						22.0
 					],
@@ -3250,7 +3250,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						1388.0,
+						1636.0,
 						119.0,
 						22.0
 					],
@@ -3268,7 +3268,7 @@
 					],
 					"patching_rect": [
 						149.0,
-						1388.0,
+						1636.0,
 						119.0,
 						22.0
 					],
@@ -3286,7 +3286,7 @@
 					],
 					"patching_rect": [
 						278.0,
-						1388.0,
+						1636.0,
 						98.0,
 						22.0
 					],
@@ -3304,7 +3304,7 @@
 					],
 					"patching_rect": [
 						386.0,
-						1388.0,
+						1636.0,
 						105.0,
 						22.0
 					],
@@ -3322,7 +3322,7 @@
 					],
 					"patching_rect": [
 						501.0,
-						1388.0,
+						1636.0,
 						105.0,
 						22.0
 					],
@@ -3340,7 +3340,7 @@
 					],
 					"patching_rect": [
 						616.0,
-						1388.0,
+						1636.0,
 						98.0,
 						22.0
 					],
@@ -3362,7 +3362,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						1433.0,
+						1681.0,
 						245.0,
 						22.0
 					],
@@ -3380,7 +3380,7 @@
 					],
 					"patching_rect": [
 						275.0,
-						1433.0,
+						1681.0,
 						91.0,
 						22.0
 					],
@@ -3398,7 +3398,7 @@
 					],
 					"patching_rect": [
 						376.0,
-						1433.0,
+						1681.0,
 						140.0,
 						22.0
 					],
@@ -3414,7 +3414,7 @@
 					"outlettype": [],
 					"patching_rect": [
 						526.0,
-						1433.0,
+						1681.0,
 						112.0,
 						22.0
 					],
@@ -3444,7 +3444,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						1473.0,
+						1721.0,
 						602.0,
 						22.0
 					],
@@ -3462,7 +3462,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						1513.0,
+						1761.0,
 						133.0,
 						22.0
 					],
@@ -3480,7 +3480,7 @@
 					],
 					"patching_rect": [
 						163.0,
-						1513.0,
+						1761.0,
 						91.0,
 						22.0
 					],
@@ -3498,7 +3498,7 @@
 					],
 					"patching_rect": [
 						264.0,
-						1513.0,
+						1761.0,
 						91.0,
 						22.0
 					],
@@ -3516,7 +3516,7 @@
 					],
 					"patching_rect": [
 						365.0,
-						1513.0,
+						1761.0,
 						91.0,
 						22.0
 					],
@@ -3534,7 +3534,7 @@
 					],
 					"patching_rect": [
 						466.0,
-						1513.0,
+						1761.0,
 						91.0,
 						22.0
 					],
@@ -3552,7 +3552,7 @@
 					],
 					"patching_rect": [
 						567.0,
-						1513.0,
+						1761.0,
 						91.0,
 						22.0
 					],
@@ -3570,7 +3570,7 @@
 					],
 					"patching_rect": [
 						20.0,
-						1548.0,
+						1796.0,
 						133.0,
 						22.0
 					],
@@ -3588,7 +3588,7 @@
 					],
 					"patching_rect": [
 						163.0,
-						1548.0,
+						1796.0,
 						133.0,
 						22.0
 					],
@@ -3606,7 +3606,7 @@
 					],
 					"patching_rect": [
 						306.0,
-						1548.0,
+						1796.0,
 						91.0,
 						22.0
 					],
@@ -3624,7 +3624,7 @@
 					],
 					"patching_rect": [
 						407.0,
-						1548.0,
+						1796.0,
 						91.0,
 						22.0
 					],
@@ -3642,7 +3642,7 @@
 					],
 					"patching_rect": [
 						508.0,
-						1548.0,
+						1796.0,
 						91.0,
 						22.0
 					],
@@ -3660,7 +3660,7 @@
 					],
 					"patching_rect": [
 						609.0,
-						1548.0,
+						1796.0,
 						91.0,
 						22.0
 					],

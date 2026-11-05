@@ -245,6 +245,30 @@ exists.
 
 **Second round:** discard the finder panel again (`git checkout --
 patchers/cg.panel.finder.maxpat`), then `git pull`.
+
+**Second round results (2026-11-05):**
+- **The voice leading passes:** the leading note now comes by step.
+- **A text collision in the finder panel:** the "How to read it" text on the finder's side
+  ran into the right side of the patch.
+  - **Why:** every comment was sized at 6.5 px per character, and Max draws wider. The
+    long hints were sized to end at x 816, just short of the divider (830) and GENERATE
+    (840), and the help paragraphs had 370 px columns counted at 52 characters a line.
+  - **Fixed:**
+    - comments are now sized at 7.5 px per character, so the overlap lint catches this
+    - the finder's hints are shortened
+    - each tool's "How to read it" is one column, counted generously (88 characters a
+      line at 760 px, 52 at 460 px) with a spare line
+    - GENERATE's controls sit 10 px further right of their labels
+    - the divider runs the full height, and the window grows to fit (about 1080 high;
+      it scrolls on a smaller screen)
+    - a browser mock-up at a deliberately wide text width shows no box overflowing
+  - **The canon and tuning panels:** their layout code also passes at the new width,
+    with small nudges (labels a few px clear of their boxes). Their saved files are
+    unchanged, so your canon panel keeps its MIDI-out port; they change only when next
+    rebuilt.
+
+**Third round:** discard the finder panel again, pull, and reopen it. If anything still
+overlaps, a screenshot will pin it.
 **First:** the finder panel was remade (it's wider now, with GENERATE on the right), so
 discard your copy: in the repo folder run `git checkout -- patchers/cg.panel.finder.maxpat`,
 then `git pull`.
@@ -272,5 +296,5 @@ then `git pull`.
 | `fux-relaxed` (Part D) | | |
 | rounds by the block method (Part E) | | |
 | edits toggle golden test (Part F) | | |
-| generated canons in Max (Part G) | First round: dorian closes skipped into the C sharp | `cadence-approach` (hard), written degrees in the close; second round to hear |
+| generated canons in Max (Part G) | First round: dorian closes skipped into the C sharp. Second round: **voice leading PASS**; a text collision in the finder panel | `cadence-approach` (hard), written degrees in the close; comments sized at 7.5 px a character, one help column per tool |
 | 32-note canon in Max within the slice budget (Part G) | | |

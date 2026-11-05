@@ -81,7 +81,7 @@ class Patch:
         return self._add(self._place(box, x, y, w, 22))
 
     def comment(self, text, x, y, w=None, h=20, **extra):
-        w = w or max(30, 6.5 * len(text) + 10)
+        w = w or max(30, 7.5 * len(text) + 10)  # generous: Max draws wider than 6.5 px a character
         box = {"maxclass": "comment", "text": text, "numinlets": 1, "numoutlets": 0}
         box.update(extra)
         return self._add(self._place(box, x, y, w, h))
@@ -736,14 +736,14 @@ def panel_tuning():
     engine = p.obj("cg.tuning", 20, 420, 1, 2, ["", "signal"])
 
     p.comment("system:", 20, 100)
-    menu = p.ui("umenu", 80, 100, 280, 22, 1, 3, ["int", "", ""])
+    menu = p.ui("umenu", 86, 100, 280, 22, 1, 3, ["int", "", ""])
     pick = p.obj("prepend starter", 380, 100, 2, 1)
     p.connect(menu, 0, pick, 0)
     p.connect(pick, 0, engine, 0)
 
     browse = p.ui("button", 20, 135, 22, 22, 1, 1, ["bang"])
     p.comment("load a .scl file...", 48, 136)
-    dialog = p.obj("opendialog", 190, 135, 1, 2, ["", "bang"])
+    dialog = p.obj("opendialog", 205, 135, 1, 2, ["", "bang"])
     load = p.obj("prepend load", 290, 135, 2, 1)
     p.connect(browse, 0, dialog, 0)
     p.connect(dialog, 0, load, 0)
@@ -758,8 +758,8 @@ def panel_tuning():
     p.connect(key, 0, engine, 0)
 
     p.comment("hold degree:", 20, 245)
-    degree = p.ui("number", 110, 245, 50, 22, 1, 2, ["", "bang"])
-    hold = p.obj("prepend hold", 170, 245, 2, 1)
+    degree = p.ui("number", 122, 245, 50, 22, 1, 2, ["", "bang"])
+    hold = p.obj("prepend hold", 180, 245, 2, 1)
     silence = p.msg("silence", 290, 245)
     info = p.msg("info", 360, 245)
     p.connect(degree, 0, hold, 0)
@@ -901,9 +901,9 @@ def panel_canon():
     play = p.msg("play", 20, row(3))
     stop = p.msg("stop", 70, row(3))
     p.comment("tempo", 130, row(3))
-    tempo = named(p.ui("number", 175, row(3), 50, 22, 1, 2, ["", "bang"]), "tempo")
-    p.comment("volume", 240, row(3))
-    volume = named(p.ui("flonum", 290, row(3), 50, 22, 1, 2, ["", "bang"], format=6), "volume")
+    tempo = named(p.ui("number", 180, row(3), 50, 22, 1, 2, ["", "bang"]), "tempo")
+    p.comment("volume", 236, row(3))
+    volume = named(p.ui("flonum", 294, row(3), 50, 22, 1, 2, ["", "bang"], format=6), "volume")
     for m in (play, stop):
         forward.append(m)  # a message box is its own message
     send(tempo, "tempo")
@@ -926,9 +926,9 @@ def panel_canon():
     header("YOUR MELODY", 6)
     midi_button = p.ui("button", 20, row(7), 22, 22, 1, 1, ["bang"])
     p.comment("load a .mid...", 46, row(7))
-    own = p.msg("presetmelody", 150, row(7))
+    own = p.msg("presetmelody", 165, row(7))
     forward.append(own)
-    p.comment("back to the preset's own melody", 255, row(7))
+    p.comment("back to the preset's own melody", 270, row(7))
     y = lane(midi_button)
     midi_dialog = obj("opendialog", y + 2, 1, 2, ["", "bang"])
     out_of(midi_button, 0, midi_dialog, y)
@@ -936,14 +936,14 @@ def panel_canon():
     p.connect(midi_dialog, 0, load_midi, 0)
     forward.append(load_midi)
     p.comment("line", 20, row(8))
-    line = p.ui("umenu", 58, row(8), 80, 22, 1, 3, ["int", "", ""], items=["top", ",", "bottom", ",", "track"])
-    p.comment("map", 148, row(8))
-    pitch_map = p.ui("umenu", 180, row(8), 85, 22, 1, 3, ["int", "", ""], items=["exact", ",", "nearest", ",", "degree"])
-    p.comment("quantize", 275, row(8))
-    grid = p.ui("flonum", 340, row(8), 50, 22, 1, 2, ["", "bang"], format=6)
-    p.comment("track", 398, row(8))
-    track = named(p.ui("number", 443, row(8), 45, 22, 1, 2, ["", "bang"]), "track")
-    p.comment("(-1 = all)", 494, row(8))
+    line = p.ui("umenu", 62, row(8), 80, 22, 1, 3, ["int", "", ""], items=["top", ",", "bottom", ",", "track"])
+    p.comment("map", 150, row(8))
+    pitch_map = p.ui("umenu", 185, row(8), 85, 22, 1, 3, ["int", "", ""], items=["exact", ",", "nearest", ",", "degree"])
+    p.comment("quantize", 278, row(8))
+    grid = p.ui("flonum", 350, row(8), 50, 22, 1, 2, ["", "bang"], format=6)
+    p.comment("track", 405, row(8))
+    track = named(p.ui("number", 455, row(8), 45, 22, 1, 2, ["", "bang"]), "track")
+    p.comment("(-1 = all)", 505, row(8))
     for box, message_name in [(line, "midiline"), (pitch_map, "midimap"), (grid, "midiquantize"), (track, "miditrack")]:
         send(box, message_name)
 
@@ -965,14 +965,14 @@ def panel_canon():
     header("VOICE EDITOR (canon voices; free voices are edited in the spec file)", 13)
     fields = [  # label, x, the box, its message (the name isn't sent)
         ("voice", 20, p.ui("number", 20, row(15), 45, 22, 1, 2, ["", "bang"]), "select"),
-        ("name", 70, p.msg("", 70, row(15), w=120), None),
-        ("delay", 200, p.ui("flonum", 200, row(15), 50, 22, 1, 2, ["", "bang"], format=6), "delay"),
-        ("interval", 255, p.ui("number", 255, row(15), 50, 22, 1, 2, ["", "bang"]), "interval"),
-        ("transform", 325, p.ui("umenu", 325, row(15), 65, 22, 1, 3, ["int", "", ""],
+        ("name", 70, p.msg("", 70, row(15), w=100), None),
+        ("delay", 180, p.ui("flonum", 180, row(15), 50, 22, 1, 2, ["", "bang"], format=6), "delay"),
+        ("interval", 240, p.ui("number", 240, row(15), 50, 22, 1, 2, ["", "bang"]), "interval"),
+        ("transform", 310, p.ui("umenu", 310, row(15), 65, 22, 1, 3, ["int", "", ""],
                                 items=["P", ",", "I", ",", "R", ",", "RI"]), "transform"),
-        ("time scale", 400, p.ui("flonum", 400, row(15), 60, 22, 1, 2, ["", "bang"], format=6), "timescale"),
-        ("register", 480, p.ui("number", 480, row(15), 50, 22, 1, 2, ["", "bang"]), "register"),
-        ("passes", 550, p.ui("number", 550, row(15), 45, 22, 1, 2, ["", "bang"]), "passes"),
+        ("time scale", 392, p.ui("flonum", 392, row(15), 60, 22, 1, 2, ["", "bang"], format=6), "timescale"),
+        ("register", 482, p.ui("number", 482, row(15), 50, 22, 1, 2, ["", "bang"]), "register"),
+        ("passes", 557, p.ui("number", 557, row(15), 45, 22, 1, 2, ["", "bang"]), "passes"),
     ]
     EDIT_NAMES = ["voice", "name", "delay", "interval", "transform", "timescale", "register", "passes"]
     for (label, x, box, message_name), name in zip(fields, EDIT_NAMES):
@@ -984,10 +984,10 @@ def panel_canon():
     # PIANO ROLL: what the canon panel renders and plays, with the analysis.
     header("PIANO ROLL", 17)
     p.comment("rules", 120, row(17))
-    rules = named(p.ui("umenu", 165, row(17), 110, 22, 1, 3, ["int", "", ""],
+    rules = named(p.ui("umenu", 170, row(17), 110, 22, 1, 3, ["int", "", ""],
                        items=["canon", ",", "florid", ",", "fux-strict", ",", "spectral", ",", "free"]), "rules")
     send(rules, "profile", outlet=1)  # the menu's item text
-    p.comment("red = fault, amber = soft; click a marker", 285, row(17))
+    p.comment("red = fault, amber = soft; click a marker", 290, row(17))
     roll = named(p._add(p._place({
         "maxclass": "v8ui", "filename": "cg.roll.bundle.js",
         "textfile": {"filename": "cg.roll.bundle.js", "flags": 0, "embed": 0, "autowatch": 1},
@@ -1101,28 +1101,28 @@ def panel_finder():
 
     row_label("Voices", 95)
     number("voices", 220, 95, minimum=2, maximum=6)
-    hint("2 = the melody and one follower. 3 or more = sets of followers that fit together.", 280, 95)
+    hint("2 = the melody and one follower; 3+ = sets that fit together", 280, 95)
 
     row_label("Intervals, in scale steps", 130)
     number("intervalfrom", 220, 130)
     hint("to", 275, 130)
     number("intervalto", 310, 130)
-    hint("0 = unison, 7 = an octave up, -2 = a third down (in a 7-note scale)", 368, 130)
+    hint("0 unison, 7 octave up, -2 third down (7-note scale)", 368, 130)
 
     row_label("Entry delays, in beats", 165)
     number("delayfrom", 220, 165, flo=True, minimum=0.0)
     hint("to", 275, 165)
     number("delayto", 310, 165, flo=True, minimum=0.0)
-    hint("every", 365, 165)
+    hint("every", 363, 165)
     number("delaystep", 412, 165, flo=True, minimum=0.25)
-    hint("0 = with the melody. every = the step between tries", 470, 165)
+    hint("0 = with the melody; every = the step", 470, 165)
 
     row_label("Rules", 200)
     rules_menu = p.ui("umenu", 220, 200, 130, 22, 1, 3, ["int", "", ""],
                       items=["canon", ",", "florid", ",", "fux-strict", ",", "spectral", ",", "free"])
     present(rules_menu)
     rows["profile"] = rules_menu
-    hint("Perpetual canon (it loops)", 370, 200)
+    hint("Perpetual (it loops)", 370, 200)
     loops = p.ui("toggle", 555, 200, 22, 22, 1, 1, ["int"])
     present(loops)
     rows["perpetual"] = loops
@@ -1140,7 +1140,7 @@ def panel_finder():
     row_label("Transforms", 235)
     for i, t in enumerate(["P", "I", "R", "RI"]):
         toggle("transforms", f"transform {t}", t, 220 + 60 * i, 235)
-    hint("Time scales", 480, 235)
+    hint("Time scales", 470, 235)
     for i, x in enumerate(["0.5", "1", "2"]):
         toggle("timescales", f"timescale {x}", f"x{x}", 565 + 65 * i, 235)
 
@@ -1150,7 +1150,7 @@ def panel_finder():
     run = p.msg("run", 560, 270)
     stop = p.msg("stop", 605, 270)
     present(run, stop)
-    hint("abandons the search", 655, 270)
+    hint("stops the search", 655, 270)
 
     present(p.comment("Results: click one to hear it in the canon panel", 20, 310))
     results = p.ui("umenu", 20, 335, 760, 22, 1, 3, ["int", "", ""])
@@ -1159,18 +1159,19 @@ def panel_finder():
     line = p.msg("", 75, 370, w=705)
     present(line)
 
-    # How to read it: two columns of wrapped comments. Lines are counted at a
-    # generous 52 characters, so Max's own wrapping never clips one.
+    # How to read it: one column the finder's full width. Lines are counted at a
+    # generous 88 characters (Max draws wider than our estimate), plus one
+    # spare, so Max's own wrapping never runs a paragraph into the next.
     present(p.comment("How to read it", 20, 410, fontface=1))
 
-    def column(x, y, paragraphs):
+    def column(x, y, width, chars, paragraphs):
         for text in paragraphs:
-            lines = -(-len(text) // 52)
-            present(p.note(text, x, y, 370, lines))
-            y += 14 + 14 * lines + 8
+            lines = -(-len(text) // chars) + 1
+            present(p.note(text, x, y, width, lines))
+            y += 14 + 14 * lines + 6
         return y
 
-    left = column(20, 435, [
+    finder_bottom = column(20, 435, 760, 88, [
         "A result reads like  3. lower 3rd / after 4: 1 fault / cost 1  (from the round). The 3. is its "
         "rank: fewest faults first, then the lowest cost. lower 3rd / after 4 is the follower: a 3rd below "
         "the melody, coming in 4 beats after it. With 3 or more voices, + joins the followers.",
@@ -1182,8 +1183,7 @@ def panel_finder():
         "Transforms: P = the melody as is, I = upside down, R = backwards, RI = both. Time scales: x2 = "
         "the follower at half speed (augmentation, as in a prolation canon), x0.5 = twice as fast. Each "
         "tick multiplies the search. In a result, I, R, RI or x2 marks a follower's transform or speed.",
-    ])
-    right = column(410, 435, [
+
         "Status: done: 3 clean of 152 = 152 followers tried, 3 without faults. With 3 or more voices the "
         "finder tries each follower against the melody alone (pass alone), pairs the ones that pass (fit "
         "together), makes sets only of pairs that fit, and judges each set whole. stopped at the budget "
@@ -1218,34 +1218,34 @@ def panel_finder():
     present(p.note("Writes a new melody and its canon (Fux, first species). It doesn't read the canon panel's "
                    "melody: a click plays the canon there.", gx, 40, 460, 2))
     present(p.comment("Mode", gx, 95))
-    gen_menu("mode", gx + 150, 95, 110, ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "panel"])
-    hint("panel = the canon panel's tuning", gx + 270, 95)
+    gen_menu("mode", gx + 160, 95, 110, ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "panel"])
+    hint("panel = canon panel's tuning", gx + 278, 95)
     present(p.comment("Notes in the melody", gx, 130))
-    gen_number("notes", gx + 150, 130, minimum=2, maximum=64)
-    hint("one per bar", gx + 205, 130)
+    gen_number("notes", gx + 160, 130, minimum=2, maximum=64)
+    hint("one per bar", gx + 215, 130)
     present(p.comment("Range below / above", gx, 165))
-    gen_number("below", gx + 150, 165, minimum=0, maximum=14)
-    hint("/", gx + 205, 165)
-    gen_number("above", gx + 240, 165, minimum=0, maximum=21)
-    hint("scale steps from the final", gx + 295, 165)
+    gen_number("below", gx + 160, 165, minimum=0, maximum=14)
+    hint("/", gx + 215, 165)
+    gen_number("above", gx + 250, 165, minimum=0, maximum=21)
+    hint("steps from the final", gx + 305, 165)
     present(p.comment("Follower", gx, 200))
-    gen_number("interval", gx + 150, 200, minimum=-21, maximum=21)
-    hint("steps, after", gx + 205, 200)
-    gen_number("delay", gx + 300, 200, minimum=0, maximum=16)
-    hint("bars", gx + 355, 200)
+    gen_number("interval", gx + 160, 200, minimum=-21, maximum=21)
+    hint("steps, after", gx + 215, 200)
+    gen_number("delay", gx + 320, 200, minimum=0, maximum=16)
+    hint("bars", gx + 375, 200)
     present(p.comment("Rules", gx, 235))
-    gen_menu("profile", gx + 150, 235, 110, ["fux-strict", "canon", "florid", "spectral", "free"])
-    hint("close", gx + 270, 235)
-    gen_menu("cadence", gx + 315, 235, 60, ["6|8", "3|1"])
+    gen_menu("profile", gx + 160, 235, 110, ["fux-strict", "canon", "florid", "spectral", "free"])
+    hint("close", gx + 280, 235)
+    gen_menu("cadence", gx + 330, 235, 60, ["6|8", "3|1"])
     present(p.comment("Seed", gx, 270))
-    gen_number("seed", gx + 150, 270)
-    hint("canons", gx + 205, 270)
-    gen_number("count", gx + 255, 270, minimum=1, maximum=32)
-    hint("taste", gx + 310, 270)
-    gen["taste"] = p.ui("toggle", gx + 356, 270, 22, 22, 1, 1, ["int"])
+    gen_number("seed", gx + 160, 270)
+    hint("canons", gx + 215, 270)
+    gen_number("count", gx + 272, 270, minimum=1, maximum=32)
+    hint("taste", gx + 326, 270)
+    gen["taste"] = p.ui("toggle", gx + 376, 270, 22, 22, 1, 1, ["int"])
     present(gen["taste"])
-    gen_run = p.msg("run", gx + 388, 270)
-    gen_stop = p.msg("stop", gx + 430, 270)
+    gen_run = p.msg("run", gx + 404, 270)
+    gen_stop = p.msg("stop", gx + 446, 270)
     present(gen_run, gen_stop)
     present(p.comment("Canons: click one to hear it in the canon panel", gx, 310))
     gen_results = p.ui("umenu", gx, 335, 460, 22, 1, 3, ["int", "", ""])
@@ -1268,13 +1268,17 @@ def panel_finder():
         "The close: 6|8, a major sixth opening to the octave, or 3|1, a minor third closing to the unison "
         "(Fux), with the leading note raised where the mode needs it (C sharp in D dorian) and reached by step.",
     ]:
-        lines = -(-len(text) // 64)
+        lines = -(-len(text) // 52) + 1  # generous, as the finder's
         present(p.note(text, gx, gen_bottom, 460, lines))
-        gen_bottom += 14 + 14 * lines + 8
+        gen_bottom += 14 + 14 * lines + 6
 
     # The wiring, below; presentation mode hides it. Boxes flow left to right,
     # wrapping at the panel's width.
-    top = max(left, right, gen_bottom) + 20
+    top = max(finder_bottom, gen_bottom) + 20
+    p.rect = (60, 40, 1360, max(finder_bottom, gen_bottom) + 30)  # the window fits the text
+    line_box = next(b["box"] for b in p.boxes if b["box"]["id"] == divider)
+    for key in ("patching_rect", "presentation_rect"):
+        line_box[key][3] = float(max(finder_bottom, gen_bottom) - 10)  # the divider runs the full height
     p.note(HAND_NOTE, 20, top, 760, 2)
     engine = p.obj("cg.finder", 20, top + 50, 1, 1)
     p.connect(run, 0, engine, 0)
