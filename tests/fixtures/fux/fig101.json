@@ -1,0 +1,16 @@
+{
+  "source": "Fux, The Study of Counterpoint (trans. Mann, 1965), p. 78, Fig. 101: three parts, first species, the cantus firmus in the upper voice",
+  "transcription": "Sounding pitches as MIDI numbers, durations in beats (a whole note is 4); a third number is a note's written degree (C major's degrees, 0 = C4), given for a raised note. Voices top to bottom: the cantus (alto), the tenor, the bass. Fux's figures, cantus over bass: 8 10 5 6 10 10 10 12 10 5 8; tenor over bass: 3 5 3 3 5 8 5 10 8 3 8. Fux accepts the hidden fifth from bar 7 to 8 'if there is no other possibility' (p. 78), and the fifth to the final octave in the close 'because there is no other possibility' (p. 77).",
+  "system": { "type": "edo", "divisions": 12, "mode": [0, 2, 4, 5, 7, 9, 11] },
+  "meter": { "beats": 4 },
+  "voices": [
+    { "name": "cantus firmus", "notes": [[62, 4], [65, 4], [64, 4], [62, 4], [67, 4], [65, 4], [69, 4], [67, 4], [65, 4], [64, 4], [62, 4]] },
+    { "name": "tenor", "notes": [[53, 4], [57, 4], [60, 4], [57, 4], [59, 4], [62, 4], [60, 4], [64, 4], [62, 4], [61, 4, 0], [62, 4]] },
+    { "name": "bass", "notes": [[50, 4], [50, 4], [57, 4], [53, 4], [52, 4], [50, 4], [53, 4], [48, 4], [50, 4], [57, 4], [50, 4]] }
+  ],
+  "expect": {
+    "profile": "fux-relaxed",
+    "hard": [],
+    "hidden": [{ "bar": 8, "fromBar": 7 }, { "bar": 11, "fromBar": 10 }]
+  }
+}

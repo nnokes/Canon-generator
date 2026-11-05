@@ -1,0 +1,15 @@
+{
+  "source": "Fux, The Study of Counterpoint (trans. Mann, 1965), pp. 78-79, Fig. 102: Joseph's rewrite of bars 7-11 of Fig. 101, the bass rising to the high C",
+  "transcription": "Sounding pitches as MIDI numbers, durations in beats (a whole note is 4), from bar 7 (six bars' rest first, so the bars keep Fux's numbers); a third number is a note's written degree (C major's degrees, 0 = C4). Voices top to bottom: the cantus, the tenor, the bass. Aloys's verdict (p. 79): 'two progressions of the same kind follow immediately; from the ninth bar to the tenth, and from the tenth bar to the last' (hidden fifths and octaves), and in bar 9 the tenor and bass 'blend in a unison'.",
+  "system": { "type": "edo", "divisions": 12, "mode": [0, 2, 4, 5, 7, 9, 11] },
+  "meter": { "beats": 4 },
+  "voices": [
+    { "name": "cantus firmus", "notes": [[null, 24], [69, 4], [67, 4], [65, 4], [64, 4], [62, 4]] },
+    { "name": "tenor", "notes": [[null, 24], [60, 4], [64, 4], [62, 4], [61, 4, 0], [62, 4]] },
+    { "name": "bass", "notes": [[null, 24], [53, 4], [60, 4], [62, 4], [57, 4], [50, 4]] }
+  ],
+  "expect": {
+    "profile": "fux-relaxed",
+    "hidden": [{ "bar": 10, "fromBar": 9, "hard": false }, { "bar": 11, "fromBar": 10, "hard": true }]
+  }
+}

@@ -100,7 +100,9 @@ test("your clip: no 4-voice set at one speed; at x2 clean sets, exactly the tria
   const halfSpeed = { ...ranges, timeScales: [1, 2] };
   const four = finder.find({ ...base, voices: 4, ranges: halfSpeed });
   const clean = four.results.filter((r) => r.hard === 0);
-  assert.equal(clean.length, 10);
+  // 10 in M3; 12 since M4 part D, where a tritone between upper voices (the 6/3
+  // chord's) is consonant, as Fux reckons from the bass (p. 112).
+  assert.equal(clean.length, 12);
   assert.equal(clean[0].label, "upper 5th, after 1 + upper 9th, after 3, x2 + lower 5th, after 6, x2");
   // The pairs that fit (the 3-voice sets), and their triangles, by brute force.
   const three = finder.find({ ...base, voices: 3, ranges: halfSpeed, keep: Infinity });

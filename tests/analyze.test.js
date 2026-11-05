@@ -19,13 +19,14 @@ const near = (actual, expected, tolerance, label) =>
   assert.ok(Math.abs(actual - expected) <= tolerance, `${label}: ${actual} is not within ${tolerance} of ${expected}`);
 const C_MAJOR = scales.fromSpec({ type: "edo", divisions: 12, mode: [0, 2, 4, 5, 7, 9, 11] });
 
-// Voices as [[pitch, dur], ...] (pitch null = a rest) -> events.
+// Voices as [[pitch, dur], ...] (pitch null = a rest; a third number is the
+// note's written degree, for an altered note) -> events.
 function events(voices) {
   const out = [];
   voices.forEach((notes, voice) => {
     let t = 0;
-    for (const [pitch, dur] of notes) {
-      if (pitch !== null) out.push({ t, dur, pitch, voice });
+    for (const [pitch, dur, degree] of notes) {
+      if (pitch !== null) out.push({ t, dur, pitch, voice, ...(degree !== undefined ? { degree } : {}) });
       t += dur;
     }
   });
@@ -126,7 +127,7 @@ test("the analyzer reads a rendered canon: the round's four voices, with its met
 // ---------------------------------------------------------------- part C: profiles and rules
 
 test("profiles: canon is florid plus Albrechtsberger's rules; overrides, subsets and unknowns", () => {
-  assert.deepEqual(rules.profiles(), ["free", "fux-strict", "florid", "canon", "spectral"]);
+  assert.deepEqual(rules.profiles(), ["free", "fux-strict", "fux-relaxed", "florid", "canon", "spectral"]);
   const canonRules = rules.resolve("canon").rules;
   assert.ok(canonRules["dissonance-treatment"].hard, "from florid");
   assert.ok(canonRules["entry-rest"] && !canonRules["entry-rest"].hard);
@@ -218,6 +219,66 @@ test("Fux Figs. 7-8 (pp. 32-33): the hidden fifths that diminution reveals", () 
   }
 });
 
+// ---------------------------------------------------------------- M4 part D: three parts (Fux pp. 71-82)
+
+const hiddenOf = (report) => report.violations.filter((v) => v.rule === "hidden-perfect")
+  .map((v) => ({ bar: v.bar, fromBar: v.from.bar, hard: v.hard }));
+
+test("Fux Figs. 101, 104, 105 (pp. 78-80): his three-part examples pass fux-relaxed; the hidden fifths he accepts are costs", () => {
+  for (const name of ["fig101.json", "fig104.json", "fig105.json"]) {
+    const fx = fixture(name);
+    const report = fuxReport(fx, fx.voices);
+    assert.deepEqual(hard(report), [], name);
+    assert.deepEqual(hiddenOf(report), fx.expect.hidden.map((h) => ({ ...h, hard: false })), `${name}: hidden fifths and octaves`);
+    assert.ok(!report.violations.some((v) => v.rule === "full-triad"), `${name}: a third or sixth in every chord`);
+    // fux-strict is the two-voice profile: there his hidden progressions are faults.
+    const strict = fuxReport(fx, fx.voices, "fux-strict");
+    assert.deepEqual(hard(strict).map((v) => v.rule), fx.expect.hidden.map(() => "hidden-perfect"), `${name} under fux-strict`);
+  }
+});
+
+test("Fux Fig. 102 (p. 79): two hidden progressions in a row are a fault, the first alone a cost", () => {
+  const fx = fixture("fig102.json");
+  const report = fuxReport(fx, fx.voices);
+  assert.deepEqual(hiddenOf(report), fx.expect.hidden);
+  // A fragment from bar 7: its bass starts on F, so mode-final is its only other fault.
+  assert.deepEqual(hard(report).map((v) => `${v.rule} ${v.bar}`), ["mode-final 7", "hidden-perfect 11"]);
+});
+
+test("between upper voices a fourth or a tritone is consonant (Fux p. 112); against the bass it isn't", () => {
+  const dissonances = (voices) => run(voices, { profile: { base: "fux-strict", only: ["dissonance"] } }).violations.length;
+  // Fig. 105's bar 10: E3, G3 and C sharp 4: a 6/3 chord, an augmented fourth on top.
+  assert.equal(dissonances([[[52, 4]], [[55, 4]], [[61, 4]]]), 0, "G-C sharp over E");
+  assert.equal(dissonances([[[52, 4]], [[61, 4]], [[67, 4]]]), 0, "C sharp-G over E: a diminished fifth on top");
+  assert.equal(dissonances([[[55, 4]], [[61, 4]]]), 1, "two voices: the tritone is against the bass");
+  assert.equal(dissonances([[[55, 4]], [[61, 4]], [[64, 4]]]), 1, "over G: the C sharp is a tritone against the bass");
+  assert.equal(dissonances([[[48, 4]], [[67, 4]], [[69, 4]]]), 1, "a second between upper voices stays a dissonance");
+});
+
+test("three or more voices: the penultimate is two voices closing as two do; the opening may be the triad", () => {
+  const only = (ids) => ({ base: "fux-strict", only: ids });
+  // In C: G3 B3 D4 to C3 C4 C4 (Fig. 101's shape): B-D, a minor third, closes to the unison.
+  const close = (b, m, t) => run([[[48, 4], ...b], [[60, 4], ...m], [[64, 4], ...t]], { profile: only(["penultimate", "begin-perfect"]) });
+  assert.deepEqual(close([[55, 4], [48, 4]], [[59, 4], [60, 4]], [[62, 4], [60, 4]]).violations, []);
+  // E3 G3 B3 to C3 G3 C4: no pair closes by contrary step into a unison or octave.
+  const none = close([[52, 4], [48, 4]], [[55, 4], [55, 4]], [[59, 4], [60, 4]]).violations;
+  assert.deepEqual(none.map((v) => v.rule), ["penultimate"]);
+  // Two voices: the opening third is still a fault.
+  assert.deepEqual(run([[[48, 4], [50, 4]], [[64, 4], [62, 4]]], { profile: only(["begin-perfect"]) }).violations.map((v) => v.bar), [1]);
+});
+
+test("fux-relaxed: Fux's relaxations for more voices, each a rule switched or weighted", () => {
+  const relaxed = rules.resolve("fux-relaxed").rules;
+  assert.equal(relaxed["prefer-imperfect"], undefined, "a triad holds a fifth");
+  assert.deepEqual(relaxed["hidden-perfect"], { hard: true, weight: 2, single: "soft" });
+  assert.equal(relaxed["full-triad"].hard, false);
+  assert.equal(relaxed["parallel-perfect"].hard, true, "two fifths or two octaves stay faults (p. 112)");
+  assert.ok(rules.profiles().includes("fux-relaxed"));
+  // An empty chord inside a three-part passage costs: C3 G3 C4 between two triads.
+  const report = run([[[48, 4], [48, 4], [48, 4]], [[52, 4], [55, 4], [55, 4]], [[55, 4], [60, 4], [64, 4]]], { profile: "fux-relaxed" });
+  assert.deepEqual(report.violations.filter((v) => v.rule === "full-triad").map((v) => v.bar), [2]);
+});
+
 // ---------------------------------------------------------------- M4: the approach to the leading note
 
 // A two-voice first-species close in D dorian (degree 0 = D4): the upper voice's
@@ -257,8 +318,10 @@ test("cadence-approach: the raised leading note by step, and no natural form jus
 
 test("cadence-approach: an unraised leading note (ionian B) by step; phrygian's F falling to E", () => {
   const ionian = scales.fromSpec({ type: "edo", divisions: 12, mode: [0, 2, 4, 5, 7, 9, 11], ref: { step: 0, midi: 60 } });
+  // The final as the generator gives it (options.final): a semitone into it is a leading note.
   const judge = (system, events_) => analyze.analyze({ events: events_ }, {
     system, meter: { beats: 4, strong: [0] }, profile: { base: "fux-strict", only: ["cadence-approach"] },
+    final: tuning.degreeToPitch(system, 0),
   }).violations.map((v) => v.detail);
   const make = (prev, lead, fin) => [
     { t: 0, dur: 4, pitch: prev, voice: 1 },
@@ -272,4 +335,7 @@ test("cadence-approach: an unraised leading note (ionian B) by step; phrygian's 
   const phrygian = scales.fromSpec({ type: "edo", divisions: 12, mode: [0, 1, 3, 5, 7, 8, 10], ref: { step: 0, midi: 64 } });
   assert.deepEqual(judge(phrygian, make(67, [65, 1], [64, 0])), [], "G4 F4 E4: by step");
   assert.deepEqual(judge(phrygian, make(72, [65, 1], [64, 0])), ["the leading note is reached by a skip"], "C5 F4 E4");
+  // A semitone that doesn't lead to the final isn't a leading note: an inner voice
+  // falling to the final chord's third (A to G sharp over E, Fux Fig. 106; M4 part D).
+  assert.deepEqual(judge(phrygian, make(60, [69, 3], [68, 2])), [], "C4 A4 G sharp 4");
 });

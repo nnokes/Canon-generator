@@ -1,0 +1,16 @@
+{
+  "source": "Fux, The Study of Counterpoint (trans. Mann, 1965), p. 80, Fig. 105: three parts, first species, the cantus firmus in the lowest voice",
+  "transcription": "Sounding pitches as MIDI numbers, durations in beats (a whole note is 4); a third number is a note's written degree (C major's degrees, 0 = C4), given for an altered note: B flat is a B, C sharp a C. Voices top to bottom: the soprano, the alto, the cantus (bass). Fux's figures, soprano over bass: 10 10 10 10 6 8 5 8 6 6 8; alto over bass: 8 5 6 8 3 3 3 3 3 3 5. Bars 5 and 10 are 6/3 chords whose upper voices make an augmented fourth (B flat and E over G; G and C sharp over E).",
+  "system": { "type": "edo", "divisions": 12, "mode": [0, 2, 4, 5, 7, 9, 11] },
+  "meter": { "beats": 4 },
+  "voices": [
+    { "name": "soprano", "notes": [[65, 4], [69, 4], [67, 4], [65, 4], [64, 4], [65, 4], [64, 4], [67, 4], [62, 4], [61, 4, 0], [62, 4]] },
+    { "name": "alto", "notes": [[62, 4], [60, 4], [60, 4], [62, 4], [58, 4, -1], [57, 4], [60, 4], [58, 4, -1], [57, 4], [55, 4], [57, 4]] },
+    { "name": "cantus firmus", "notes": [[50, 4], [53, 4], [52, 4], [50, 4], [55, 4], [53, 4], [57, 4], [55, 4], [53, 4], [52, 4], [50, 4]] }
+  ],
+  "expect": {
+    "profile": "fux-relaxed",
+    "hard": [],
+    "hidden": []
+  }
+}

@@ -56,6 +56,40 @@ const FORMULAS = {
   "3|1": { upper: () => [1, 0], lower: () => [-1, 0], lengths: [1, 2], apart: 0, ficta: { raise: "lower", cents: 300 } },
 };
 
+// The first-species closes for three or more voices (Fux pp. 76-82, 112-116;
+// M4 part D): two voices close as in two parts, and the others fill the chords.
+// Each voice's degrees above the final, bottom to top (a list of choices for
+// the bass); `pair`: the two that close, by their place in that list.
+//   6|8 (Figs. 105, 165): the bass 2-1 under the top's 7-8; the inner voices go
+//        from the third over the bass to the fifth of the final chord, then (four
+//        parts) to its third, then to the final
+//   3|1 (Figs. 101, 163): the bass leaps 5-1, down a fifth or up a fourth; the top
+//        2-1 over the voice below it, 7-1, a third closing to the unison; inner
+//        voices hold the fifth (Figs. 160, 163, 164). Where the mode has no perfect
+//        fifth over its fifth degree (phrygian: B-F; Fux p. 81), the bass takes the
+//        7-8 under the top's 2-1, and an inner voice falls from the fifth over it to
+//        the third of the final chord (Fig. 106: D A F to E G sharp E; p. 82)
+// More voices than Fux writes for repeat the inner lines.
+const MANY = {
+  "6|8": (n, m) => ({
+    roles: [[[1, 0]], ...fill(n - 2, [[3, 4], [3, 2], [3, 0]]), [[m - 1, m]]],
+    pair: [0, n - 1], apart: 1, ficta: { raise: "upper", cents: 900 },
+  }),
+  "3|1": (n, m, perfectFifth) => (perfectFifth
+    ? {
+      roles: [[[4, 0], [4 - m, 0]], ...fill(n - 3, [[4, 4]]), [[-1, 0]], [[1, 0]]],
+      pair: [n - 2, n - 1], apart: 0, ficta: { raise: "lower", cents: 300 },
+    }
+    : {
+      roles: [[[-1, 0]], ...fill(n - 2, [[3, 2], [3, 0]]), [[1, 0]]],
+      pair: [0, n - 1], apart: 0, ficta: { raise: "lower", cents: 300 },
+    }),
+};
+// k inner lines, cycling through `lines` (each a single choice).
+function fill(k, lines) {
+  return Array.from({ length: Math.max(0, k) }, (_, i) => [lines[i % lines.length]]);
+}
+
 function check(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -282,8 +316,9 @@ function nearestShift(system, degree, target) {
   return best;
 }
 
-// A fixed cadence after the cut (M2 has no rules; M4 can write better codas):
-// the lowest and highest voices take the formula, the others hold the
+// A fixed cadence after the cut (M2 has no rules): the lowest and highest
+// voices take the formula. With more voices, a first-species close gives every
+// voice a line (MANY, M4 part D); the florid closes' other voices hold the
 // nearest of the final, its third and its fifth (degrees 0, 2, 4).
 function coda(plan, events, at) {
   const { formula, dur } = plan.ending;
@@ -316,6 +351,7 @@ function coda(plan, events, at) {
   for (const { cv } of parts) {
     check(cv.system.period_cents !== null, `${cv.system.name}: a free cadence needs a repeating scale system`);
   }
+  if (parts.length > 2 && MANY[formula]) return closeMany(MANY[formula], parts, final, line, at);
 
   const out = [];
   const low = parts[0];
@@ -353,6 +389,77 @@ function coda(plan, events, at) {
     });
   }
   return out;
+}
+
+// A first-species close for three or more voices (MANY). Each voice takes its
+// line in the octave nearest its last note (the smallest move into the close),
+// never below the bass, the pair's upper voice `apart` periods over the lower's
+// final; the bass picks the nearer of its choices. Then ficta on the pair, as in
+// two voices, and a third in the final chord is made major.
+function closeMany(make, parts, final, line, at) {
+  const n = parts.length;
+  const bassSystem = parts[0].cv.system;
+  const m = tuning.size(bassSystem);
+  const period = bassSystem.period_cents;
+  // The fifth degree to the second, an octave up: a perfect fifth, except in phrygian.
+  const fifth = ((tuning.degreeCents(bassSystem, final + 1 + m) - tuning.degreeCents(bassSystem, final + 4)) % period + period) % period;
+  const shape = make(n, m, Math.abs(fifth - 702) <= 25);
+  const sounding = (cv, d) => tuning.degreeToPitch(cv.system, d) + 12 * cv.register;
+  const lines = [];
+  shape.roles.forEach((choices, i) => {
+    const { cv, pitch } = parts[i];
+    const size = tuning.size(cv.system);
+    const from = pitch + 12 * cv.register; // where the voice was, as it sounds
+    let best = null;
+    for (const rel of choices) {
+      const lastRel = rel[rel.length - 1];
+      const near = nearestShift(cv.system, final + lastRel, pitch);
+      for (let k = -3; k <= 4; k++) {
+        const degrees = rel.map((r) => near + k * size - lastRel + r);
+        const p = degrees.map((d) => sounding(cv, d));
+        if (i > 0 && p.some((x, j) => time.lt(x, lines[0].pitches[j]))) continue;
+        if (i === shape.pair[1]) {
+          const low = lines[shape.pair[0]].pitches;
+          if (time.lt(p[p.length - 1], low[low.length - 1] + (shape.apart * period) / 100)) continue;
+        }
+        const score = Math.abs(p[0] - from) + 0.5 * Math.abs(p[p.length - 1] - from);
+        if (!best || score < best.score - 1e-9) best = { degrees, pitches: p, score };
+      }
+    }
+    lines.push(best);
+  });
+  const out = [];
+  shape.roles.forEach((_, i) => out.push(...line(parts[i].cv, lines[i].degrees)));
+  ficta(shape.ficta, out, parts[shape.pair[0]].cv, parts[shape.pair[1]].cv, at);
+  // A third in the final chord is major (Fux p. 80: the minor third "is not
+  // capable of giving a sense of conclusion"; p. 82; Fig. 165's F sharp).
+  const finalOf = (cv) => out.find((e) => e.voice === cv.index && time.lt(at, e.t));
+  const bass = finalOf(parts[0].cv);
+  for (let i = 1; i < n; i++) {
+    const { cv } = parts[i];
+    const size = tuning.size(cv.system);
+    const written = lines[i].degrees[lines[i].degrees.length - 1];
+    const major = majorThirdOf(cv.system);
+    if ((((written - final) % size) + size) % size !== 2 || major === null) continue;
+    const e = finalOf(cv);
+    const now = (((e.pitch - bass.pitch) * 100) % 1200 + 1200) % 1200;
+    if (now < major - 10) e.pitch += (major - now) / 100;
+  }
+  return out;
+}
+
+// The tuning's major third: of the mode's two-step sizes, the largest within
+// 350-450 cents (400 in 12-EDO, 387 in 31-EDO); none for a tuning without an
+// octave period.
+function majorThirdOf(system) {
+  if (system.period_cents !== 1200) return null;
+  const m = tuning.size(system);
+  let best = null;
+  for (let d = 0; d < m; d++) {
+    const size = tuning.degreeCents(system, d + 2) - tuning.degreeCents(system, d);
+    if (size >= 350 && size <= 450 && (best === null || size > best)) best = size;
+  }
+  return best;
 }
 
 // The tuning's own semitone: of the sizes between two of its steps, the one

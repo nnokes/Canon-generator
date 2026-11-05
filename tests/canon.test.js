@@ -269,3 +269,52 @@ test("first-species closes: 6|8 a major sixth to the octave, 3|1 a minor third t
   };
   assert.deepEqual(canon.render(spec).events.filter((e) => e.index < 0).map((e) => [e.t, e.dur]).sort(), [[4, 4], [4, 4], [8, 8], [8, 8]]);
 });
+
+// M4 part D: the first-species closes for three and four voices (Fux pp. 76-82, 112-116).
+test("closes for more voices: Fux's three- and four-part cadences, each voice where it was, ficta on the pair that closes", () => {
+  const MODES = {
+    ionian: [[0, 2, 4, 5, 7, 9, 11], 60], dorian: [[0, 2, 3, 5, 7, 9, 10], 62], phrygian: [[0, 1, 3, 5, 7, 8, 10], 64],
+  };
+  const NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B"];
+  const name = (p) => NAMES[((Math.round(p) % 12) + 12) % 12];
+  // The dux ends on degrees 4 3 2 4 above the final; the followers enter at once
+  // at these steps, so every voice has a last note to move from.
+  const close = (mode, formula, steps) => {
+    const [degrees, midi] = MODES[mode];
+    const spec = {
+      system: { type: "edo", divisions: 12, mode: degrees, ref: { step: 0, midi } }, meter: { beats: 4, strong: [0] },
+      dux: { source: "list", notes: [4, 3, 2, 4].map((d) => ({ degree: d, dur: 4 })) },
+      voices: steps.map((s, i) => (i === 0 ? {} : { interval: { steps: s } })),
+      ending: { kind: "free-cadence", formula, final: 0, dur: 4 },
+    };
+    const events = canon.render(spec).events.filter((e) => e.coda);
+    const at = Math.min(...events.map((e) => e.t));
+    const chord = (when) => events.filter(when).sort((a, b) => a.pitch - b.pitch).map((e) => name(e.pitch)).join(" ");
+    return { pen: chord((e) => e.t === at), fin: chord((e) => e.t > at), events };
+  };
+  // 6|8, three parts (Fig. 105): 2-1 in the bass under 7-8, the inner voice from
+  // the third over the bass to the fifth. D F B to C G C; dorian's C sharp.
+  assert.equal(close("ionian", "6|8", [0, -4, -9]).pen, "D F B");
+  assert.equal(close("ionian", "6|8", [0, -4, -9]).fin, "C G C");
+  assert.equal(close("dorian", "6|8", [0, -4, -9]).pen, "E G C#");
+  assert.equal(close("dorian", "6|8", [0, -4, -9]).fin, "D A D");
+  // Four parts (Fig. 165): a second inner voice to the third, made major (F sharp).
+  assert.equal(close("dorian", "6|8", [0, -4, -9, 3]).pen, "E G G C#");
+  assert.equal(close("dorian", "6|8", [0, -4, -9, 3]).fin, "D F# A D");
+  // 3|1, three parts (Fig. 101): the bass leaps 5-1 under C sharp-E closing to the unison.
+  assert.equal(close("dorian", "3|1", [0, -4, -9]).pen, "A C# E");
+  assert.equal(close("dorian", "3|1", [0, -4, -9]).fin, "D D D");
+  // Four parts (Fig. 163): the fourth voice holds the fifth.
+  assert.equal(close("dorian", "3|1", [0, -4, -9, 3]).pen, "A A C# E");
+  // Phrygian has no perfect fifth over its fifth degree (B-F, p. 81): the bass
+  // rises D-E under F-E and the inner voice falls A to G sharp (Fig. 106).
+  assert.equal(close("phrygian", "3|1", [0, -4, -9]).pen, "D A F");
+  assert.equal(close("phrygian", "3|1", [0, -4, -9]).fin, "E G# E");
+  // Each voice moves into its close by its nearest octave, and none crosses below the bass.
+  const { events } = close("ionian", "6|8", [0, -4, -9]);
+  const bass = Math.min(...events.map((e) => e.pitch));
+  assert.ok(events.filter((e) => e.pitch === bass).every((e) => e.voice === events.find((x) => x.pitch === bass).voice));
+  // The raised notes keep their written degree (C sharp is a C).
+  const raised = close("dorian", "6|8", [0, -4, -9]).events.find((e) => name(e.pitch) === "C#");
+  assert.equal(((raised.degree % 7) + 7) % 7, 6, "C sharp written as C (degree 6 above D)");
+});

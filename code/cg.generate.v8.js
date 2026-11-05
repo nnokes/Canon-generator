@@ -15,9 +15,15 @@
 //                                                      or panel: the canon panel's tuning (cg.spec)
 //   notes <n>                      show notes ...      the dux's length
 //   below|above <steps>            show ...            the dux's range, in steps from the final
-//   interval <steps>               show interval ...   the follower's interval, in scale steps
-//   delay <bars>                   show delay ...      the follower's delay, in bars
-//   profile <name>                 show profile ...    fux-strict (default), canon, florid, spectral, free
+//   voices <2-4>                   show voices ...     the melody and 1-3 followers (M4 part D); the
+//                                                      rules follow: fux-strict for two voices,
+//                                                      fux-relaxed for more (unless you chose another)
+//   interval <steps>               show interval ...   the first follower's interval, in scale steps
+//   delay <bars>                   show delay ...      the first follower's delay, in bars
+//   interval2|delay2 <n>           show ...            the second follower (3 or 4 voices)
+//   interval3|delay3 <n>           show ...            the third follower (4 voices)
+//   profile <name>                 show profile ...    fux-strict (default), fux-relaxed, canon, florid,
+//                                                      spectral, free
 //   cadence <6|8|3|1>              show cadence ...    the close: a sixth to the octave, a third to the unison
 //   seed <n>, count <n>            show ...            the first seed, and how many canons (one per seed)
 //   taste <0|1>                    show taste ...      the melodic taste cost (ours) on or off
@@ -56,17 +62,25 @@ const CADENCES = ["6|8", "3|1"];
 const NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 
 // What the panel shows, one entry per box.
+// The followers' defaults (M4 part D): the fifth above a bar later, the octave
+// below four bars later, the fourth below five bars later (C, G, C, G entries,
+// as a fugue's exposition): with 12 notes every seed of the first four finds one.
 const state = {
-  mode: "ionian", notes: 12, below: 3, above: 9, interval: 4, delay: 1, profile: "fux-strict", cadence: "6|8",
-  seed: 1, count: 4, taste: 1, slicems: 20,
+  mode: "ionian", notes: 12, below: 3, above: 9, voices: 2, interval: 4, delay: 1, interval2: -7, delay2: 4,
+  interval3: -3, delay3: 5, profile: "fux-strict", cadence: "6|8", seed: 1, count: 4, taste: 1, slicems: 20,
 };
 const whole = (low, high) => (v) => Number.isInteger(v) && v >= low && v <= high;
 const CHECKS = {
   notes: [whole(2, 64), "notes: a whole number from 2 to 64"],
   below: [whole(0, 14), "below: whole steps from 0 to 14"],
   above: [whole(0, 21), "above: whole steps from 0 to 21"],
+  voices: [whole(2, 4), "voices: 2 3 or 4"],
   interval: [whole(-21, 21), "interval: whole scale steps from -21 to 21"],
   delay: [whole(0, 16), "delay: whole bars from 0 to 16"],
+  interval2: [whole(-21, 21), "interval2: whole scale steps from -21 to 21"],
+  delay2: [whole(0, 16), "delay2: whole bars from 0 to 16"],
+  interval3: [whole(-21, 21), "interval3: whole scale steps from -21 to 21"],
+  delay3: [whole(0, 16), "delay3: whole bars from 0 to 16"],
   seed: [Number.isInteger, "seed: a whole number"],
   count: [whole(1, 32), "count: a whole number from 1 to 32"],
   slicems: [(v) => v > 0, "time slice: above 0 ms"],
@@ -124,6 +138,23 @@ function below(n) { setNumber("below", n); }
 function above(n) { setNumber("above", n); }
 function interval(n) { setNumber("interval", n); }
 function delay(n) { setNumber("delay", n); }
+function interval2(n) { setNumber("interval2", n); }
+function delay2(n) { setNumber("delay2", n); }
+function interval3(n) { setNumber("interval3", n); }
+function delay3(n) { setNumber("delay3", n); }
+
+// The number of voices; Fux's rules for that many follow, unless another profile
+// was chosen: fux-strict for two, fux-relaxed for more (p. 139).
+function voices(n) {
+  const before = state.voices;
+  setNumber("voices", n);
+  if (state.voices === before) return;
+  const wanted = state.voices > 2 ? "fux-relaxed" : "fux-strict";
+  if ((state.profile === "fux-strict" || state.profile === "fux-relaxed") && state.profile !== wanted) {
+    state.profile = wanted;
+    show("profile");
+  }
+}
 function seed(n) { setNumber("seed", n); }
 function count(n) { setNumber("count", n); }
 function slicems(ms) { setNumber("slicems", ms); }
@@ -178,10 +209,16 @@ function world() {
 }
 world.local = 1;
 
+// The followers the voices setting asks for, first to last.
+function followers() {
+  const all = [[state.interval, state.delay], [state.interval2, state.delay2], [state.interval3, state.delay3]];
+  return all.slice(0, state.voices - 1).map(([steps, bars]) => ({ interval: steps, delay: bars }));
+}
+followers.local = 1;
+
 function label(seedValue) {
-  const size = state.mode === "panel" ? 0 : 7;
-  const name = finder.intervalName({ domain: "degree", steps: state.interval }, size || 7);
-  return `generated: seed ${seedValue} / ${name} after ${state.delay} ${state.delay === 1 ? "bar" : "bars"}`;
+  const names = followers().map((f) => `${finder.intervalName({ domain: "degree", steps: f.interval }, 7)} after ${f.delay} ${f.delay === 1 ? "bar" : "bars"}`);
+  return `generated: seed ${seedValue} / ${names.join(" + ")}`;
 }
 label.local = 1;
 
@@ -189,7 +226,7 @@ function optionsFor(w, seedValue) {
   return generator.strict({
     name: label(seedValue), system: w.system, meter: w.meter, tempo: w.tempo, final: w.final,
     length: state.notes, range: [w.final - state.below, w.final + state.above],
-    followers: [{ interval: state.interval, delay: state.delay }],
+    followers: followers(),
     close: state.cadence, profile: state.profile, taste: Boolean(state.taste),
     seed: seedValue, budget: extra.budget,
   });
@@ -314,7 +351,8 @@ function pick(index) {
 
 function info() {
   const s = state;
-  outlet(0, "status", "generate:", s.mode, "/", s.notes, "notes from", -s.below, "to", s.above, "steps / follower",
-    s.interval, "steps after", s.delay, "bars /", s.profile, "/ close", s.cadence, "/ seeds", s.seed, "to",
+  const heard = followers().map((f) => `${f.interval} steps after ${f.delay} bars`).join(" + ");
+  outlet(0, "status", "generate:", s.mode, "/", s.notes, "notes from", -s.below, "to", s.above, "steps /", s.voices,
+    "voices: followers", heard, "/", s.profile, "/ close", s.cadence, "/ seeds", s.seed, "to",
     s.seed + s.count - 1, "/ taste", s.taste ? "on" : "off", "/ slice", s.slicems, "ms");
 }

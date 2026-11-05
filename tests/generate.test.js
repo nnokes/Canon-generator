@@ -8,6 +8,7 @@ const generator = require("cg-generate");
 const canon = require("cg-canon");
 const analyze = require("cg-analyze");
 const scales = require("cg-scales");
+const tuning = require("cg-tuning");
 
 const MAJOR = { type: "edo", divisions: 12, mode: [0, 2, 4, 5, 7, 9, 11], ref: { step: 0, midi: 60 } };
 const METER = { beats: 4, strong: [0] };
@@ -178,4 +179,60 @@ test("the generator's closes: the leading note by step, never with its natural f
       }
     }
   }
+});
+
+// ---------------------------------------------------------------- part D: more voices
+
+test("three voices: canons at several intervals and delays, each a strict canon, all pass fux-relaxed afresh", () => {
+  const SETTINGS = [
+    [[-4, 1], [-7, 3]], [[4, 2], [-3, 4]], [[-7, 2], [-14, 4]], [[0, 2], [-7, 4]], [[7, 1], [0, 3]], [[-3, 1], [-7, 3]],
+  ];
+  for (const pairs of SETTINGS) {
+    const followers = pairs.map(([interval, delay]) => ({ interval, delay }));
+    const options_ = generator.strict({ length: 12, range: [-5, 12], followers });
+    assert.equal(options_.profile, "fux-relaxed", "more than one follower: Fux's rules for more voices");
+    const result = generator.generate(options_);
+    const label = pairs.map(([i, d]) => `${i} after ${d}`).join(", ");
+    assert.equal(result.found, true, `${label}: ${result.diagnostics.blocking}`);
+    const rendered = canon.render(result.spec);
+    const again = analyze.analyze(rendered, { system: scales.fromSpec(MAJOR), meter: METER, profile: "fux-relaxed", final: 60 });
+    assert.equal(again.hard, 0, `${label}: ${again.violations.filter((v) => v.hard).map((v) => `${v.rule} ${v.bar}`)}`);
+    // Each follower is the dux, transposed and delayed, until the close.
+    const notes = rendered.events.filter((e) => e.index >= 0);
+    pairs.forEach(([interval, delay], k) => {
+      for (const f of notes.filter((e) => e.voice === k + 1)) {
+        const lead = notes.find((d) => d.voice === 0 && d.index === f.index);
+        assert.equal(f.t - lead.t, 4 * delay, label);
+        const system = scales.fromSpec(MAJOR);
+        assert.equal(tuning.quantize(system, f.pitch).degree - tuning.quantize(system, lead.pitch).degree, interval, label);
+      }
+    });
+  }
+});
+
+test("four voices, and in dorian; entries a bar apart twice running can't be a canon (dissonance)", () => {
+  const four = generator.generate(generator.strict({
+    length: 12, range: [-5, 12], followers: [{ interval: -4, delay: 1 }, { interval: -7, delay: 3 }, { interval: -11, delay: 4 }],
+  }));
+  assert.equal(four.found, true, four.diagnostics.blocking);
+  assert.equal(analyze.analyze(canon.render(four.spec), {
+    system: scales.fromSpec(MAJOR), meter: METER, profile: "fux-relaxed", final: 60,
+  }).hard, 0);
+  assert.equal(new Set(canon.render(four.spec).events.map((e) => e.voice)).size, 4);
+  const dorian = { type: "edo", divisions: 12, mode: [0, 2, 3, 5, 7, 9, 10], ref: { step: 0, midi: 62 } };
+  for (const close of ["6|8", "3|1"]) {
+    const result = generator.generate(generator.strict({
+      system: dorian, close, length: 12, range: [-5, 12], followers: [{ interval: -4, delay: 1 }, { interval: -7, delay: 3 }],
+    }));
+    assert.equal(result.found, true, `dorian ${close}: ${result.diagnostics.blocking}`);
+    assert.equal(analyze.analyze(canon.render(result.spec), {
+      system: scales.fromSpec(dorian), meter: METER, profile: "fux-relaxed", final: 62,
+    }).hard, 0, `dorian ${close}`);
+  }
+  // The fifth below a bar later and the octave below two bars later: a step in
+  // the dux is a seventh or ninth against one of them. Searched to the end.
+  const none = generator.generate(generator.strict({ length: 12, range: [-5, 12], followers: [{ interval: -4, delay: 1 }, { interval: -7, delay: 2 }] }));
+  assert.equal(none.found, false);
+  assert.equal(none.complete, true);
+  assert.equal(none.diagnostics.blocking, "dissonance");
 });

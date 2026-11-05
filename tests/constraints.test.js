@@ -75,6 +75,24 @@ test("first species: every check reports exactly what the whole canon's analysis
   }
 });
 
+// M4 part D: three voices under fux-relaxed, whose hidden-perfect reads the motion
+// before (two in a row): the windows still agree with the whole canon.
+test("three voices, fux-relaxed: every check reports exactly what the whole canon's analysis does there", () => {
+  const r = rng.create(11);
+  let hidden = 0;
+  for (const voices of [[{ delay: 4, interval: { steps: -4 } }, { delay: 12, interval: { steps: -7 } }],
+    [{ delay: 8, interval: { steps: 4 } }, { delay: 16, interval: { steps: -3 } }]]) {
+    const spec = { ...firstSpecies(10, voices[0]), voices: [{}, ...voices], ending: { kind: "free-cadence", formula: "6|8", final: 0, dur: 4 } };
+    const m = constraints.model({ spec, degrees: [-5, 12], profile: "fux-relaxed", final: 0 });
+    for (let k = 0; k < 15; k++) {
+      const dux = m.variables.map(() => -5 + r.int(18));
+      agree(m, spec, dux, 60);
+      hidden += m.checks.flatMap((c) => m.check(c, dux)).filter((v) => v.rule === "hidden-perfect").length;
+    }
+  }
+  assert.ok(hidden > 10, `hidden fifths and octaves were compared (${hidden})`);
+});
+
 test("with no cadence, the end rules are checked in windows too: the penultimate a slice ahead", () => {
   const r = rng.create(5);
   const spec = { ...firstSpecies(10, { delay: 4, interval: { steps: 7 } }), ending: "cut" };

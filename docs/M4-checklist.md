@@ -23,8 +23,8 @@ as few notes as it can so that a canon works (§3.6).
 "Valid" means the finished canon passes the M3 analyzer (`cg-analyze`) under its rule
 profile with no hard faults: the generator and the analyzer judge with the same rules.
 
-**Status:** started 2026-10-19. Parts A, B, C and G (for two voices) are built: 185
-tests. Next: Max session 1 (below), then parts D, E and F.
+**Status:** started 2026-10-19. Parts A, B, C, D and G are built (two to four voices):
+198 tests. Next: Max session 2 (three and four voices, below), then parts E and F.
 
 ---
 
@@ -144,15 +144,75 @@ exists.
   32-note canon; taste; strict's defaults and a canon in D dorian; the closes and their
   ficta in dorian, phrygian and ionian.
 
-## Part D. More voices: `fux-relaxed`
-- [ ] **The profile:** `fux-strict`, relaxed as Fux relaxes it for three and four
-  parts ("the rules are to be less rigorously observed", p. 139). Each relaxation cites
-  its page. For example: hidden fifths and octaves only between the outer voices; a
-  third allowed in the final chord; soft weights scaled by the number of voices.
-- [ ] **N-voice chains:** followers at their own intervals and delays, every pair checked
-  against the sounding bass, as the analyzer does.
-- [ ] **Tests:** 3-voice canons pass `fux-relaxed`; the profile's table in
-  `docs/controls.md`.
+## Part D. More voices: `fux-relaxed`: done
+**What blocked it.** A first try with the two-voice rules relaxed found **no** three-voice
+canon in 150 settings. Where the voices enter two bars apart, the search did write clean
+counterpoint. Its one fault was always the close (bar 13).
+- The renderer's three-voice close held the middle voice on a note of the final chord
+  through the next-to-last bar: over the bass's D (in C), a C, E or G is a seventh, ninth
+  or fourth.
+- Fux's own three-part closes then failed two of our rules:
+  - **Fig. 105** puts an augmented fourth between the upper voices (G and C sharp over E).
+    Our `dissonance` rule rejected it.
+  - **Figs. 101 and 104** let the bass leap from the fifth to the final under the voices
+    that close. Our `penultimate` rule wanted the outer voices to close by step.
+- [x] **The closes for three and four voices** (`cg-canon`; Fux pp. 76–82, 112–116). Two
+  voices close as in two parts, and the others fill the chords:
+  - **6 | 8** (Fig. 105; four parts Fig. 165): the bass 2–1 under the top's 7–8; the
+    inner voice from the third over the bass to the fifth (D F B to C G C); a fourth voice
+    to the final chord's third.
+  - **3 | 1** (Fig. 101; four parts Figs. 160, 163, 164): the bass leaps 5–1; the top
+    2–1 over the voice below it, 7–1, a third closing to the unison (A C♯ E to D D D);
+    a fourth voice holds the fifth.
+  - **Phrygian** has no perfect fifth over its fifth degree (B–F, Fux p. 81), so its 3 | 1
+    is Fig. 106's: the bass rises D–E under F–E, an inner voice falls A–G♯.
+  - **Placement and ficta:** each voice moves to its close by its nearest octave, never
+    below the bass. Ficta raises the pair that closes, as in two voices. A third in the
+    final chord is made major (Fux pp. 80, 82; Fig. 165's F♯).
+- [x] **Rules that change with the number of voices** (every profile; they leave two
+  voices alone):
+  - **Between upper voices,** consonance is reckoned from the bass: a fourth, and the
+    augmented fourth or diminished fifth of a 6/3 chord, are consonant there (Fux p. 112
+    and its note, "this already holds in three part writing").
+  - **The penultimate:** some two voices close by contrary step into the unison or
+    octave; the bass may leap (Figs. 101, 104–106).
+  - **The opening** may be the full triad, as Fux's three-part examples open (Figs. 101,
+    104, 105).
+  - **`cadence-approach`:** only a semitone into the final is a leading note (an inner
+    voice falling A to G♯ isn't).
+- [x] **The profile, `fux-relaxed`:** `fux-strict`, relaxed only where Fux relaxes it, each
+  with its page:
+  - **one hidden fifth or octave is a cost** (2), "if there is no other possibility"
+    (p. 78), "on account of ... the imitation" (p. 110). **Two in a row stay a fault**
+    (p. 79, Fig. 102).
+  - **`prefer-imperfect` off:** a triad holds a fifth over the bass (p. 71).
+  - **`full-triad`** (new, soft 0.5): a cost for an empty chord, no third or sixth over
+    the bass (pp. 71–72).
+  - **Parallel fifths and octaves** stay faults between any two voices (p. 112).
+  - The first plan's example, "soft weights scaled by the number of voices", has no source
+    in Fux, so it's not used.
+- [x] **N-voice chains:** followers at their own intervals and delays. `strict()` takes
+  any number, and chooses `fux-relaxed` for more than one. Every pair is checked against
+  the sounding bass, as before.
+- [x] **Found:**
+  - **Three voices:** 42 of 60 settings tried, mostly in a few hundred candidates (12
+    notes; followers at the fifth, octave, fourth, unison and twelfth, above and below).
+  - **Entries a bar apart twice running are impossible:** with the fifth below a bar later
+    and the octave below two bars later, every step of the dux is a seventh or ninth
+    against one of them. The search proves it (blocked by `dissonance`).
+  - **Four voices:** at the fifth above (1 bar), the octave below (4) and the fourth below
+    (5), every seed of the first four finds one, about 230 candidates each.
+- [x] **Tests:**
+  - **Fux's three-part figures as goldens** (transcribed, with his interval figures as a
+    check): Figs. 101, 104 and 105 pass `fux-relaxed`; under `fux-strict` only the hidden
+    fifths and octaves Fux accepts there fail; Fig. 102 fails where Aloys says, the second
+    of two hidden progressions in a row.
+  - the upper-voice fourth and tritone; the N-voice penultimate; the profile
+  - the closes in ionian, dorian and phrygian, three and four voices
+  - six three-voice settings: each found, a strict canon, passing `fux-relaxed` afresh;
+    a four-voice canon; dorian with both closes; the impossible setting named
+  - **The answer finder** now finds 12 clean four-voice sets on your clip at x2 (10
+    before): two sets whose only fault was a tritone between upper voices.
 
 ## Part E. Rounds by the block method (Mann pp. 232–237)
 - [ ] **The block:** a round's *k* sections all sound at once once every voice is in, so
@@ -219,7 +279,13 @@ exists.
   the shared time slice. Tests: 185.
 - [ ] **The edits toggle** (Part F): allow edits, max edits, and a repair of the picked
   result.
-- [ ] **More voices and rounds** (Parts D, E): their controls.
+- [x] **More voices** (Part D): **voices** (2–4), and **follower 2** and **follower 3**
+  (interval and delay; defaults the octave below 4 bars later and the fourth below 5 bars
+  later). With more than two voices the rules switch to `fux-relaxed`, and back to
+  `fux-strict` for two, unless you chose another profile. `fux-relaxed` is in the finder's
+  rules menu too. The canon panel's rules menu gets it when that panel is next rebuilt
+  (your saved copy keeps its MIDI-out port).
+- [ ] **Rounds** (Part E): their controls.
 - [ ] **Recheck the time-slice budget** with a 32-note canon (session 1, below).
 
 ## Max session 1: hear the generated canons
@@ -269,6 +335,24 @@ patchers/cg.panel.finder.maxpat`), then `git pull`.
 
 **Third round:** discard the finder panel again, pull, and reopen it. If anything still
 overlaps, a screenshot will pin it.
+
+## Max session 2: three and four voices (Part D)
+**First:** the finder panel was remade again (GENERATE has three new rows), so discard
+your copy: `git checkout -- patchers/cg.panel.finder.maxpat`, then `git pull`.
+1. Open the canon panel and the finder panel. In GENERATE, set **voices** to 3. The rules
+   menu turns to `fux-relaxed`. Click **run**: four canons, each three voices (the melody,
+   the fifth above a bar later, the octave below four bars later). Click each and listen,
+   especially to the close: next-to-last chord D F B, then C G C (Fux's Fig. 105).
+2. Try the close **3|1**: G B D to C C C, the bass leaping up a fourth or down a fifth
+   (Fig. 101).
+3. **Dorian:** listen for the C sharp in the close, and with 4 voices the F sharp in the
+   final chord (Fig. 165).
+4. **Voices 4:** the fourth below five bars later joins.
+5. **Something that can't work:** follower 2 at 7 (the octave above), 2 bars. The status
+   line says "blocked by dissonance": two entries a bar apart each, so a step in the melody
+   makes a 7th or 9th against one of them.
+6. **How do they sound?** Especially the inner voices and the closes. That decides whether
+   the hidden-fifth cost (2) and the empty-chord cost (0.5) need changing.
 **First:** the finder panel was remade (it's wider now, with GENERATE on the right), so
 discard your copy: in the repo folder run `git checkout -- patchers/cg.panel.finder.maxpat`,
 then `git pull`.
@@ -293,7 +377,7 @@ then `git pull`.
 | incremental checks = full analysis (Part A) | **PASS** (Node, `tests/constraints.test.js`): every check equals the whole canon's analysis at its slice, for random duxes, first species and florid | The analyzer takes the canon's edges; end rules judged on the whole canon |
 | same seed, same canon (Part B) | **PASS** (Node, `tests/generate.test.js`) | The seed orders equal-cost candidates |
 | 2-voice canons at the 8ve, 5th, 4th; delays 1–4 bars (Part C) | **PASS** (Node, `tests/generate.test.js`): all 24 settings, above and below, no hard faults | First-species closes 6 \| 8 and 3 \| 1, with ficta; taste orders the search |
-| `fux-relaxed` (Part D) | | |
+| `fux-relaxed` (Part D) | **PASS** (Node, `tests/analyze.test.js`, `tests/generate.test.js`): Fux's Figs. 101, 104, 105 pass and Fig. 102 fails where he says; 3-voice canons in six settings, a 4-voice canon and dorian pass afresh | Fux's three- and four-part closes in the renderer; consonance between upper voices reckoned from the bass; the penultimate made by any two voices |
 | rounds by the block method (Part E) | | |
 | edits toggle golden test (Part F) | | |
 | generated canons in Max (Part G) | First round: dorian closes skipped into the C sharp. Second round: **voice leading PASS**; a text collision in the finder panel | `cadence-approach` (hard), written degrees in the close; comments sized at 7.5 px a character, one help column per tool |

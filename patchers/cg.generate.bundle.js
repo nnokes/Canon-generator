@@ -925,6 +925,40 @@ const FORMULAS = {
   "3|1": { upper: () => [1, 0], lower: () => [-1, 0], lengths: [1, 2], apart: 0, ficta: { raise: "lower", cents: 300 } },
 };
 
+// The first-species closes for three or more voices (Fux pp. 76-82, 112-116;
+// M4 part D): two voices close as in two parts, and the others fill the chords.
+// Each voice's degrees above the final, bottom to top (a list of choices for
+// the bass); `pair`: the two that close, by their place in that list.
+//   6|8 (Figs. 105, 165): the bass 2-1 under the top's 7-8; the inner voices go
+//        from the third over the bass to the fifth of the final chord, then (four
+//        parts) to its third, then to the final
+//   3|1 (Figs. 101, 163): the bass leaps 5-1, down a fifth or up a fourth; the top
+//        2-1 over the voice below it, 7-1, a third closing to the unison; inner
+//        voices hold the fifth (Figs. 160, 163, 164). Where the mode has no perfect
+//        fifth over its fifth degree (phrygian: B-F; Fux p. 81), the bass takes the
+//        7-8 under the top's 2-1, and an inner voice falls from the fifth over it to
+//        the third of the final chord (Fig. 106: D A F to E G sharp E; p. 82)
+// More voices than Fux writes for repeat the inner lines.
+const MANY = {
+  "6|8": (n, m) => ({
+    roles: [[[1, 0]], ...fill(n - 2, [[3, 4], [3, 2], [3, 0]]), [[m - 1, m]]],
+    pair: [0, n - 1], apart: 1, ficta: { raise: "upper", cents: 900 },
+  }),
+  "3|1": (n, m, perfectFifth) => (perfectFifth
+    ? {
+      roles: [[[4, 0], [4 - m, 0]], ...fill(n - 3, [[4, 4]]), [[-1, 0]], [[1, 0]]],
+      pair: [n - 2, n - 1], apart: 0, ficta: { raise: "lower", cents: 300 },
+    }
+    : {
+      roles: [[[-1, 0]], ...fill(n - 2, [[3, 2], [3, 0]]), [[1, 0]]],
+      pair: [0, n - 1], apart: 0, ficta: { raise: "lower", cents: 300 },
+    }),
+};
+// k inner lines, cycling through `lines` (each a single choice).
+function fill(k, lines) {
+  return Array.from({ length: Math.max(0, k) }, (_, i) => [lines[i % lines.length]]);
+}
+
 function check(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -1151,8 +1185,9 @@ function nearestShift(system, degree, target) {
   return best;
 }
 
-// A fixed cadence after the cut (M2 has no rules; M4 can write better codas):
-// the lowest and highest voices take the formula, the others hold the
+// A fixed cadence after the cut (M2 has no rules): the lowest and highest
+// voices take the formula. With more voices, a first-species close gives every
+// voice a line (MANY, M4 part D); the florid closes' other voices hold the
 // nearest of the final, its third and its fifth (degrees 0, 2, 4).
 function coda(plan, events, at) {
   const { formula, dur } = plan.ending;
@@ -1185,6 +1220,7 @@ function coda(plan, events, at) {
   for (const { cv } of parts) {
     check(cv.system.period_cents !== null, `${cv.system.name}: a free cadence needs a repeating scale system`);
   }
+  if (parts.length > 2 && MANY[formula]) return closeMany(MANY[formula], parts, final, line, at);
 
   const out = [];
   const low = parts[0];
@@ -1222,6 +1258,77 @@ function coda(plan, events, at) {
     });
   }
   return out;
+}
+
+// A first-species close for three or more voices (MANY). Each voice takes its
+// line in the octave nearest its last note (the smallest move into the close),
+// never below the bass, the pair's upper voice `apart` periods over the lower's
+// final; the bass picks the nearer of its choices. Then ficta on the pair, as in
+// two voices, and a third in the final chord is made major.
+function closeMany(make, parts, final, line, at) {
+  const n = parts.length;
+  const bassSystem = parts[0].cv.system;
+  const m = tuning.size(bassSystem);
+  const period = bassSystem.period_cents;
+  // The fifth degree to the second, an octave up: a perfect fifth, except in phrygian.
+  const fifth = ((tuning.degreeCents(bassSystem, final + 1 + m) - tuning.degreeCents(bassSystem, final + 4)) % period + period) % period;
+  const shape = make(n, m, Math.abs(fifth - 702) <= 25);
+  const sounding = (cv, d) => tuning.degreeToPitch(cv.system, d) + 12 * cv.register;
+  const lines = [];
+  shape.roles.forEach((choices, i) => {
+    const { cv, pitch } = parts[i];
+    const size = tuning.size(cv.system);
+    const from = pitch + 12 * cv.register; // where the voice was, as it sounds
+    let best = null;
+    for (const rel of choices) {
+      const lastRel = rel[rel.length - 1];
+      const near = nearestShift(cv.system, final + lastRel, pitch);
+      for (let k = -3; k <= 4; k++) {
+        const degrees = rel.map((r) => near + k * size - lastRel + r);
+        const p = degrees.map((d) => sounding(cv, d));
+        if (i > 0 && p.some((x, j) => time.lt(x, lines[0].pitches[j]))) continue;
+        if (i === shape.pair[1]) {
+          const low = lines[shape.pair[0]].pitches;
+          if (time.lt(p[p.length - 1], low[low.length - 1] + (shape.apart * period) / 100)) continue;
+        }
+        const score = Math.abs(p[0] - from) + 0.5 * Math.abs(p[p.length - 1] - from);
+        if (!best || score < best.score - 1e-9) best = { degrees, pitches: p, score };
+      }
+    }
+    lines.push(best);
+  });
+  const out = [];
+  shape.roles.forEach((_, i) => out.push(...line(parts[i].cv, lines[i].degrees)));
+  ficta(shape.ficta, out, parts[shape.pair[0]].cv, parts[shape.pair[1]].cv, at);
+  // A third in the final chord is major (Fux p. 80: the minor third "is not
+  // capable of giving a sense of conclusion"; p. 82; Fig. 165's F sharp).
+  const finalOf = (cv) => out.find((e) => e.voice === cv.index && time.lt(at, e.t));
+  const bass = finalOf(parts[0].cv);
+  for (let i = 1; i < n; i++) {
+    const { cv } = parts[i];
+    const size = tuning.size(cv.system);
+    const written = lines[i].degrees[lines[i].degrees.length - 1];
+    const major = majorThirdOf(cv.system);
+    if ((((written - final) % size) + size) % size !== 2 || major === null) continue;
+    const e = finalOf(cv);
+    const now = (((e.pitch - bass.pitch) * 100) % 1200 + 1200) % 1200;
+    if (now < major - 10) e.pitch += (major - now) / 100;
+  }
+  return out;
+}
+
+// The tuning's major third: of the mode's two-step sizes, the largest within
+// 350-450 cents (400 in 12-EDO, 387 in 31-EDO); none for a tuning without an
+// octave period.
+function majorThirdOf(system) {
+  if (system.period_cents !== 1200) return null;
+  const m = tuning.size(system);
+  let best = null;
+  for (let d = 0; d < m; d++) {
+    const size = tuning.degreeCents(system, d + 2) - tuning.degreeCents(system, d);
+    if (size >= 350 && size <= 450 && (best === null || size > best)) best = size;
+  }
+  return best;
 }
 
 // The tuning's own semitone: of the sizes between two of its steps, the one
@@ -1637,7 +1744,7 @@ exports.names = () => Object.keys(MODELS);
 //
 //   judge(context, profile) -> { profile, violations: [{ rule, hard, cost,
 //                                bar, beat, t, voices, detail }] }
-//   profile: a name ("fux-strict", "florid", "canon", "spectral", "free"), or
+//   profile: a name ("fux-strict", "fux-relaxed", "florid", "canon", "spectral", "free"), or
 //            { base, rules: { id: { hard, weight, ...params } or false } }
 //
 // Pitch rules count scale steps of the active scale for melody (step vs leap)
@@ -1652,7 +1759,14 @@ const time = require("cg-time");
 const isPerfect = (x) => x.cls === "perfect";
 const isImperfect = (x) => x.cls === "imperfect";
 // Against the bass a fourth is a dissonance; between upper voices it isn't.
-const consonantPair = (p) => p.cls !== "dissonant" || (p.fourth && !p.withBass);
+// Consonance is reckoned from the bass, "regardless of what may occur between
+// the inner voices" (Fux p. 112, and his note: "this already holds in three part
+// writing"): between upper voices the fourth, and the augmented fourth or
+// diminished fifth of a 6/3 chord (Fig. 105: G and C sharp over E), are
+// consonant. In octave tunings, a tritone is within 45 cents of 600.
+const upperFourth = (p, period) => !p.withBass
+  && (p.fourth || (period === 1200 && Math.abs(folded(p.cents, 1200) - 600) <= 45));
+const consonantPair = (p, period = 1200) => p.cls !== "dissonant" || upperFourth(p, period);
 
 function violation(rule, slice, voices, detail, extra = {}) {
   return { rule, bar: slice.bar, beat: slice.beat, t: slice.t, voices, detail, ...extra };
@@ -1720,7 +1834,7 @@ RULES.dissonance = (c) => {
   const out = [];
   for (const s of c.slices) {
     for (const p of s.pairs) {
-      if (!consonantPair(p)) out.push(violation("dissonance", s, [p.low, p.high], `${Math.round(p.cents)} cents`));
+      if (!consonantPair(p, c.period)) out.push(violation("dissonance", s, [p.low, p.high], `${Math.round(p.cents)} cents`));
     }
   }
   return out;
@@ -1740,7 +1854,7 @@ RULES["dissonance-treatment"] = (c) => {
   c.slices.forEach((s, si) => {
     const prev = si > 0 ? c.slices[si - 1] : null;
     for (const p of s.pairs) {
-      if (consonantPair(p)) continue;
+      if (consonantPair(p, c.period)) continue;
       const ok = [p.low, p.high].some((v) => {
         const n = noteOf(s, v);
         const { prev: before, next: after } = neighbours(c.byVoice, n.event);
@@ -1754,7 +1868,7 @@ RULES["dissonance-treatment"] = (c) => {
         if (!prev) return false;
         const other = v === p.low ? p.high : p.low;
         const was = pairIn(prev, v, other);
-        const prepared = !was || consonantPair(was);
+        const prepared = !was || consonantPair(was, c.period);
         return prepared && after && touches(n.event, after) && steps(c.system, n.event.pitch, after.pitch) === -1;
       });
       if (ok) continue;
@@ -1797,14 +1911,30 @@ function motionRules(c) {
   return out;
 }
 RULES["parallel-perfect"] = (c) => motionRules(c).parallel;
-RULES["hidden-perfect"] = (c) => motionRules(c).hidden;
+// With params.single "soft" (fux-relaxed): with more voices a hidden fifth or
+// octave may be accepted "if there is no other possibility" (Fux p. 78, Fig. 101,
+// bars 7-8; p. 77, the bass's fifth to the final octave), "on account of the
+// requirements of the melody, or of the imitation" (p. 110): one on its own is a
+// cost. Two in a row stay faults (p. 79, Fig. 102: "two progressions of the same
+// kind follow immediately").
+RULES["hidden-perfect"] = (c, params = {}) => {
+  const hidden = motionRules(c).hidden;
+  if (params.single !== "soft") return hidden;
+  const key = (t) => Math.round(t * 1e6);
+  const arrivals = new Set(hidden.map((v) => key(v.t)));
+  return hidden.map((v) => (arrivals.has(key(v.from.t)) ? v : { ...v, soft: true }));
+};
 
 // Fux p. 28: begin and end on perfect consonances. With three or more voices the
-// final chord may hold a third (Fux p. 112).
+// first chord may be the full triad (Fux pp. 71, 78: "the harmonic triad ... in
+// each measure"; his Figs. 101, 104 and 105 open with a third over the final), and
+// so may the final chord (Fux p. 112; p. 82: leaving the third out of a
+// three-part close "holds true only in cases in which it is possible").
 RULES["begin-perfect"] = (c) => {
   const s = edges(c).first;
   if (!s) return [];
-  return s.above.filter((x) => !isPerfect(x)).map((x) => violation("begin-perfect", s, [s.bass, x.voice], `${Math.round(x.cents)} cents`));
+  const allowed = (x) => isPerfect(x) || (s.notes.length > 2 && isImperfect(x));
+  return s.above.filter((x) => !allowed(x)).map((x) => violation("begin-perfect", s, [s.bass, x.voice], `${Math.round(x.cents)} cents`));
 };
 RULES["end-perfect"] = (c) => {
   const s = edges(c).last;
@@ -1839,6 +1969,11 @@ RULES["mode-final"] = (c, params) => {
 // Fux pp. 28-29: the next-to-last bar is a major sixth (cantus below) or a minor
 // third (cantus above), the outer voices closing by contrary step. In 12-EDO the
 // sizes are checked (fux12 and ratio); in other tunings, the class and the steps.
+// With three or more voices (Fux pp. 76-82), two of the voices close that way,
+// opening to the octave or closing to the unison, and the others are free: the
+// bass leaps from the fifth to the final (Figs. 101, 104: A to D under C sharp
+// and E), or itself rises or falls by step (Fig. 105: E to D; Fig. 106, phrygian:
+// D to E).
 RULES.penultimate = (c) => {
   const { all, last } = edges(c);
   const pen = last ? all[all.indexOf(last) - 1] : null;
@@ -1846,19 +1981,27 @@ RULES.penultimate = (c) => {
   // The outer voices of the penultimate slice; at a final unison they may swap.
   const lo = pen.bass;
   const hi = pen.notes[pen.notes.length - 1].voice;
+  const twelve = c.model.name === "fux12" || c.model.name === "ratio";
+  const sized = (p) => [9, 3].includes(Math.round(folded(p.cents, 1200) / 100));
+  const stepOf = (v) => steps(c.system, noteOf(pen, v).pitch, noteOf(last, v).pitch);
+  const contrary = (a, b) => {
+    const [x, y] = [stepOf(a), stepOf(b)];
+    return Math.abs(x) === 1 && Math.abs(y) === 1 && Math.sign(x) !== Math.sign(y);
+  };
+  if (pen.notes.length > 2) {
+    const unison = (p) => folded(p.cents, c.period) < 15 || c.period - folded(p.cents, c.period) < 15;
+    const closes = pen.pairs.some((p) => {
+      const after = pairIn(last, p.low, p.high);
+      return after && isImperfect(p) && contrary(p.low, p.high) && unison(after) && (!twelve || sized(p));
+    });
+    return closes ? [] : [violation("penultimate", pen, [lo, hi], "no two voices close by contrary step from a sixth or third")];
+  }
   const p = pairIn(pen, lo, hi);
   if (!p || !noteOf(last, lo) || !noteOf(last, hi)) return [violation("penultimate", pen, [lo, hi], "an outer voice stops before the end")];
   const out = [];
-  const lowStep = steps(c.system, noteOf(pen, lo).pitch, noteOf(last, lo).pitch);
-  const highStep = steps(c.system, noteOf(pen, hi).pitch, noteOf(last, hi).pitch);
   if (!isImperfect(p)) out.push(violation("penultimate", pen, [lo, hi], "not an imperfect consonance"));
-  if (!(Math.abs(lowStep) === 1 && Math.abs(highStep) === 1 && Math.sign(lowStep) !== Math.sign(highStep))) {
-    out.push(violation("penultimate", pen, [lo, hi], "the outer voices don't close by contrary step"));
-  }
-  if (c.model.name === "fux12" || c.model.name === "ratio") {
-    const semis = Math.round(folded(p.cents, 1200) / 100);
-    if (semis !== 9 && semis !== 3) out.push(violation("penultimate", pen, [lo, hi], "not a major sixth or minor third"));
-  }
+  if (!contrary(lo, hi)) out.push(violation("penultimate", pen, [lo, hi], "the outer voices don't close by contrary step"));
+  if (twelve && !sized(p)) out.push(violation("penultimate", pen, [lo, hi], "not a major sixth or minor third"));
   return out;
 };
 
@@ -1867,6 +2010,21 @@ RULES["prefer-imperfect"] = (c) => {
   const out = [];
   for (const s of edges(c).inner) {
     for (const x of s.above) if (isPerfect(x)) out.push(violation("prefer-imperfect", s, [s.bass, x.voice], "perfect inside"));
+  }
+  return out;
+};
+
+// Fux p. 71 (three parts): "the harmonic triad" in each measure if possible; a
+// sixth or an octave may stand in for the fifth, for a better line or to avoid
+// two perfect consonances in a row (p. 72). Ours, as a cost: a slice inside the
+// canon where three or more voices sound and none is a third or sixth over the
+// bass (only unisons, octaves and fifths: an empty chord).
+RULES["full-triad"] = (c) => {
+  const out = [];
+  for (const s of edges(c).inner) {
+    if (s.notes.length > 2 && !s.above.some(isImperfect)) {
+      out.push(violation("full-triad", s, [s.bass], "no third or sixth over the bass"));
+    }
   }
   return out;
 };
@@ -2002,12 +2160,18 @@ RULES["leap-compensation"] = (c) => {
 // marked coda). M4 session 1: generated dorian canons skipped into the C sharp.
 RULES["cadence-approach"] = (c) => {
   const out = [];
+  // The final: options.final, or the bass of the last slice. A semitone to
+  // anything else (an inner voice falling to the final chord's third, M4 part D)
+  // isn't a leading note.
+  const lastSlice = c.slices[c.slices.length - 1];
+  const final = c.options.final !== undefined ? c.options.final : lastSlice && noteOf(lastSlice, lastSlice.bass).pitch;
+  const isFinal = (p) => final === undefined || folded((p - final) * 100, c.period) < 15 || c.period - folded((p - final) * 100, c.period) < 15;
   for (const line of c.byVoice.values()) {
     const i = line.findIndex((e) => e.coda);
     if (i < 1 || i + 1 >= line.length) continue;
     const lead = line[i];
     const rise = (line[i + 1].pitch - lead.pitch) * 100;
-    if (!(Math.abs(rise) > 50 && Math.abs(rise) < 150)) continue; // not a leading note
+    if (!(Math.abs(rise) > 50 && Math.abs(rise) < 150) || !isFinal(line[i + 1].pitch)) continue; // not a leading note
     const s = c.slices.find((x) => time.eq(x.t, lead.t));
     const prev = line[i - 1];
     if (touches(prev, lead) && Math.abs(degreeOf(c.system, lead) - degreeOf(c.system, prev)) !== 1) {
@@ -2096,6 +2260,21 @@ const PROFILES = {
     "prefer-imperfect": S(0.5), "parallel-imperfect-run": S(1, { max: 3 }), "leap-compensation": S(0.5),
     "cadence-approach": H(),
   },
+  // Fux, three and four parts (pp. 71-116): "as the number of voices increases,
+  // the rules are to be less rigorously observed" (p. 139). The rules that change
+  // with the number of voices sounding (consonance between upper voices, the
+  // opening and final chords, the penultimate) already do in every profile; this
+  // one relaxes what Fux himself relaxes:
+  //   hidden-perfect     one hidden fifth or octave is a cost; two in a row a
+  //                      fault (pp. 77-79, 110)
+  //   prefer-imperfect   off: a triad holds a fifth over the bass (p. 71)
+  //   full-triad         a cost for an empty chord (pp. 71-72)
+  // Parallel fifths and octaves stay faults between any two voices (p. 112: "if
+  // only mistakes such as successions of two fifths or two octaves are avoided").
+  "fux-relaxed": {
+    base: "fux-strict",
+    "hidden-perfect": H(2, { single: "soft" }), "prefer-imperfect": false, "full-triad": S(0.5),
+  },
   // Florid canons, as Albrechtsberger writes them (ours: species 2-4's dissonance
   // treatment, brought forward from M5 for the answer finder). Melodic faults
   // are soft: a follower inherits the dux's melody, and a composer fixes a
@@ -2132,7 +2311,11 @@ function resolve(profile) {
     throw new Error(`unknown rule profile ${profile}; one of ${Object.keys(PROFILES).join(" ")}`);
   }
   for (const p of chain) {
-    for (const [id, r] of Object.entries(PROFILES[p])) if (id !== "base") rules[id] = r;
+    for (const [id, r] of Object.entries(PROFILES[p])) {
+      if (id === "base") continue;
+      if (r === false) delete rules[id]; // a profile can switch off a rule of its base
+      else rules[id] = r;
+    }
   }
   for (const [id, r] of Object.entries(spec.rules || {})) {
     if (r === false) { delete rules[id]; continue; }
@@ -2142,9 +2325,6 @@ function resolve(profile) {
   if (spec.only) rules = Object.fromEntries(Object.entries(rules).filter(([id]) => spec.only.includes(id)));
   return { name, rules };
 }
-
-// Fux p. 139: "as the number of voices increases, the rules are to be less
-// rigorously observed". fux-relaxed (M4) scales soft weights by voice count.
 
 function judge(context, profile) {
   const { name, rules } = resolve(profile);
@@ -3333,9 +3513,15 @@ __cg_require.local = 1;
 //                                                      or panel: the canon panel's tuning (cg.spec)
 //   notes <n>                      show notes ...      the dux's length
 //   below|above <steps>            show ...            the dux's range, in steps from the final
-//   interval <steps>               show interval ...   the follower's interval, in scale steps
-//   delay <bars>                   show delay ...      the follower's delay, in bars
-//   profile <name>                 show profile ...    fux-strict (default), canon, florid, spectral, free
+//   voices <2-4>                   show voices ...     the melody and 1-3 followers (M4 part D); the
+//                                                      rules follow: fux-strict for two voices,
+//                                                      fux-relaxed for more (unless you chose another)
+//   interval <steps>               show interval ...   the first follower's interval, in scale steps
+//   delay <bars>                   show delay ...      the first follower's delay, in bars
+//   interval2|delay2 <n>           show ...            the second follower (3 or 4 voices)
+//   interval3|delay3 <n>           show ...            the third follower (4 voices)
+//   profile <name>                 show profile ...    fux-strict (default), fux-relaxed, canon, florid,
+//                                                      spectral, free
 //   cadence <6|8|3|1>              show cadence ...    the close: a sixth to the octave, a third to the unison
 //   seed <n>, count <n>            show ...            the first seed, and how many canons (one per seed)
 //   taste <0|1>                    show taste ...      the melodic taste cost (ours) on or off
@@ -3374,17 +3560,25 @@ const CADENCES = ["6|8", "3|1"];
 const NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 
 // What the panel shows, one entry per box.
+// The followers' defaults (M4 part D): the fifth above a bar later, the octave
+// below four bars later, the fourth below five bars later (C, G, C, G entries,
+// as a fugue's exposition): with 12 notes every seed of the first four finds one.
 const state = {
-  mode: "ionian", notes: 12, below: 3, above: 9, interval: 4, delay: 1, profile: "fux-strict", cadence: "6|8",
-  seed: 1, count: 4, taste: 1, slicems: 20,
+  mode: "ionian", notes: 12, below: 3, above: 9, voices: 2, interval: 4, delay: 1, interval2: -7, delay2: 4,
+  interval3: -3, delay3: 5, profile: "fux-strict", cadence: "6|8", seed: 1, count: 4, taste: 1, slicems: 20,
 };
 const whole = (low, high) => (v) => Number.isInteger(v) && v >= low && v <= high;
 const CHECKS = {
   notes: [whole(2, 64), "notes: a whole number from 2 to 64"],
   below: [whole(0, 14), "below: whole steps from 0 to 14"],
   above: [whole(0, 21), "above: whole steps from 0 to 21"],
+  voices: [whole(2, 4), "voices: 2 3 or 4"],
   interval: [whole(-21, 21), "interval: whole scale steps from -21 to 21"],
   delay: [whole(0, 16), "delay: whole bars from 0 to 16"],
+  interval2: [whole(-21, 21), "interval2: whole scale steps from -21 to 21"],
+  delay2: [whole(0, 16), "delay2: whole bars from 0 to 16"],
+  interval3: [whole(-21, 21), "interval3: whole scale steps from -21 to 21"],
+  delay3: [whole(0, 16), "delay3: whole bars from 0 to 16"],
   seed: [Number.isInteger, "seed: a whole number"],
   count: [whole(1, 32), "count: a whole number from 1 to 32"],
   slicems: [(v) => v > 0, "time slice: above 0 ms"],
@@ -3442,6 +3636,23 @@ function below(n) { setNumber("below", n); }
 function above(n) { setNumber("above", n); }
 function interval(n) { setNumber("interval", n); }
 function delay(n) { setNumber("delay", n); }
+function interval2(n) { setNumber("interval2", n); }
+function delay2(n) { setNumber("delay2", n); }
+function interval3(n) { setNumber("interval3", n); }
+function delay3(n) { setNumber("delay3", n); }
+
+// The number of voices; Fux's rules for that many follow, unless another profile
+// was chosen: fux-strict for two, fux-relaxed for more (p. 139).
+function voices(n) {
+  const before = state.voices;
+  setNumber("voices", n);
+  if (state.voices === before) return;
+  const wanted = state.voices > 2 ? "fux-relaxed" : "fux-strict";
+  if ((state.profile === "fux-strict" || state.profile === "fux-relaxed") && state.profile !== wanted) {
+    state.profile = wanted;
+    show("profile");
+  }
+}
 function seed(n) { setNumber("seed", n); }
 function count(n) { setNumber("count", n); }
 function slicems(ms) { setNumber("slicems", ms); }
@@ -3496,10 +3707,16 @@ function world() {
 }
 world.local = 1;
 
+// The followers the voices setting asks for, first to last.
+function followers() {
+  const all = [[state.interval, state.delay], [state.interval2, state.delay2], [state.interval3, state.delay3]];
+  return all.slice(0, state.voices - 1).map(([steps, bars]) => ({ interval: steps, delay: bars }));
+}
+followers.local = 1;
+
 function label(seedValue) {
-  const size = state.mode === "panel" ? 0 : 7;
-  const name = finder.intervalName({ domain: "degree", steps: state.interval }, size || 7);
-  return `generated: seed ${seedValue} / ${name} after ${state.delay} ${state.delay === 1 ? "bar" : "bars"}`;
+  const names = followers().map((f) => `${finder.intervalName({ domain: "degree", steps: f.interval }, 7)} after ${f.delay} ${f.delay === 1 ? "bar" : "bars"}`);
+  return `generated: seed ${seedValue} / ${names.join(" + ")}`;
 }
 label.local = 1;
 
@@ -3507,7 +3724,7 @@ function optionsFor(w, seedValue) {
   return generator.strict({
     name: label(seedValue), system: w.system, meter: w.meter, tempo: w.tempo, final: w.final,
     length: state.notes, range: [w.final - state.below, w.final + state.above],
-    followers: [{ interval: state.interval, delay: state.delay }],
+    followers: followers(),
     close: state.cadence, profile: state.profile, taste: Boolean(state.taste),
     seed: seedValue, budget: extra.budget,
   });
@@ -3632,7 +3849,8 @@ function pick(index) {
 
 function info() {
   const s = state;
-  outlet(0, "status", "generate:", s.mode, "/", s.notes, "notes from", -s.below, "to", s.above, "steps / follower",
-    s.interval, "steps after", s.delay, "bars /", s.profile, "/ close", s.cadence, "/ seeds", s.seed, "to",
+  const heard = followers().map((f) => `${f.interval} steps after ${f.delay} bars`).join(" + ");
+  outlet(0, "status", "generate:", s.mode, "/", s.notes, "notes from", -s.below, "to", s.above, "steps /", s.voices,
+    "voices: followers", heard, "/", s.profile, "/ close", s.cadence, "/ seeds", s.seed, "to",
     s.seed + s.count - 1, "/ taste", s.taste ? "on" : "off", "/ slice", s.slicems, "ms");
 }

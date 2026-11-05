@@ -742,7 +742,8 @@ test("cg.finder: a 3+ voice run with no sets says why, from the first stage that
   assert.match(why(bundle.tick().out)[0], /^done: no sets: no two passing followers fit each other \/ try time scale x2/);
 });
 
-test("cg.finder: your clip makes no 4-voice canon at one speed, and 10 clean ones with a follower at half speed", () => {
+// 10 clean sets in M3; 12 since M4 part D (a tritone between upper voices is consonant, Fux p. 112).
+test("cg.finder: your clip makes no 4-voice canon at one speed, and 12 clean ones with a follower at half speed", () => {
   const canonBundle = loadBundle("cg.canon");
   canonBundle.send("preset", 0);
   canonBundle.send("loadmidi", path.join(FIXTURES, "live-clip.mid"));
@@ -756,7 +757,7 @@ test("cg.finder: your clip makes no 4-voice canon at one speed, and 10 clean one
   assert.deepEqual(select(bundle.send("timescale", 2, 1), "show"), [["timescales", 0, 1, 1]]);
   bundle.send("run");
   const out = bundle.tick().out;
-  assert.match(select(out, "progress").at(-1).join(" "), /^done: 10 clean sets of \d+ \//);
+  assert.match(select(out, "progress").at(-1).join(" "), /^done: 12 clean sets of \d+ \//);
   const top = select(out, "results").find((r) => r[0] === "append")[1];
   assert.equal(top, "1. upper 5th / after 1 + upper 9th / after 3 / x2 + lower 5th / after 6 / x2: clean");
 });
@@ -802,18 +803,19 @@ test("cg.finder: with 3+ voices it says how many followers and pairs got through
 test("cg.generate exposes exactly its documented messages, and echoes every setting", () => {
   const bundle = loadBundle("cg.generate");
   assert.deepEqual(bundle.handlers(), [
-    "above", "below", "budget", "cadence", "count", "delay", "info", "interval", "mode", "notes", "pick", "profile",
-    "run", "seed", "settings", "slicems", "stop", "taste",
+    "above", "below", "budget", "cadence", "count", "delay", "delay2", "delay3", "info", "interval", "interval2",
+    "interval3", "mode", "notes", "pick", "profile", "run", "seed", "settings", "slicems", "stop", "taste", "voices",
   ]);
   assert.deepEqual(select(bundle.send("settings"), "show"), [
-    ["mode", "ionian"], ["notes", 12], ["below", 3], ["above", 9], ["interval", 4], ["delay", 1],
+    ["mode", "ionian"], ["notes", 12], ["below", 3], ["above", 9], ["voices", 2], ["interval", 4], ["delay", 1],
+    ["interval2", -7], ["delay2", 4], ["interval3", -3], ["delay3", 5],
     ["profile", "fux-strict"], ["cadence", "6|8"], ["seed", 1], ["count", 4], ["taste", 1], ["slicems", 20],
   ]);
   // A refused value is reported, and the box snaps back to what the generator holds.
   for (const [message, value, kept, why] of [
     ["notes", 1, 12, /notes: a whole number from 2 to 64/], ["mode", "locrian", "ionian", /mode: one of ionian/],
     ["cadence", "7-6|8", "6|8", /cadence: one of 6\|8 3\|1/], ["profile", "baroque", "fux-strict", /unknown rule profile/],
-    ["delay", 1.5, 1, /delay: whole bars/],
+    ["delay", 1.5, 1, /delay: whole bars/], ["voices", 5, 2, /voices: 2 3 or 4/],
   ]) {
     const out = bundle.send(message, value);
     assert.match(errors(out)[0], why);
@@ -860,6 +862,44 @@ test("cg.generate: writes canons in time slices, lists them, and a pick plays in
     assert.deepEqual(errors(played), []);
     assert.equal(rows(played).length, rendered.events.length);
   });
+});
+
+test("cg.generate: three and four voices, Fux's rules for more parts, and back to two", () => {
+  const canonBundle = loadBundle("cg.canon");
+  canonBundle.send("preset", 0);
+  const bundle = loadBundle("cg.generate");
+  // More voices: the rules follow (fux-relaxed), unless you chose others.
+  assert.deepEqual(select(bundle.send("voices", 3), "show"), [["voices", 3], ["profile", "fux-relaxed"]]);
+  bundle.send("count", 2);
+  bundle.send("run");
+  const { out } = bundle.tick();
+  const listed = select(out, "results").filter((r) => r[0] === "append").map((r) => r[1]);
+  assert.equal(listed.length, 2, select(out, "status").map((l) => l.join(" ")).join("\n"));
+  listed.forEach((item, i) => {
+    bundle.send("pick", i);
+    const spec = JSON.parse(new SimDict("cg.generated").stringify());
+    assert.match(spec.name, /^generated: seed \d+ \/ upper 5th after 1 bar \+ lower octave after 4 bars$/);
+    const rendered = canonEngine.render(spec);
+    assert.equal(new Set(rendered.events.map((e) => e.voice)).size, 3);
+    const report = require("cg-analyze").analyze(rendered, {
+      system: require("cg-scales").fromSpec(spec.system), meter: spec.meter, profile: "fux-relaxed", final: 60,
+    });
+    assert.equal(report.hard, 0, `${item}: ${report.violations.filter((v) => v.hard).map((v) => v.rule).join(" ")}`);
+    assert.deepEqual(errors(canonBundle.send("usespec", "cg.generated")), []);
+  });
+  bundle.send("voices", 4);
+  bundle.send("count", 1);
+  bundle.send("run");
+  bundle.tick();
+  bundle.send("pick", 0);
+  const four = JSON.parse(new SimDict("cg.generated").stringify());
+  assert.equal(four.voices.length, 4, "the melody and three followers");
+  // A profile you chose stays; back to two voices, fux-relaxed goes back to fux-strict.
+  bundle.send("profile", "florid");
+  assert.deepEqual(select(bundle.send("voices", 2), "show"), [["voices", 2]]);
+  bundle.send("profile", "fux-relaxed");
+  assert.deepEqual(select(bundle.send("voices", 3), "show"), [["voices", 3]], "already fux-relaxed: nothing to change");
+  assert.deepEqual(select(bundle.send("voices", 2), "show"), [["voices", 2], ["profile", "fux-strict"]]);
 });
 
 test("cg.generate: a setting with no canon says which rule blocks it", () => {

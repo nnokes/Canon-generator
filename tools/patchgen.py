@@ -652,8 +652,9 @@ def generate():
     show, done, status, error."""
     p = Patch(rect=(80, 80, 680, 380))
     p.note(GENERATED_NOTE, 20, 10, 600, 1)
-    inlet = p.inlet(20, 50, "messages: run, stop, settings, mode, notes, below, above, interval, delay, profile, "
-                    "cadence, seed, count, taste, slicems, budget, pick, info", 0)
+    inlet = p.inlet(20, 50, "messages: run, stop, settings, mode, notes, below, above, voices, interval, delay, "
+                    "interval2, delay2, interval3, delay3, profile, cadence, seed, count, taste, slicems, budget, "
+                    "pick, info", 0)
     load = p.obj("loadbang", 110, 50, 1, 1, ["bang"])
     ask = p.msg("settings", 110, 80)
     v8 = p.obj("v8 cg.generate.bundle.js", 20, 115, 1, 1)
@@ -985,7 +986,8 @@ def panel_canon():
     header("PIANO ROLL", 17)
     p.comment("rules", 120, row(17))
     rules = named(p.ui("umenu", 170, row(17), 110, 22, 1, 3, ["int", "", ""],
-                       items=["canon", ",", "florid", ",", "fux-strict", ",", "spectral", ",", "free"]), "rules")
+                       items=["canon", ",", "florid", ",", "fux-strict", ",", "fux-relaxed", ",", "spectral", ",",
+                              "free"]), "rules")
     send(rules, "profile", outlet=1)  # the menu's item text
     p.comment("red = fault, amber = soft; click a marker", 290, row(17))
     roll = named(p._add(p._place({
@@ -1119,7 +1121,8 @@ def panel_finder():
 
     row_label("Rules", 200)
     rules_menu = p.ui("umenu", 220, 200, 130, 22, 1, 3, ["int", "", ""],
-                      items=["canon", ",", "florid", ",", "fux-strict", ",", "spectral", ",", "free"])
+                      items=["canon", ",", "florid", ",", "fux-strict", ",", "fux-relaxed", ",", "spectral", ",",
+                             "free"])
     present(rules_menu)
     rows["profile"] = rules_menu
     hint("Perpetual (it loops)", 370, 200)
@@ -1190,7 +1193,8 @@ def panel_finder():
         "(in the Max window) = 20000 canons tried: narrow the ranges. No sets: the line says why.",
         "Rules: canon = Albrechtsberger's florid canon rules (the default). florid = the same without the "
         "two canon rules (a beat's rest before a voice comes back; no phrase starting a 7th or 9th from "
-        "the last). fux-strict = note against note: strict, few results. spectral = no hard rules; the "
+        "the last). fux-strict = note against note: strict, few results. fux-relaxed = the same as Fux "
+        "relaxes it for 3 or 4 parts (hidden fifths a cost). spectral = no hard rules; the "
         "cost comes from roughness and parallels. free = no rules: everything is clean. Perpetual: every "
         "voice loops, so where the melody wraps around is judged too.",
         "Time slice: the search runs in pieces. The finder works this many ms, lets Max redraw and take "
@@ -1228,33 +1232,39 @@ def panel_finder():
     hint("/", gx + 215, 165)
     gen_number("above", gx + 250, 165, minimum=0, maximum=21)
     hint("steps from the final", gx + 305, 165)
-    present(p.comment("Follower", gx, 200))
-    gen_number("interval", gx + 160, 200, minimum=-21, maximum=21)
-    hint("steps, after", gx + 215, 200)
-    gen_number("delay", gx + 320, 200, minimum=0, maximum=16)
-    hint("bars", gx + 375, 200)
-    present(p.comment("Rules", gx, 235))
-    gen_menu("profile", gx + 160, 235, 110, ["fux-strict", "canon", "florid", "spectral", "free"])
-    hint("close", gx + 280, 235)
-    gen_menu("cadence", gx + 330, 235, 60, ["6|8", "3|1"])
-    present(p.comment("Seed", gx, 270))
-    gen_number("seed", gx + 160, 270)
-    hint("canons", gx + 215, 270)
-    gen_number("count", gx + 272, 270, minimum=1, maximum=32)
-    hint("taste", gx + 326, 270)
-    gen["taste"] = p.ui("toggle", gx + 376, 270, 22, 22, 1, 1, ["int"])
+    present(p.comment("Voices", gx, 200))
+    gen_number("voices", gx + 160, 200, minimum=2, maximum=4)
+    hint("the melody + 1 to 3 followers", gx + 215, 200)
+    for row, (label_text, suffix, note) in enumerate([("Follower", "", ""), ("Follower 2", "2", "3+ voices"),
+                                                      ("Follower 3", "3", "4 voices")]):
+        y = 235 + 35 * row
+        present(p.comment(label_text, gx, y))
+        gen_number("interval" + suffix, gx + 160, y, minimum=-21, maximum=21)
+        hint("steps, after", gx + 215, y)
+        gen_number("delay" + suffix, gx + 320, y, minimum=0, maximum=16)
+        hint("bars" + (f": {note}" if note else ""), gx + 375, y)
+    present(p.comment("Rules", gx, 340))
+    gen_menu("profile", gx + 160, 340, 110, ["fux-strict", "fux-relaxed", "canon", "florid", "spectral", "free"])
+    hint("close", gx + 280, 340)
+    gen_menu("cadence", gx + 330, 340, 60, ["6|8", "3|1"])
+    present(p.comment("Seed", gx, 375))
+    gen_number("seed", gx + 160, 375)
+    hint("canons", gx + 215, 375)
+    gen_number("count", gx + 272, 375, minimum=1, maximum=32)
+    hint("taste", gx + 326, 375)
+    gen["taste"] = p.ui("toggle", gx + 376, 375, 22, 22, 1, 1, ["int"])
     present(gen["taste"])
-    gen_run = p.msg("run", gx + 404, 270)
-    gen_stop = p.msg("stop", gx + 446, 270)
+    gen_run = p.msg("run", gx + 404, 375)
+    gen_stop = p.msg("stop", gx + 446, 375)
     present(gen_run, gen_stop)
-    present(p.comment("Canons: click one to hear it in the canon panel", gx, 310))
-    gen_results = p.ui("umenu", gx, 335, 460, 22, 1, 3, ["int", "", ""])
+    present(p.comment("Canons: click one to hear it in the canon panel", gx, 415))
+    gen_results = p.ui("umenu", gx, 440, 460, 22, 1, 3, ["int", "", ""])
     present(gen_results)
-    present(p.comment("Status", gx, 370))
-    gen_line = p.msg("", gx + 55, 370, w=405)
+    present(p.comment("Status", gx, 475))
+    gen_line = p.msg("", gx + 55, 475, w=405)
     present(gen_line)
-    present(p.comment("How to read it", gx, 410, fontface=1))
-    gen_bottom = 435
+    present(p.comment("How to read it", gx, 515, fontface=1))
+    gen_bottom = 540
     for text in [
         "A canon reads like  2. seed 3: C5 B4 D5 C5 ... / cost 1.5  : its seed, then the melody's first notes. "
         "A seed is a canon: the same settings and seed give the same canon. Canons = how many seeds to try, "
@@ -1267,6 +1277,9 @@ def panel_finder():
         "delay or range. The octave a bar later can only move by leaps: a step would make a 7th or 9th.",
         "The close: 6|8, a major sixth opening to the octave, or 3|1, a minor third closing to the unison "
         "(Fux), with the leading note raised where the mode needs it (C sharp in D dorian) and reached by step.",
+        "Voices 3 or 4: each follower enters at its own interval and delay. The rules turn to fux-relaxed, Fux's "
+        "rules for more parts: a hidden fifth or octave costs instead of failing (never two in a row), and an "
+        "empty chord (no third or sixth) costs. Two followers a bar apart each can't work: a step makes a 7th.",
     ]:
         lines = -(-len(text) // 52) + 1  # generous, as the finder's
         present(p.note(text, gx, gen_bottom, 460, lines))
