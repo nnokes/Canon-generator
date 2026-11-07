@@ -146,3 +146,59 @@ test("search: progress arrives during a long search, with the best so far", () =
   assert.equal(first.value.total, 38);
   assert.ok(first.value.best && Number.isFinite(first.value.best.cost));
 });
+
+// ---------------------------------------------------------------- M4 part F: the edits toggle
+
+// The golden (M4's exit criterion): Albrechtsberger's canon at the unison, 4 beats
+// later (Mann Ex. 201), with its fourth note raised a step so the canon breaks.
+test("edits: Ex. 201 with one note broken is repaired by one note, naming the rule; with edits off the melody never changes", () => {
+  const fx = fixture("ex201.json");
+  const broken = { source: "list", notes: fx.dux.notes.map((n, i) => (i === 3 ? { ...n, degree: n.degree + 1 } : n)) };
+  const options = { dux: broken, system: fx.system, meter: fx.meter, voices: 2, ranges: { intervals: [0], delays: [4] } };
+  const scale = scales.fromSpec(fx.system);
+  // Edits off: the canon is reported broken, and its spec plays your melody as given.
+  const off = finder.find(options);
+  assert.equal(off.results.length, 1);
+  assert.ok(off.results[0].hard > 0, "broken");
+  assert.ok(off.results.every((r) => !r.repaired));
+  assert.deepEqual(finder.specFor(options, off.results[0]).dux, broken, "your melody, unchanged");
+  // Edits on: the repair restores one note, says which rule it fixed, and passes afresh.
+  const on = finder.find({ ...options, allowEdits: true });
+  const fixed = on.results.find((r) => r.repaired);
+  assert.ok(fixed, "a repair");
+  assert.equal(fixed.edits.length, 1);
+  assert.deepEqual([fixed.edits[0].index, fixed.edits[0].from, fixed.edits[0].to], [3, 10, 9], "note 4, back to Albrechtsberger's");
+  assert.deepEqual([fixed.edits[0].bar, fixed.edits[0].beat], [2, 1]);
+  assert.ok(fixed.edits[0].fixes.includes("dissonance"), fixed.edits[0].fixes.join(" "));
+  const spec = finder.specFor(options, fixed);
+  assert.match(spec.name, /\(1 edit\)$/);
+  assert.equal(analyze.analyze(canon.render(spec), { system: scale, meter: fx.meter, profile: "canon" }).hard, 0);
+  assert.equal(on.results.indexOf(fixed), 0, "no clean canon here, so the repair comes first");
+  assert.deepEqual(on.repairs, { tried: 1, found: 1, max: 3 });
+});
+
+// M3 session 1's clip: no four-voice set at normal speed. With edits, near sets
+// (from the followers with the fewest faults) are repaired.
+test("edits: your clip makes a four-voice canon at x1 with two notes changed", () => {
+  const io = require("cg-io");
+  const round = require("cg-presets").preset(0);
+  const system = (round.groups ? round.groups[0] : round).system;
+  const parsed = io.parseMidi(fs.readFileSync(path.join(__dirname, "fixtures", "live-clip.mid")));
+  const dux = { source: "list", notes: io.melodyFromMidi(parsed, { system: scales.fromSpec(system) }).notes };
+  const options = {
+    dux, system, meter: round.meter, voices: 4, ranges: { intervals: finder.range(-9, 9), delays: finder.range(1, 8) },
+    allowEdits: true, repairs: 3,
+  };
+  const out = finder.find(options);
+  assert.equal(out.tried, 0, "no set of followers at all");
+  const repaired = out.results.filter((r) => r.repaired);
+  assert.ok(repaired.length >= 1, JSON.stringify(out.repairs));
+  assert.equal(repaired[0].edits.length, 2, repaired[0].label);
+  assert.ok(repaired[0].edits.every((e) => Math.abs(e.steps) <= 4), "each note moves a fifth at most");
+  for (const r of repaired) {
+    const again = analyze.analyze(canon.render(finder.specFor(options, r)), { system: scales.fromSpec(system), meter: round.meter, profile: "canon" });
+    assert.equal(again.hard, 0, r.label);
+    assert.equal(r.settings.length, 3, "three followers");
+  }
+  assert.ok(repaired.every((r, i) => i === 0 || r.edits.length >= repaired[i - 1].edits.length), "fewest edits first");
+});

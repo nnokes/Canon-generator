@@ -23,8 +23,9 @@ as few notes as it can so that a canon works (§3.6).
 "Valid" means the finished canon passes the M3 analyzer (`cg-analyze`) under its rule
 profile with no hard faults: the generator and the analyzer judge with the same rules.
 
-**Status:** started 2026-10-19. Parts A–E and G are built (canons in two to four voices;
-rounds by the block method): 206 tests. Next: Max session 3 (rounds, below), then Part F.
+**Status:** started 2026-10-19. Parts A–G are built (canons in two to four voices; rounds by
+the block method; the finder's edits toggle): 212 tests. Next: Max sessions 3 (rounds) and 4
+(edits), below; then M4 closes.
 
 ---
 
@@ -313,19 +314,55 @@ part as one section of the round's tune:
     - the renderer's written degree
     - GENERATE's round controls, and a dorian round that plays through the canon panel
 
-## Part F. The edits toggle (`allowEdits`) in the finder
-- [ ] **Off (the default):** your melody is never changed; the finder ranks and reports,
-  as now.
-- [ ] **On:** for a chosen result (or the top *K*), find the version of your melody with
-  the fewest changes that makes it pass:
-  - the search from Part B, with the original pitch tried first and a soft cost for each
-    note changed and how far it moves (in scale steps)
-  - the rhythm kept as it is; locked notes never changed; an optional `maxEdits`
-- [ ] **The result:** the edited melody, each changed note, and the rule its change fixed
-  (from the diagnostics).
-- [ ] **Golden test:** Mann Ex. 201 with one note changed so a canon breaks: the repair
-  finds a one-note fix that passes and names the broken rule. With the toggle off, the
-  melody comes back unchanged.
+## Part F. The edits toggle (`allowEdits`) in the finder: done
+- [x] **Off (the default):** your melody is never changed. The finder ranks and reports
+  as before, with the same results.
+- [x] **On:** the near-misses are repaired, and those that pass are listed by the run
+  (your choice), after the clean results, fewest edits first.
+  - **The near-misses, with two voices:** the followers with the fewest faults.
+  - **With three or more:** the sets judged whole that have faults, plus **near sets**.
+    These are built from the 20 followers with the fewest faults alone (not only the
+    clean ones), ranked by their own and their pairs' faults, the best 100 judged whole.
+    On your clip at x1, only 3 pairs fit and no two share a follower, so no set nearly
+    fits from clean followers.
+  - **Ten repairs per run.**
+- [x] **The repair** (`repair()` in `cg-generate`), the search from Part B:
+  - **Fewest notes changed:** it searches allowing 0 changes, then 1, 2, ..., up to the
+    most allowed. The first canon found has the fewest. A budget per limit keeps a large
+    limit from stalling a run.
+  - **The most allowed** (your choice): the larger of 3 and 8% of the melody's notes,
+    rounded up (3 for 13 notes, 4 from 38, 6 for 64), or your own number.
+  - **Your notes first, then the nearest.** An edit costs 1 + the steps moved, weighted
+    over the soft rules. After the first canon the search goes on a while (half as long
+    again) and keeps the smallest moves.
+  - **Each note moves a fifth at most** (4 scale steps), so the melody stays yours.
+    Without that limit a repair on your clip moved a note 9 steps.
+  - **The rhythm is kept; locked notes never change.** An unchanged note keeps its exact
+    pitch, a chromatic or bent one included: the constraint model's per-note offset (Part
+    E's ficta) now also carries your original offsets.
+- [x] **The result:** the edited melody, and each change with its bar, beat, old and new
+  note, and the rules it fixed: the hard faults your melody's canon had where that note
+  sounds (any voice) or moving out of it, which the repaired canon hasn't.
+- [x] **Golden test:** Mann Ex. 201 at Albrechtsberger's unison 4 beats later, with note 4
+  raised a step so the canon breaks.
+  - **Edits on:** the repair changes one note, puts it back where Albrechtsberger had it
+    (E to D), names `dissonance`, and passes afresh.
+  - **Edits off:** the results play your melody exactly as given.
+- [x] **Found:**
+  - **Ex. 201**, with one note broken against each of several answers: repaired with one
+    note in 2–110 ms, the broken note itself restored in nearly every case.
+  - **Your clip, 4 voices at x1:** no set at all, but with edits on, 8 of the 10 best near
+    sets become clean canons with 2–3 notes changed (each moved 1–2 steps), about 8 s.
+  - **The round preset, 2 voices:** all 10 near-misses repaired with 1–2 notes, in 0.9 s.
+- [x] **Tests:**
+  - the golden (both ways)
+  - your clip's four-voice repair
+  - fewest edits first, including a melody that needs exactly three; the default maximum
+  - a maximum respected; locked notes; moves a fifth at most
+  - a chromatic note kept exactly
+  - the wrapper: messages, echoes, refusals, repaired items after the clean ones, and a
+    pick that plays the edited melody and names each change
+  - the panel's wiring and words
 
 ## Part G. Max: Generate in the finder panel (built first, at your request, for two voices)
 - [x] **`code/cg.generate.v8.js`** (bundled to `patchers/cg.generate.bundle.js`):
@@ -366,8 +403,10 @@ part as one section of the round's tune:
   canons pass `fux-strict` and play through `usespec`; no canon names `repeat`; `mode
   panel` in 31-EDO D dorian; the patch's pick order; the column's wiring both ways and
   the shared time slice. Tests: 185.
-- [ ] **The edits toggle** (Part F): allow edits, max edits, and a repair of the picked
-  result.
+- [x] **The edits toggle** (Part F): a new row in the finder column, **Edits**: an
+  **allow** toggle and **max** (0 = auto). Repaired results read `4. lower 3rd / after 4: 1
+  edit / cost 0.5`. A click plays the repair, and the status line names each change, for
+  example `edit: bar 2 beat 1 : E5 to D5 / fixes dissonance`.
 - [x] **More voices** (Part D): **voices** (2–4), and **follower 2** and **follower 3**
   (interval and delay; defaults the octave below 4 bars later and the fourth below 5 bars
   later). With more than two voices the rules switch to `fux-relaxed`, and back to
@@ -479,6 +518,22 @@ so discard your copy (`git checkout -- patchers/cg.panel.finder.maxpat`), then `
 5. **How do they sound?** Whole notes make chorale-like rounds; rhythm comes in M5. Are
    the tunes singable, and is the unison cost (0.5) about right?
 
+## Max session 4: the edits toggle (Part F)
+**First:** the finder panel was remade again (an Edits row), so discard your copy
+(`git checkout -- patchers/cg.panel.finder.maxpat`), then `git pull`.
+1. **Load your clip.** In the finder, set voices to 4 and time scale x1 only. Run: no set,
+   as before.
+2. **Tick allow edits** (max 0 = auto) and run again. The progress line counts the repairs
+   (about 8 s in Node; Max may be slower). Repaired sets appear with `2 edits` or
+   `3 edits`.
+3. **Click one:** it plays, and the status lines name each change and the rule it fixed.
+   Does it still sound like your melody?
+4. **Two voices** with edits on: repairs come after the clean results, mostly 1 edit.
+5. **Afterwards:** the canon panel plays the repaired melody, so the next run searches
+   that. Load your .mid again to start from yours.
+6. **Is the time OK** with 4 voices? If not, fewer repairs per run (now 10) is the easy
+   lever.
+
 ## Results
 
 | Check | Result | Decision |
@@ -488,6 +543,6 @@ so discard your copy (`git checkout -- patchers/cg.panel.finder.maxpat`), then `
 | 2-voice canons at the 8ve, 5th, 4th; delays 1–4 bars (Part C) | **PASS** (Node, `tests/generate.test.js`): all 24 settings, above and below, no hard faults | First-species closes 6 \| 8 and 3 \| 1, with ficta; taste orders the search |
 | `fux-relaxed` (Part D) | **PASS** (Node, `tests/analyze.test.js`, `tests/generate.test.js`): Fux's Figs. 101, 104, 105 pass and Fig. 102 fails where he says; 3-voice canons in six settings, a 4-voice canon and dorian pass afresh | Fux's three- and four-part closes in the renderer; consonance between upper voices reckoned from the bass; the penultimate made by any two voices |
 | rounds by the block method (Part E) | **PASS** (Node, `tests/generate.test.js`): 3- and 4-voice rounds in four modes, no hard fault, no 6/4, each group alone clean, the wrap-around join judged; Mann Ex. 218–219 pass the `canon` rules | Column by column, cadence first; check windows by rule; ficta in the tune; the penultimate closes on the final; `unison` (soft) in `fux-relaxed` |
-| edits toggle golden test (Part F) | | |
+| edits toggle golden test (Part F) | **PASS** (Node, `tests/finder.test.js`): Ex. 201 broken by one note is repaired by one note (the same note restored), naming `dissonance`; edits off leaves the melody unchanged. Your clip at x1 makes four-voice canons with 2 notes changed | Repairs listed by run, fewest edits first; at most the larger of 3 and 8% of the notes; each note a fifth at most |
 | generated canons in Max (Part G) | First round: dorian closes skipped into the C sharp. Second round: **voice leading PASS**; a text collision in the finder panel | `cadence-approach` (hard), written degrees in the close; comments sized at 7.5 px a character, one help column per tool |
 | 32-note canon in Max within the slice budget (Part G) | | |

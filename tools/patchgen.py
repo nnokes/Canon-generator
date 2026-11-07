@@ -1147,25 +1147,34 @@ def panel_finder():
     for i, x in enumerate(["0.5", "1", "2"]):
         toggle("timescales", f"timescale {x}", f"x{x}", 565 + 65 * i, 235)
 
-    row_label("Time slice, ms", 270)
-    number("slicems", 220, 270, minimum=1, maximum=1000)
-    hint("smaller = smoother, bigger = sooner", 280, 270)
-    run = p.msg("run", 560, 270)
-    stop = p.msg("stop", 605, 270)
-    present(run, stop)
-    hint("stops the search", 655, 270)
+    # The edits toggle (M4 part F): repair the near-misses with the fewest changes.
+    row_label("Edits", 270)
+    edits = p.ui("toggle", 220, 270, 22, 22, 1, 1, ["int"])
+    present(edits)
+    rows["edits"] = edits
+    hint("allow: change notes to repair near-misses", 247, 270)
+    number("maxedits", 590, 270, minimum=0, maximum=64)
+    hint("max (0 = auto)", 648, 270)
 
-    present(p.comment("Results: click one to hear it in the canon panel", 20, 310))
-    results = p.ui("umenu", 20, 335, 760, 22, 1, 3, ["int", "", ""])
+    row_label("Time slice, ms", 305)
+    number("slicems", 220, 305, minimum=1, maximum=1000)
+    hint("smaller = smoother, bigger = sooner", 280, 305)
+    run = p.msg("run", 560, 305)
+    stop = p.msg("stop", 605, 305)
+    present(run, stop)
+    hint("stops the search", 655, 305)
+
+    present(p.comment("Results: click one to hear it in the canon panel", 20, 345))
+    results = p.ui("umenu", 20, 370, 760, 22, 1, 3, ["int", "", ""])
     present(results)
-    present(p.comment("Status", 20, 370))
-    line = p.msg("", 75, 370, w=705)
+    present(p.comment("Status", 20, 405))
+    line = p.msg("", 75, 405, w=705)
     present(line)
 
     # How to read it: one column the finder's full width. Lines are counted at a
     # generous 88 characters (Max draws wider than our estimate), plus one
     # spare, so Max's own wrapping never runs a paragraph into the next.
-    present(p.comment("How to read it", 20, 410, fontface=1))
+    present(p.comment("How to read it", 20, 445, fontface=1))
 
     def column(x, y, width, chars, paragraphs):
         for text in paragraphs:
@@ -1174,7 +1183,7 @@ def panel_finder():
             y += 14 + 14 * lines + 6
         return y
 
-    finder_bottom = column(20, 435, 760, 88, [
+    finder_bottom = column(20, 470, 760, 88, [
         "A result reads like  3. lower 3rd / after 4: 1 fault / cost 1  (from the round). The 3. is its "
         "rank: fewest faults first, then the lowest cost. lower 3rd / after 4 is the follower: a 3rd below "
         "the melody, coming in 4 beats after it. With 3 or more voices, + joins the followers.",
@@ -1200,6 +1209,12 @@ def panel_finder():
         "Time slice: the search runs in pieces. The finder works this many ms, lets Max redraw and take "
         "clicks, then carries on. Smaller = smoother; bigger = finishes sooner. 20 ms is about one "
         "screen refresh.",
+        "Edits: off, your melody is never changed. Ticked, the finder also repairs the near-misses: for "
+        "each, the fewest notes changed (each by a fifth at most) that make it pass, your own notes "
+        "tried first. Repairs come after the clean results, fewest edits first: 4. ...: 2 edits. A "
+        "click plays the repair and the status line names each change and the rule it fixed; the next "
+        "run then searches the repaired melody (load yours again to start over). Max = the most notes "
+        "changed; 0 = auto: 3, or 8% of the notes. Runs take longer (a second or so a repair with 4 voices).",
     ])
 
     # GENERATE (M4 part G): a column on the right, on the same rows.
@@ -1317,7 +1332,7 @@ def panel_finder():
 
     sends = [(rows[name], 1 if name == "profile" else 0, name)  # the rules menu sends its item's text
              for name in ["voices", "intervalfrom", "intervalto", "delayfrom", "delayto", "delaystep", "profile",
-                          "perpetual", "slicems"]]
+                          "perpetual", "edits", "maxedits", "slicems"]]
     sends += [(box, 0, message) for group in flags.values() for box, message in group]
     for source, source_outlet, message in sends:
         prepend = flow(f"prepend {message}", 2, 1)

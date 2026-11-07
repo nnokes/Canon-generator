@@ -505,9 +505,9 @@ test("cg.mpecheck: the target Hz, and what 'off' says about the readings left", 
 
 test("cg.finder exposes exactly its documented messages", () => {
   assert.deepEqual(loadBundle("cg.finder").handlers(), [
-    "budget", "delayfrom", "delays", "delaystep", "delayto", "info", "intervalfrom", "intervals", "intervalto",
-    "perpetual", "pick", "profile", "run", "settings", "slicems", "stop", "timescale", "timescales", "transform",
-    "transforms", "voices",
+    "budget", "delayfrom", "delays", "delaystep", "delayto", "edits", "info", "intervalfrom", "intervals", "intervalto",
+    "maxedits", "perpetual", "pick", "profile", "run", "settings", "slicems", "stop", "timescale", "timescales",
+    "transform", "transforms", "voices",
   ]);
 });
 
@@ -703,8 +703,12 @@ test("cg.finder: settings shows every box's value, and each setting echoes what 
   const bundle = loadBundle("cg.finder");
   assert.deepEqual(select(bundle.send("settings"), "show"), [
     ["voices", 2], ["intervalfrom", -9], ["intervalto", 9], ["delayfrom", 1], ["delayto", 8], ["delaystep", 1],
-    ["profile", "canon"], ["perpetual", 0], ["slicems", 20], ["transforms", 1, 0, 0, 0], ["timescales", 0, 1, 0],
+    ["profile", "canon"], ["perpetual", 0], ["edits", 0], ["maxedits", 0], ["slicems", 20], ["transforms", 1, 0, 0, 0],
+    ["timescales", 0, 1, 0],
   ]);
+  assert.deepEqual(select(bundle.send("edits", 1), "show"), [["edits", 1]]);
+  assert.deepEqual(select(bundle.send("maxedits", 4), "show"), [["maxedits", 4]]);
+  assert.match(errors(bundle.send("maxedits", -1))[0], /max edits: a whole number from 0 \(auto\) to 64/);
   assert.deepEqual(select(bundle.send("delaystep", 0.5), "show"), [["delaystep", 0.5]]);
   assert.deepEqual(select(bundle.send("delaystep", 0), "show"), [["delaystep", 0.5]], "0 is refused: it snaps back");
   assert.deepEqual(select(bundle.send("perpetual", 1), "show"), [["perpetual", 1]]);
@@ -721,6 +725,48 @@ test("cg.finder: a run that finds nothing says so in the menu", () => {
   const shown = select(bundle.tick().out, "results");
   assert.deepEqual(shown.slice(-2), [["append", "(none found: see the status line)"], ["set", 0]]);
   assert.match(errors(bundle.send("pick", 0))[0], /no result 0: the last run found 0/);
+});
+
+// M4 part F: the edits toggle, on the round preset's melody (Frere Jacques).
+test("cg.finder: edits on lists repaired canons after the clean ones; a pick plays the edited melody and names each change", () => {
+  const canonBundle = loadBundle("cg.canon");
+  canonBundle.send("preset", 0);
+  const melody = JSON.parse(new SimDict("cg.spec").stringify()).dux;
+  const bundle = loadBundle("cg.finder");
+  bundle.send("edits", 1);
+  bundle.send("run");
+  const { out } = bundle.tick();
+  const items = select(out, "results").filter((r) => r[0] === "append").map((r) => r[1]);
+  const repaired = items.map((text, i) => [text, i]).filter(([text]) => /: \d+ edits?( \/ cost [\d.]+)?$/.test(text));
+  assert.ok(repaired.length > 0, items.join("\n"));
+  const firstRepaired = repaired[0][1];
+  assert.ok(items.slice(0, firstRepaired).every((text) => /: clean/.test(text)), "the clean ones first");
+  assert.ok(items.every((text) => !/[,;]/.test(text)));
+  assert.ok(select(out, "status").some((line) => /^finder: edits: \d+ of 10 near-misses repaired \/ up to 3 notes changed each/.test(line.join(" "))));
+  // A pick plays the repair: your melody with exactly that many notes changed.
+  const picked = bundle.send("pick", firstRepaired);
+  assert.deepEqual(select(picked, "audition"), [["cg.audition"]]);
+  const spec = JSON.parse(new SimDict("cg.audition").stringify());
+  const count = Number(repaired[0][0].match(/: (\d+) edits?/)[1]);
+  assert.match(spec.name, new RegExp(`\\(${count} edits?\\)$`));
+  const system = require("cg-scales").fromSpec(spec.system);
+  const before = canonEngine.duxMaterial(melody, system);
+  const after = canonEngine.duxMaterial(spec.dux, system);
+  assert.equal(after.filter((n, i) => !n.rest && n.degree !== before[i].degree).length, count);
+  const lines = select(picked, "status").map((l) => l.join(" "));
+  assert.equal(lines.filter((l) => /^edit: bar \d+ beat [\d.]+ : [A-G][b#]?\d to [A-G][b#]?\d/.test(l)).length, count, lines.join("\n"));
+  assert.ok(lines.some((l) => /fixes/.test(l)));
+  assert.deepEqual(errors(canonBundle.send("usespec", "cg.audition")), []);
+  // Playing it made the repair the canon panel's melody (as any pick does), so the
+  // next run would search it: load the melody again. Edits off: no repairs, and a
+  // pick plays your melody as it is.
+  canonBundle.send("preset", 0);
+  bundle.send("edits", 0);
+  bundle.send("run");
+  const plain = select(bundle.tick().out, "results").filter((r) => r[0] === "append").map((r) => r[1]);
+  assert.ok(plain.every((text) => !/edits?/.test(text)));
+  bundle.send("pick", 0);
+  assert.deepEqual(JSON.parse(new SimDict("cg.audition").stringify()).dux, melody);
 });
 
 test("cg.finder: a 3+ voice run with no sets says why, from the first stage that came up empty", () => {

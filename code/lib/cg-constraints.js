@@ -51,6 +51,9 @@
 //     final       the mode's final, as a degree of the dux's system
 //     ficta       dux notes where the degree below the final is raised to the
 //                 leading note (a round's sections' next-to-last notes; M4 part E)
+//     original    your melody's notes ({ degree, offset }, M4 part F): a note
+//                 left on its original degree keeps its offset, so a chromatic or
+//                 bent note sounds exactly as you played it
 
 const canon = require("cg-canon");
 const analyze = require("cg-analyze");
@@ -124,6 +127,15 @@ function model(options) {
     const above = tuning.degreeCents(system, d + 2) - tuning.degreeCents(system, d + 1);
     return below > semitone + 10 && above > semitone + 10 ? below - semitone : 0; // cents up
   }
+  // A note's cents above its degree: ficta, or your original's offset where the
+  // note is unchanged (M4 part F).
+  const original = options.original || [];
+  function offsetOf(dux, i) {
+    const up = raise(dux, i);
+    if (up) return up;
+    const o = original[i];
+    return o && !o.rest && o.offset && dux[i] === o.degree ? o.offset : 0;
+  }
   const atEnd = final === undefined ? [...AT_END, "mode-final"] : AT_END; // mode-final's final: voice 0's last note
   const subProfile = (only) => ({ ...profileSpec(options.profile), only: ids.filter(only) });
   const nowRule = (id) => !LOOKAHEAD.includes(id) && !atEnd.includes(id);
@@ -151,7 +163,7 @@ function model(options) {
       source: "list",
       notes: notes.map((n, i) => {
         if (n.rest) return n;
-        const up = plain ? 0 : raise(dux, i);
+        const up = plain ? 0 : offsetOf(dux, i);
         return up ? { dur: n.dur, degree: dux[i], offset: up } : { dur: n.dur, degree: dux[i] };
       }),
     },
@@ -179,10 +191,13 @@ function model(options) {
       table.set(`${first}:${d}`, pitches);
     }
   }
+  // An inverting voice mirrors an offset too (cg-transform's invert).
+  const mirrored = (spec.voices || []).map((v) => Boolean(v) && (v.transform === "I" || v.transform === "RI"));
   const pitchOf = (i, dux) => {
     const e = skeleton[i];
     const first = inverts ? dux[firstVar] : null;
-    return table.get(`${first}:${dux[e.index]}`)[i] + raise(dux, e.index) / 100;
+    const cents = offsetOf(dux, e.index);
+    return table.get(`${first}:${dux[e.index]}`)[i] + (mirrored[e.voice] ? -cents : cents) / 100;
   };
 
   // Slices: each onset, and the events sounding there.
@@ -267,10 +282,10 @@ function model(options) {
   function checkOne(c, dux) {
     const events = c.events.map((i) => {
       const e = skeleton[i];
-      const up = raise(dux, e.index);
       const pitch = pitchOf(i, dux);
-      // A raised note keeps the degree it's written on, as the renderer marks it.
-      return up ? { ...e, pitch, degree: tuning.quantize(system, pitch - up / 100).degree } : { ...e, pitch };
+      const table_ = table.get(`${inverts ? dux[firstVar] : null}:${dux[e.index]}`)[i];
+      // A note off its degree keeps the degree it's written on, as the renderer marks it.
+      return Math.abs(pitch - table_) > 1e-9 ? { ...e, pitch, degree: tuning.quantize(system, table_).degree } : { ...e, pitch };
     });
     const report = analyze.analyze({ events }, {
       system, meter, consonance: model_, final, edges, metrics: false, profile: c.profile,

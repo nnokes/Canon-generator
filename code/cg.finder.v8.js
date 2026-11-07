@@ -17,6 +17,10 @@
 //   delayfrom|delayto|delaystep <beats>  show ...    the entry delays
 //   profile <name>               show profile ...    canon (default), florid, fux-strict, spectral, free
 //   perpetual <0|1>              show perpetual ...  judge a perpetual canon in its steady state
+//   edits <0|1>                  show edits ...      the edits toggle (M4 part F): also repair the
+//                                near-misses, the fewest notes changed; off, your melody is never changed
+//   maxedits <n>                 show maxedits ...   the most notes a repair changes; 0 = auto
+//                                (3, or 8% of the melody's notes)
 //   slicems <ms>                 show slicems ...    the time-slice budget: work per slice
 //   transform <P|I|R|RI> <0|1>   show transforms <P> <I> <R> <RI>   one transform on or off;
 //                                the panel's toggles, as 0/1 flags
@@ -29,7 +33,8 @@
 //                                <ms per slice>, status ... (one line; two for 3+ voices, and
 //                                a third saying why when no set was found)
 //   stop                         status stopped
-//   pick <i>                     audition cg.audition (the patch: stop, usespec, play)
+//   pick <i>                     audition cg.audition (the patch: stop, usespec, play); a repaired
+//                                result plays your melody edited, and a status line names each change
 //   info                         status ...
 // Errors come out as: error <message>. Every output starts with a selector, and
 // no text carries a comma or semicolon: Max reads those as separators.
@@ -40,6 +45,10 @@ outlets = 1;
 
 const finder = require("cg-finder");
 const rules = require("cg-rules");
+const scales = require("cg-scales");
+const tuning = require("cg-tuning");
+const canon = require("cg-canon");
+const NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 
 const TRANSFORMS = ["P", "I", "R", "RI", "segmentRetrograde", "segmentPermute"];
 // The panel's toggles: which transforms and time scales it shows.
@@ -48,7 +57,7 @@ const PANEL_SCALES = [0.5, 1, 2];
 // What the panel shows, one entry per box.
 const state = {
   voices: 2, intervalfrom: -9, intervalto: 9, delayfrom: 1, delayto: 8, delaystep: 1,
-  profile: "canon", perpetual: 0, slicems: 20,
+  profile: "canon", perpetual: 0, edits: 0, maxedits: 0, slicems: 20,
 };
 const CHECKS = {
   voices: [(v) => Number.isInteger(v) && v >= 2 && v <= 6, "voices: a whole number from 2 to 6"],
@@ -58,6 +67,7 @@ const CHECKS = {
   delayto: [(v) => v >= 0, "delays: 0 beats or more"],
   delaystep: [(v) => v > 0, "delays: every must be above 0"],
   slicems: [(v) => v > 0, "time slice: above 0 ms"],
+  maxedits: [(v) => Number.isInteger(v) && v >= 0 && v <= 64, "max edits: a whole number from 0 (auto) to 64"],
 };
 const extra = { transforms: ["P"], timeScales: [1], budget: 20000, keep: 50 };
 let search = null; // { it, options, started, slices, busy }
@@ -116,6 +126,11 @@ function settings() {
 }
 
 function voices(n) { set("voices", n); }
+function maxedits(n) { set("maxedits", n); }
+function edits(on) {
+  state.edits = on ? 1 : 0;
+  show("edits");
+}
 function intervalfrom(n) { set("intervalfrom", n); }
 function intervalto(n) { set("intervalto", n); }
 function delayfrom(x) { set("delayfrom", x); }
@@ -224,6 +239,7 @@ function run() {
     const opts = {
       voices: state.voices, profile: state.profile, perpetual: Boolean(state.perpetual),
       budget: extra.budget, keep: extra.keep, ranges: ranges(), ...current(),
+      allowEdits: Boolean(state.edits), maxEdits: state.maxedits > 0 ? state.maxedits : undefined,
     };
     search = { it: finder.search(opts), options: opts, started: Date.now(), slices: 0, busy: 0 };
     results = [];
@@ -263,7 +279,8 @@ tick.local = 1;
 // A result as a menu item: no commas (Max splits menu items on them).
 function menuText(r, i) {
   const cost = r.cost ? `cost ${round(r.cost)}` : "";
-  const mark = r.hard ? `${r.hard} ${r.hard === 1 ? "fault" : "faults"}` : "clean";
+  const mark = r.repaired ? `${r.edits.length} ${r.edits.length === 1 ? "edit" : "edits"}`
+    : r.hard ? `${r.hard} ${r.hard === 1 ? "fault" : "faults"}` : "clean";
   return `${i + 1}. ${r.label.replace(/\s*,\s*/g, " / ")}: ${mark}${cost ? " / " + cost : ""}`.replace(/[,;]/g, " ");
 }
 menuText.local = 1;
@@ -277,10 +294,14 @@ function finish(value) {
   if (!results.length) outlet(0, "results", "append", "(none found: see the status line)");
   outlet(0, "results", "set", 0); // show the top one without playing it
   const ms = Date.now() - search.started;
-  const passing = results.filter((r) => r.hard === 0).length;
+  const passing = results.filter((r) => r.hard === 0 && !r.repaired).length;
   const sets = value.voices > 2;
   const empty = sets ? noSets(value) : null;
-  if (empty) {
+  const fixed = value.repairs ? value.repairs.found : 0;
+  if (value.repairs && (empty || !passing)) {
+    outlet(0, "progress", "done:", passing, sets ? "clean sets /" : "clean /", fixed, "repaired with edits (fewest first) of",
+      value.repairs.tried, "near-misses / up to", value.repairs.max, "edits");
+  } else if (empty) {
     outlet(0, "progress", "done: no sets:", ...empty);
   } else if (sets) {
     outlet(0, "progress", "done:", passing, "clean sets of", value.tried, "/", value.passingFollowers, "of",
@@ -297,6 +318,10 @@ function finish(value) {
       "followers pass against the dux alone,", value.pairsOk, "pairs of them work together");
   }
   if (empty) outlet(0, "status", "finder: no sets:", ...empty);
+  if (value.repairs) {
+    outlet(0, "status", "finder: edits:", fixed, "of", value.repairs.tried, "near-misses repaired / up to", value.repairs.max,
+      "notes changed each / each note moved a fifth at most");
+  }
   search = null;
 }
 finish.local = 1;
@@ -341,13 +366,32 @@ function pick(index) {
     const spec = finder.specFor(lastOptions, r);
     auditionDict.parse(JSON.stringify(spec));
     outlet(0, "audition", "cg.audition");
-    outlet(0, "status", "audition:", r.label);
+    outlet(0, "status", "audition:", spec.name.replace(/^found: /, "").replace(/[,;()]/g, " ").replace(/\s+/g, " ").trim());
+    if (r.repaired) {
+      for (const e of r.edits) {
+        outlet(0, "status", "edit: bar", e.bar, "beat", e.beat, ":", noteName(e.index, e.from, true), "to", noteName(e.index, e.to, false),
+          ...(e.fixes.length ? ["/ fixes", ...e.fixes] : []));
+      }
+    }
   });
 }
+
+// A note of your melody by name (12-EDO) or degree: as you wrote it, or as edited.
+function noteName(index, degree, yours) {
+  const system = scales.fromSpec(lastOptions.system);
+  const named = system.period_cents === 1200 && (system.steps_cents || []).every((c) => Math.abs(c / 100 - Math.round(c / 100)) < 0.01);
+  if (!named) return `degree ${degree}`;
+  const material = canon.duxMaterial(lastOptions.dux, system);
+  const offset = yours && material[index] ? material[index].offset || 0 : 0;
+  const midi = Math.round(tuning.degreeToPitch(system, degree) + offset / 100);
+  return NAMES[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1);
+}
+noteName.local = 1;
 
 function info() {
   const s = state;
   outlet(0, "status", "finder:", s.voices, "voices, intervals", s.intervalfrom, "to", s.intervalto,
     "steps, delays", s.delayfrom, "to", s.delayto, "every", s.delaystep, "beats, transforms", ...extra.transforms,
-    "time scales", ...extra.timeScales, "profile", s.profile + (s.perpetual ? " (perpetual)" : ""), "slice", s.slicems, "ms");
+    "time scales", ...extra.timeScales, "profile", s.profile + (s.perpetual ? " (perpetual)" : ""), "slice", s.slicems, "ms",
+    "edits", s.edits ? `on (max ${s.maxedits || "auto"})` : "off");
 }

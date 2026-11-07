@@ -2853,6 +2853,9 @@ exports.DEFAULT_METER = DEFAULT_METER;
 //     final       the mode's final, as a degree of the dux's system
 //     ficta       dux notes where the degree below the final is raised to the
 //                 leading note (a round's sections' next-to-last notes; M4 part E)
+//     original    your melody's notes ({ degree, offset }, M4 part F): a note
+//                 left on its original degree keeps its offset, so a chromatic or
+//                 bent note sounds exactly as you played it
 
 const canon = require("cg-canon");
 const analyze = require("cg-analyze");
@@ -2926,6 +2929,15 @@ function model(options) {
     const above = tuning.degreeCents(system, d + 2) - tuning.degreeCents(system, d + 1);
     return below > semitone + 10 && above > semitone + 10 ? below - semitone : 0; // cents up
   }
+  // A note's cents above its degree: ficta, or your original's offset where the
+  // note is unchanged (M4 part F).
+  const original = options.original || [];
+  function offsetOf(dux, i) {
+    const up = raise(dux, i);
+    if (up) return up;
+    const o = original[i];
+    return o && !o.rest && o.offset && dux[i] === o.degree ? o.offset : 0;
+  }
   const atEnd = final === undefined ? [...AT_END, "mode-final"] : AT_END; // mode-final's final: voice 0's last note
   const subProfile = (only) => ({ ...profileSpec(options.profile), only: ids.filter(only) });
   const nowRule = (id) => !LOOKAHEAD.includes(id) && !atEnd.includes(id);
@@ -2953,7 +2965,7 @@ function model(options) {
       source: "list",
       notes: notes.map((n, i) => {
         if (n.rest) return n;
-        const up = plain ? 0 : raise(dux, i);
+        const up = plain ? 0 : offsetOf(dux, i);
         return up ? { dur: n.dur, degree: dux[i], offset: up } : { dur: n.dur, degree: dux[i] };
       }),
     },
@@ -2981,10 +2993,13 @@ function model(options) {
       table.set(`${first}:${d}`, pitches);
     }
   }
+  // An inverting voice mirrors an offset too (cg-transform's invert).
+  const mirrored = (spec.voices || []).map((v) => Boolean(v) && (v.transform === "I" || v.transform === "RI"));
   const pitchOf = (i, dux) => {
     const e = skeleton[i];
     const first = inverts ? dux[firstVar] : null;
-    return table.get(`${first}:${dux[e.index]}`)[i] + raise(dux, e.index) / 100;
+    const cents = offsetOf(dux, e.index);
+    return table.get(`${first}:${dux[e.index]}`)[i] + (mirrored[e.voice] ? -cents : cents) / 100;
   };
 
   // Slices: each onset, and the events sounding there.
@@ -3069,10 +3084,10 @@ function model(options) {
   function checkOne(c, dux) {
     const events = c.events.map((i) => {
       const e = skeleton[i];
-      const up = raise(dux, e.index);
       const pitch = pitchOf(i, dux);
-      // A raised note keeps the degree it's written on, as the renderer marks it.
-      return up ? { ...e, pitch, degree: tuning.quantize(system, pitch - up / 100).degree } : { ...e, pitch };
+      const table_ = table.get(`${inverts ? dux[firstVar] : null}:${dux[e.index]}`)[i];
+      // A note off its degree keeps the degree it's written on, as the renderer marks it.
+      return Math.abs(pitch - table_) > 1e-9 ? { ...e, pitch, degree: tuning.quantize(system, table_).degree } : { ...e, pitch };
     });
     const report = analyze.analyze({ events }, {
       system, meter, consonance: model_, final, edges, metrics: false, profile: c.profile,
@@ -3130,6 +3145,8 @@ exports.lookback = lookback;
 //   part C).
 //   round(settings) does the same for a round at the unison, written by the
 //   block method (M4 part E).
+//   repair(options) changes as few notes of your melody as it can so that a
+//   canon passes (the answer finder's edits, M4 part F).
 //
 // options: everything cg-constraints.model takes (spec, degrees, profile,
 // consonance, final), plus:
@@ -3150,6 +3167,12 @@ exports.lookback = lookback;
 //   jitter    how much the seed reorders candidates, in cost units (default 0.5)
 //   prefer    (dux) -> extra soft cost for a partial dux (the edits toggle's
 //             closeness to your melody, M4 part F); default none
+//   from, limit  (repair) your melody's degrees, and the most notes that may
+//             differ from them; a candidate that would change one more is left out
+//   score     (dux, report) -> a number: keep searching after the first canon
+//             (as many candidates again, at least `after`, default 2000) and
+//             return the passing one with the lowest score (a repair: the
+//             smallest moves)
 //
 // Result: { found, dux, spec, report, nodes, complete, diagnostics, seed }
 //   found        a canon with no hard fault
@@ -3163,6 +3186,7 @@ exports.lookback = lookback;
 
 const constraints = require("cg-constraints");
 const rng = require("cg-rng");
+const time = require("cg-time");
 
 const DEFAULTS = { seed: 1, budget: 100000, beam: 0, order: "auto", jitter: 0.5 };
 
@@ -3200,7 +3224,7 @@ function orderOf(variables, how, section, columns = "left") {
 function* search(input) {
   const options = { ...DEFAULTS };
   for (const [k, v] of Object.entries(input)) if (v !== undefined) options[k] = v; // unset: the default
-  const m = constraints.model(options);
+  const m = options.model || constraints.model(options); // a repair builds the model once
   const backwards = (options.spec.voices || []).some((v) => v.transform === "R" || v.transform === "RI");
   const how = options.order === "auto" ? (backwards ? "outside-in" : "left") : options.order;
   const order = orderOf(m.variables, how, options.section, options.columns);
@@ -3244,11 +3268,19 @@ function* search(input) {
     if (p === deepest) for (const rule of rules) deepestRules[rule] = (deepestRules[rule] || 0) + 1;
   };
 
+  // A repair's limit: how many notes already differ from yours.
+  const from = options.from;
+  const changed = () => (from ? dux.reduce((n, d, i) => n + (d !== undefined && from[i] !== undefined && d !== from[i] ? 1 : 0), 0) : 0);
+
   // Each candidate for step p, with the soft cost of the checks it completes;
-  // those that break a hard rule are left out.
+  // those that break a hard rule are left out (and in a repair, those that would
+  // change one note too many).
   function candidates(p) {
     const v = order[p];
-    const degrees = fixed[v] !== undefined ? [fixed[v]] : m.degrees;
+    const atLimit = from && from[v] !== undefined && changed() >= options.limit;
+    const within = from && from[v] !== undefined && options.reach !== undefined
+      ? m.degrees.filter((d) => Math.abs(d - from[v]) <= options.reach) : m.degrees;
+    const degrees = fixed[v] !== undefined ? [fixed[v]] : atLimit ? [from[v]] : within;
     const out = [];
     for (const d of degrees) {
       nodes++;
@@ -3269,11 +3301,14 @@ function* search(input) {
   function finish(degrees) {
     const report = m.full(degrees);
     if (report.hard > 0) reject(order.length, report.violations);
-    if (!best || report.hard < best.report.hard || (report.hard === best.report.hard && report.cost < best.report.cost)) {
-      best = { dux: degrees.slice(), report };
-    }
+    const score = options.score && report.hard === 0 ? options.score(degrees, report) : null;
+    const better = !best || report.hard < best.report.hard
+      || (report.hard === best.report.hard && (score !== null ? score < best.score : report.cost < best.report.cost));
+    if (better) best = { dux: degrees.slice(), report, score };
     return report.hard === 0;
   }
+  // With a score, the search goes on a while after its first canon.
+  let until = Infinity;
 
   const progress = (depth) => ({ phase: "searching", nodes, depth, best: best ? best.report.hard : null });
   let found = false;
@@ -3304,7 +3339,8 @@ function* search(input) {
     // Depth-first with backtracking: a stack of each step's remaining candidates.
     const stack = [candidates(0)];
     while (stack.length) {
-      if (nodes >= options.budget) { complete = false; break; }
+      if (nodes >= until) break; // looked long enough for a better one
+      if (nodes >= options.budget) { complete = found; break; }
       const p = stack.length - 1;
       const choices = stack[p];
       if (!choices.length) {
@@ -3315,7 +3351,11 @@ function* search(input) {
       const choice = choices.shift();
       dux[order[p]] = choice.degree;
       if (p + 1 === order.length) {
-        if (finish(dux)) { found = true; break; }
+        if (finish(dux)) {
+          if (!options.score) { found = true; break; }
+          if (!found) until = nodes + Math.max(options.after || 500, Math.ceil(nodes / 2));
+          found = true;
+        }
         continue;
       }
       stack.push(candidates(p + 1));
@@ -3460,12 +3500,93 @@ function round(settings = {}) {
   };
 }
 
-function generate(options) {
-  const it = search(options);
+// ---------------------------------------------------------------- repairs (M4 part F)
+
+// The most notes a repair may change, by default (your choice): the larger of 3
+// and 8% of the melody's notes, rounded up.
+function maxEdits(count) {
+  return Math.max(3, Math.ceil(0.08 * count - 1e-9));
+}
+
+const EDIT_WEIGHT = 10; // an edit outweighs any soft rule: your note is tried first, then the nearest
+
+// Your melody, repaired: the fewest notes changed so that the canon passes.
+//   options: what search takes (spec: the canon, its dux your melody's rhythm),
+//   plus
+//     original   your melody's notes as cg-transform notes ({ degree, offset,
+//                rest, dur }); unchanged notes keep their exact pitch
+//     max        the most notes to change (default maxEdits)
+//     reach      how far a changed note may move, in scale steps (default 4: a
+//                fifth), so the melody stays yours
+//     budget     candidate notes per limit (default 20000)
+//     fixed      notes locked to their degree
+//   It searches allowing 0 changes, then 1, then 2, up to max, so the first
+//   canon found has the fewest. Within a limit, your note is tried first, then
+//   the nearer degrees (an edit costs 1 + steps moved, weighted over the soft
+//   rules), with no jitter.
+// Result: search's, plus
+//   edits      [{ index, t, bar, beat, from, to, steps, fixes }]: each change,
+//              where it is (bar and beat from 1), and the hard rules it fixed:
+//              faults your melody's canon had where that note sounds (any
+//              voice) or moving out of it, which the repaired canon hasn't
+//   original   your melody's canon analyzed; max; limits [{ limit, nodes,
+//              complete }]
+function* repair(input) {
+  const original = input.original;
+  const from = original.map((n) => (n.rest ? undefined : n.degree));
+  const notes = from.filter((d) => d !== undefined);
+  const max = input.max === undefined ? maxEdits(notes.length) : input.max;
+  const locked = Object.values(input.fixed || {});
+  const degrees = input.degrees || [Math.min(...notes, ...locked) - 4, Math.max(...notes, ...locked) + 4];
+  const edit = (dux) => dux.reduce((c, d, i) => c + (d === undefined || from[i] === undefined || d === from[i] ? 0 : 1 + Math.abs(d - from[i])), 0);
+  const prefer = (dux) => EDIT_WEIGHT * edit(dux) + (input.prefer ? input.prefer(dux) : 0);
+  const score = (dux, report) => edit(dux) + report.cost / 100; // the smallest moves, then the smoothest
+  const reach = input.reach === undefined ? 4 : input.reach;
+  const base = { ...input, degrees, original, from, prefer, score, reach, jitter: 0, budget: input.budget || 20000 };
+  const model = constraints.model(base);
+  const before = model.full(from);
+  const limits = [];
+  let last = null;
+  for (let limit = 0; limit <= max; limit++) {
+    const result = yield* search({ ...base, model, limit });
+    limits.push({ limit, nodes: result.nodes, complete: result.complete });
+    last = result;
+    if (result.found) {
+      const beats = (input.spec.meter && input.spec.meter.beats) || 4;
+      return { ...result, edits: describeEdits(model, original, from, result, before, beats), original: before, max, limits };
+    }
+  }
+  return { ...last, found: false, edits: [], original: before, max, limits };
+}
+
+// Each changed note: where it is, and the faults it took away.
+function describeEdits(m, original, from, result, before, beats) {
+  const after = new Set(result.report.violations.filter((v) => v.hard).map((v) => `${v.rule}@${Math.round(v.t * 1e6)}`));
+  const removed = before.violations.filter((v) => v.hard && !after.has(`${v.rule}@${Math.round(v.t * 1e6)}`));
+  const starts = [];
+  original.reduce((t, n) => { starts.push(t); return t + n.dur; }, 0);
+  return from.map((d, i) => [d, i]).filter(([d, i]) => d !== undefined && result.dux[i] !== d).map(([d, i]) => {
+    const sounding = m.skeleton.filter((e) => e.index === i);
+    const near = (t) => sounding.some((e) => time.le(e.t, t) && time.le(t, e.t + e.dur));
+    const t = starts[i];
+    return {
+      index: i, t, bar: Math.floor(t / beats + 1e-9) + 1, beat: Math.round((t - Math.floor(t / beats + 1e-9) * beats) * 1000) / 1000 + 1,
+      from: d, to: result.dux[i], steps: result.dux[i] - d,
+      fixes: [...new Set(removed.filter((v) => near(v.t)).map((v) => v.rule))],
+    };
+  });
+}
+
+// Any of the generators run to the end.
+function run(it) {
   for (;;) {
     const step = it.next();
     if (step.done) return step.value;
   }
+}
+
+function generate(options) {
+  return run(search(options));
 }
 
 exports.search = search;
@@ -3473,6 +3594,9 @@ exports.generate = generate;
 exports.orderOf = orderOf;
 exports.strict = strict;
 exports.round = round;
+exports.repair = repair;
+exports.maxEdits = maxEdits;
+exports.run = run;
 exports.melodicTaste = melodicTaste;
   };
 
@@ -3517,15 +3641,37 @@ exports.melodicTaste = melodicTaste;
 //   distinctDelays  N voices: followers enter one after another (default true)
 //   budget      the most renders + analyses (default 20000)
 //   keep        how many results to return (default 50)
+//   allowEdits  (M4 part F) also repair the near-misses: the fewest changes to
+//               your melody that make each pass (cg-generate's repair). Off by
+//               default: then your melody is never changed.
+//   maxEdits    the most notes a repair may change (default: the larger of 3
+//               and 8% of the melody's notes)
+//   repairs     how many near-misses to repair (default 10): with 2 voices the
+//               followers with the fewest faults; with more, the sets judged
+//               whole that have faults, and near sets (below)
+//   repairBudget  candidate notes per repair limit (default 20000)
+//
+// With edits on, repairs that pass come after the clean results, fewest edits
+// first: { ...result, repaired: true, edits, dux (your melody, edited) }.
+// specFor gives such a result's spec with the edited melody.
 
 const tuning = require("cg-tuning");
 const scales = require("cg-scales");
 const canon = require("cg-canon");
 const analyze = require("cg-analyze");
+const generate = require("cg-generate");
 
 const DEFAULTS = {
   profile: "canon", voices: 2, budget: 20000, keep: 50, passes: 2, distinctDelays: true,
+  allowEdits: false, repairs: 10, repairBudget: 20000,
 };
+// Near sets (edits on, 3+ voices): sets built from the followers with the
+// fewest faults alone, whether or not they pass, ranked by their own and their
+// pairs' faults; the best are judged whole. (M4 part F: on your clip at x1 no
+// two of the 3 fitting pairs share a follower, so no set nearly fits from clean
+// followers only.)
+const NEAR_FOLLOWERS = 20;
+const NEAR_SETS = 100;
 
 function range(from, to, step = 1) {
   const out = [];
@@ -3631,6 +3777,35 @@ function* search(input) {
     violations: report.violations.map((v) => ({ rule: v.rule, bar: v.bar, beat: v.beat, voices: v.voices, hard: v.hard })),
   });
 
+  // Edits on (M4 part F): repair each near-miss, fewest changes first; those that
+  // pass join the results after the clean ones, fewest edits first, then cost.
+  function* repairAll(value, pool) {
+    const repaired = [];
+    const melody = material.map((n) => (n.rest ? { dur: n.dur, rest: true } : { dur: n.dur, degree: n.degree, offset: n.offset }));
+    for (let i = 0; i < pool.length; i++) {
+      const r = pool[i];
+      const spec = canonSpec(options, r.followers, { source: "list", notes: melody });
+      const result = yield* generate.repair({
+        spec, original: material, profile: options.profile, consonance: options.consonance,
+        max: options.maxEdits, budget: options.repairBudget,
+      });
+      if (result.found && result.edits.length > 0) {
+        const { followers, ...rest } = r;
+        repaired.push({
+          ...rest, repaired: true, edits: result.edits, editsAllowed: result.max,
+          dux: result.spec.dux, ...summary(result.report),
+        });
+      }
+      yield { phase: "repairs", done: i + 1, total: pool.length, best: null };
+    }
+    repaired.sort((a, b) => a.edits.length - b.edits.length || a.cost - b.cost);
+    const clean = value.results.filter((r) => r.hard === 0);
+    const rest = value.results.filter((r) => r.hard > 0);
+    value.results = [...clean, ...repaired, ...rest].slice(0, options.keep + repaired.length);
+    value.repairs = { tried: pool.length, found: repaired.length, max: generate.maxEdits(material.filter((n) => !n.rest).length) };
+    if (options.maxEdits !== undefined) value.repairs.max = options.maxEdits;
+  }
+
   // 1. Each follower against the dux.
   const all = settings(options.ranges);
   const singles = [];
@@ -3645,7 +3820,13 @@ function* search(input) {
   }
   singles.sort(compare);
   if (options.voices <= 2) {
-    return { voices: 2, results: singles.slice(0, options.keep), tried: singles.length, used, complete: singles.length === all.length };
+    const value = { voices: 2, results: singles.slice(0, options.keep), tried: singles.length, used, complete: singles.length === all.length };
+    if (options.allowEdits) {
+      const faulty = singles.filter((r) => r.hard > 0).slice(0, options.repairs)
+        .map((r) => ({ ...r, followers: [r.setting] }));
+      yield* repairAll(value, faulty);
+    }
+    return value;
   }
 
   // 2. Pairs of passing followers, against each other.
@@ -3694,11 +3875,75 @@ function* search(input) {
     if (c % 8 === 7) yield { phase: "whole sets", done: c + 1, total: cliques.length, best: sets.slice().sort(compare)[0] };
   }
   sets.sort(compare);
-  return {
+  const value = {
     voices: options.voices, results: sets.slice(0, options.keep), followers: singles.slice(0, options.keep),
     tried: sets.length, used, complete: budgetLeft(),
     followersTried: singles.length, passingFollowers: passing.length,
     pairsOk: [...ok.values()].filter(Boolean).length,
+  };
+  if (options.allowEdits) {
+    const faulty = sets.filter((r) => r.hard > 0);
+    const near = yield* nearSets(k, new Set(sets.map((r) => r.label)));
+    const pool = [...faulty, ...near].sort(compare).slice(0, options.repairs)
+      .map((r) => ({ ...r, followers: r.settings }));
+    yield* repairAll(value, pool);
+  }
+  return value;
+
+  // Sets of k followers from those with the fewest faults alone, ranked by their
+  // own and their pairs' faults; the best judged whole (those with faults).
+  function* nearSets(size, known) {
+    const top = singles.slice(0, NEAR_FOLLOWERS);
+    const pairFaults = new Map();
+    let done = 0;
+    for (let i = 0; i < top.length && budgetLeft(); i++) {
+      for (let j = i + 1; j < top.length && budgetLeft(); j++) {
+        const a = top[i].setting;
+        const b = top[j].setting;
+        const clash = options.distinctDelays && Math.abs(a.delay - b.delay) < 1e-9;
+        pairFaults.set(`${i},${j}`, clash ? Infinity : judge([voiceSpec(a), voiceSpec(b)]).hard);
+        if (++done % 32 === 0) yield { phase: "near sets: pairs", done, total: (top.length * (top.length - 1)) / 2, best: null };
+      }
+    }
+    const ranked = [];
+    (function extend(chosen, from) {
+      if (chosen.length === size) {
+        let faults = chosen.reduce((sum, x) => sum + top[x].hard, 0);
+        for (let a = 0; a < chosen.length; a++) for (let b = a + 1; b < chosen.length; b++) faults += pairFaults.get(`${chosen[a]},${chosen[b]}`);
+        if (Number.isFinite(faults)) ranked.push({ chosen: chosen.slice(), faults });
+        return;
+      }
+      for (let x = from; x < top.length; x++) {
+        chosen.push(x);
+        extend(chosen, x + 1);
+        chosen.pop();
+      }
+    })([], 0);
+    ranked.sort((a, b) => a.faults - b.faults);
+    const out = [];
+    for (let c = 0; c < ranked.length && out.length < NEAR_SETS && budgetLeft(); c++) {
+      const members = ranked[c].chosen.map((i) => top[i]).sort((a, b) => a.setting.delay - b.setting.delay);
+      const labelText = members.map((m) => m.label).join(" + ");
+      if (known.has(labelText)) continue;
+      const report = judge([{}, ...members.map((m) => voiceSpec(m.setting))], true);
+      out.push({
+        settings: members.map((m) => m.setting), labels: members.map((m) => m.label), label: labelText,
+        order: sets.length + c, near: true, ...summary(report),
+      });
+      if (out.length % 8 === 0) yield { phase: "near sets: whole", done: out.length, total: NEAR_SETS, best: null };
+    }
+    return out.filter((r) => r.hard > 0);
+  }
+}
+
+// The canon for a set of followers (and a melody), as the finder renders it.
+function canonSpec(options, followers, dux) {
+  const perpetual = options.perpetual;
+  const passes = options.passes || DEFAULTS.passes;
+  return {
+    system: options.system, meter: options.meter, tempo: options.tempo, consonance: options.consonance, dux,
+    voices: [{}, ...followers.map(voiceSpec)].map((v) => (perpetual ? { ...v, loop: passes } : v)),
+    ending: perpetual ? { kind: "loop", passes } : "none",
   };
 }
 
@@ -3710,17 +3955,14 @@ function find(options) {
   }
 }
 
-// The canon spec for a result, ready to render or play.
+// The canon spec for a result, ready to render or play: a repaired one with
+// your melody, edited.
 function specFor(options, result) {
   const followers = result.settings || [result.setting];
-  const perpetual = options.perpetual;
-  const passes = options.passes || DEFAULTS.passes;
-  return {
-    name: `found: ${result.label}`,
-    system: options.system, meter: options.meter, tempo: options.tempo, dux: options.dux,
-    voices: [{}, ...followers.map(voiceSpec)].map((v) => (perpetual ? { ...v, loop: passes } : v)),
-    ending: perpetual ? { kind: "loop", passes } : "none",
-  };
+  const spec = canonSpec(options, followers, result.repaired ? result.dux : options.dux);
+  const { consonance, ...rest } = spec;
+  const name = result.repaired ? `found: ${result.label} (${result.edits.length} ${result.edits.length === 1 ? "edit" : "edits"})` : `found: ${result.label}`;
+  return { name, ...rest };
 }
 
 exports.search = search;

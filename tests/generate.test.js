@@ -371,3 +371,58 @@ test("Mann Ex. 218-219: Albrechtsberger's rounds pass his canon rules as perpetu
   const round = out.results.find((r) => r.settings.every((x) => x.interval.steps === 0));
   assert.ok(round && round.hard === 0 && round.cost === 0, "unison, after 4 + unison, after 8 + unison, after 12: clean");
 });
+
+// ---------------------------------------------------------------- part F: repairs
+
+const ex201 = () => JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "mann", "ex201.json"), "utf8"));
+function brokenCanon(changes, voice = { delay: 4, interval: { steps: 0 } }) {
+  const fx = ex201();
+  const notes = fx.dux.notes.map((n, i) => (changes[i] !== undefined ? { ...n, degree: n.degree + changes[i] } : n));
+  const spec = { system: fx.system, meter: fx.meter, dux: { source: "list", notes }, voices: [{}, voice] };
+  return { spec, original: canon.duxMaterial(spec.dux, scales.fromSpec(fx.system)), fx };
+}
+const repairOf = (setup, extra = {}) => generator.run(generator.repair({ spec: setup.spec, original: setup.original, profile: "canon", ...extra }));
+
+test("repair: fewest notes first (0 if it already passes, then 1, 2, 3), your notes tried first", () => {
+  const clean = repairOf(brokenCanon({}));
+  assert.equal(clean.found, true);
+  assert.deepEqual(clean.edits, []);
+  assert.deepEqual(clean.limits.map((l) => l.limit), [0], "it passed as written");
+  const one = repairOf(brokenCanon({ 3: 1 }));
+  assert.deepEqual(one.edits.map((e) => [e.index, e.from, e.to]), [[3, 10, 9]]);
+  assert.deepEqual(one.limits.map((l) => l.limit), [0, 1]);
+  // Three notes broken so that no two changes will do: three.
+  const three = repairOf(brokenCanon({ 0: 1, 4: 1, 9: 1 }));
+  assert.equal(three.found, true);
+  assert.equal(three.edits.length, 3);
+  assert.deepEqual(three.limits.map((l) => l.limit), [0, 1, 2, 3]);
+  const setup = brokenCanon({ 0: 1, 4: 1, 9: 1 });
+  const again = analyze.analyze(canon.render(three.spec), { system: scales.fromSpec(setup.fx.system), meter: setup.fx.meter, profile: "canon" });
+  assert.equal(again.hard, 0);
+});
+
+test("repair: the most notes changed (3, or 8% of the notes), max respected, locked notes kept, a move of a fifth at most", () => {
+  assert.deepEqual([13, 37, 38, 64].map(generator.maxEdits), [3, 3, 4, 6]);
+  const capped = repairOf(brokenCanon({ 0: 1, 4: 1, 9: 1 }), { max: 2 });
+  assert.equal(capped.found, false);
+  assert.deepEqual(capped.limits.map((l) => l.limit), [0, 1, 2]);
+  // Note 4 locked as broken: the repair must change others around it.
+  const locked = repairOf(brokenCanon({ 3: 1 }), { fixed: { 3: 10 } });
+  assert.equal(locked.found, true);
+  assert.ok(locked.edits.length >= 1 && locked.edits.every((e) => e.index !== 3), JSON.stringify(locked.edits));
+  assert.ok(locked.edits.every((e) => Math.abs(e.steps) <= 4));
+});
+
+test("repair: an unchanged note keeps its exact pitch, a chromatic one included", () => {
+  const setup = brokenCanon({ 3: 1 });
+  // Note 8 raised a semitone (a chromatic note the canon takes): kept as written.
+  setup.original = setup.original.map((n, i) => (i === 7 ? { ...n, offset: 100 } : n));
+  setup.spec.dux.notes = setup.spec.dux.notes.map((n, i) => (i === 7 ? { ...n, offset: 100 } : n));
+  const result = repairOf(setup);
+  assert.equal(result.found, true);
+  assert.ok(result.edits.every((e) => e.index !== 7));
+  assert.equal(result.spec.dux.notes[7].offset, 100, "the chromatic note stays");
+  const scale = scales.fromSpec(setup.fx.system);
+  const leader = canon.render(result.spec).events.find((e) => e.voice === 0 && e.index === 7);
+  assert.ok(Math.abs(leader.pitch - (tuning.degreeToPitch(scale, setup.original[7].degree) + 1)) < 1e-9);
+});

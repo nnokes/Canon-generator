@@ -334,8 +334,8 @@ test("the canon panel: controls on the left only; each reaches cg.canon; replies
 test("the finder panel opens in presentation mode, with each setting wired both ways", () => {
   const { patcher, byText, from } = wiring("patchers/cg.panel.finder.maxpat");
   assert.equal(patcher.openinpresentation, 1);
-  const shows = byText("route voices intervalfrom intervalto delayfrom delayto delaystep profile perpetual slicems "
-    + "transforms timescales");
+  const shows = byText("route voices intervalfrom intervalto delayfrom delayto delaystep profile perpetual edits maxedits "
+    + "slicems transforms timescales");
   assert.ok(shows, "show <name> sets each control");
   const names = shows.text.split(/\s+/).slice(1);
   // The transforms and time scales come back as one 0/1 flag per toggle, in this order.
@@ -361,7 +361,8 @@ test("the finder panel explains its words where you see them: cost, faults, the 
   const { boxes } = wiring("patchers/cg.panel.finder.maxpat");
   const shown = [...boxes.values()].filter((b) => b.presentation && b.maxclass === "comment").map((b) => b.text).join("\n");
   for (const word of ["clean:", "A fault", "cost:", "Status:", "pass alone", "fit together", "stopped at the budget",
-    "Perpetual:", "Time slice:", "Transforms:", "Time scales:", "No sets: the line says why"]) {
+    "Perpetual:", "Time slice:", "Transforms:", "Time scales:", "No sets: the line says why",
+    "Edits: off, your melody is never changed", "allow: change notes to repair near-misses", "max (0 = auto)"]) {
     assert.ok(shown.includes(word), `the panel explains ${word}`);
   }
   for (const name of require("cg-rules").profiles()) assert.ok(shown.includes(`${name} =`), `the panel explains the ${name} rules`);
