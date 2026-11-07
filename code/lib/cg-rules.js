@@ -232,7 +232,7 @@ RULES["mode-final"] = (c, params) => {
 // third (cantus above), the outer voices closing by contrary step. In 12-EDO the
 // sizes are checked (fux12 and ratio); in other tunings, the class and the steps.
 // With three or more voices (Fux pp. 76-82), two of the voices close that way,
-// opening to the octave or closing to the unison, and the others are free: the
+// opening to the octave or closing to the unison on the final, and the others are free: the
 // bass leaps from the fifth to the final (Figs. 101, 104: A to D under C sharp
 // and E), or itself rises or falls by step (Fig. 105: E to D; Fig. 106, phrygian:
 // D to E).
@@ -251,12 +251,16 @@ RULES.penultimate = (c) => {
     return Math.abs(x) === 1 && Math.abs(y) === 1 && Math.sign(x) !== Math.sign(y);
   };
   if (pen.notes.length > 2) {
-    const unison = (p) => folded(p.cents, c.period) < 15 || c.period - folded(p.cents, c.period) < 15;
+    // Into a unison or octave on the final (options.final, or the last bass):
+    // E-G closing to F over D is no cadence (M4 part E).
+    const finalPitch = c.options.final !== undefined ? c.options.final : noteOf(last, last.bass).pitch;
+    const near = (cents) => folded(cents, c.period) < 15 || c.period - folded(cents, c.period) < 15;
+    const onFinal = (p, v) => near((noteOf(last, v).pitch - finalPitch) * 100) && near(p.cents);
     const closes = pen.pairs.some((p) => {
       const after = pairIn(last, p.low, p.high);
-      return after && isImperfect(p) && contrary(p.low, p.high) && unison(after) && (!twelve || sized(p));
+      return after && isImperfect(p) && contrary(p.low, p.high) && onFinal(after, p.low) && (!twelve || sized(p));
     });
-    return closes ? [] : [violation("penultimate", pen, [lo, hi], "no two voices close by contrary step from a sixth or third")];
+    return closes ? [] : [violation("penultimate", pen, [lo, hi], "no two voices close by contrary step from a sixth or third to the final")];
   }
   const p = pairIn(pen, lo, hi);
   if (!p || !noteOf(last, lo) || !noteOf(last, hi)) return [violation("penultimate", pen, [lo, hi], "an outer voice stops before the end")];
@@ -286,6 +290,20 @@ RULES["full-triad"] = (c) => {
   for (const s of edges(c).inner) {
     if (s.notes.length > 2 && !s.above.some(isImperfect)) {
       out.push(violation("full-triad", s, [s.bass], "no third or sixth over the bass"));
+    }
+  }
+  return out;
+};
+
+// Fux p. 79 (Fig. 102): two voices that "blend in a unison, which is less
+// harmonious than the octave". Ours, as a cost: each pair of voices on the same
+// pitch inside the canon (the first and last chords may close on one; M4 part
+// E: a round's equal voices share one range, so unisons come easily).
+RULES.unison = (c) => {
+  const out = [];
+  for (const s of edges(c).inner) {
+    for (const p of s.pairs) {
+      if (Math.abs(p.cents) < 15) out.push(violation("unison", s, [p.low, p.high], "two voices on one pitch"));
     }
   }
   return out;
@@ -416,10 +434,12 @@ RULES["leap-compensation"] = (c) => {
 // Ours, after Fux's first-species closes (pp. 28-29) and musica ficta: the note
 // that leads to the final by a semitone (C sharp up to D in dorian, B up to C in
 // ionian, F down to E in phrygian) is reached by step, and, where it was raised,
-// its natural form (C for C sharp) doesn't sound
-// in that voice in the two notes before it, or in any voice in the slice just
-// before it (a false relation). At a close the renderer added (its notes are
-// marked coda). M4 session 1: generated dorian canons skipped into the C sharp.
+// its natural form (C for C sharp) doesn't sound in that voice in the two notes
+// before it, or in any voice in the slice just before it (a false relation).
+// Checked at a close the renderer added (its notes are marked coda; M4 session
+// 1: generated dorian canons skipped into the C sharp), and at any note raised
+// by ficta in the tune itself, a round's cadence (written on a degree it sounds
+// above; M4 part E).
 RULES["cadence-approach"] = (c) => {
   const out = [];
   // The final: options.final, or the bass of the last slice. A semitone to
@@ -428,26 +448,39 @@ RULES["cadence-approach"] = (c) => {
   const lastSlice = c.slices[c.slices.length - 1];
   const final = c.options.final !== undefined ? c.options.final : lastSlice && noteOf(lastSlice, lastSlice.bass).pitch;
   const isFinal = (p) => final === undefined || folded((p - final) * 100, c.period) < 15 || c.period - folded((p - final) * 100, c.period) < 15;
+  const naturalOf = (e) => tuning.degreeToPitch(c.system, degreeOf(c.system, e));
+  const raised = (e) => e.degree !== undefined && !e.coda && (e.pitch - naturalOf(e)) * 100 > 50 && (e.pitch - naturalOf(e)) * 100 < 150;
   for (const line of c.byVoice.values()) {
+    const leads = new Set();
     const i = line.findIndex((e) => e.coda);
-    if (i < 1 || i + 1 >= line.length) continue;
-    const lead = line[i];
-    const rise = (line[i + 1].pitch - lead.pitch) * 100;
-    if (!(Math.abs(rise) > 50 && Math.abs(rise) < 150) || !isFinal(line[i + 1].pitch)) continue; // not a leading note
-    const s = c.slices.find((x) => time.eq(x.t, lead.t));
-    const prev = line[i - 1];
-    if (touches(prev, lead) && Math.abs(degreeOf(c.system, lead) - degreeOf(c.system, prev)) !== 1) {
-      out.push(violation("cadence-approach", s, [lead.voice], "the leading note is reached by a skip"));
+    if (i >= 1 && i + 1 < line.length) {
+      const rise = (line[i + 1].pitch - line[i].pitch) * 100;
+      if (Math.abs(rise) > 50 && Math.abs(rise) < 150 && isFinal(line[i + 1].pitch)) leads.add(i);
     }
-    const natural = tuning.degreeToPitch(c.system, degreeOf(c.system, lead));
-    const same = (p) => folded((p - natural) * 100, c.period) < 15 || c.period - folded((p - natural) * 100, c.period) < 15;
-    if (same(lead.pitch)) continue; // not raised: no natural form to clash with
-    if (line.slice(Math.max(0, i - 2), i).some((e) => same(e.pitch))) {
-      out.push(violation("cadence-approach", s, [lead.voice], "its natural form just before (a chromatic clash)"));
-    }
-    const before = c.slices[c.slices.indexOf(s) - 1];
-    if (before && before.notes.some((n) => n.voice !== lead.voice && same(n.pitch))) {
-      out.push(violation("cadence-approach", s, [lead.voice], "its natural form in another voice just before (a false relation)"));
+    line.forEach((e, k) => { if (k >= 1 && raised(e)) leads.add(k); });
+    for (const k of [...leads].sort((a, b) => a - b)) {
+      const lead = line[k];
+      // A leading note raised in the tune rises to the final (reported there).
+      const after = line[k + 1];
+      if (raised(lead) && touches(lead, after) && !(isFinal(after.pitch) && after.pitch > lead.pitch)) {
+        out.push(violation("cadence-approach", c.slices.find((x) => time.eq(x.t, after.t)), [lead.voice],
+          "the raised leading note doesn't rise to the final"));
+      }
+      const s = c.slices.find((x) => time.eq(x.t, lead.t));
+      const prev = line[k - 1];
+      if (touches(prev, lead) && Math.abs(degreeOf(c.system, lead) - degreeOf(c.system, prev)) !== 1) {
+        out.push(violation("cadence-approach", s, [lead.voice], "the leading note is reached by a skip"));
+      }
+      const natural = naturalOf(lead);
+      const same = (p) => folded((p - natural) * 100, c.period) < 15 || c.period - folded((p - natural) * 100, c.period) < 15;
+      if (same(lead.pitch)) continue; // not raised: no natural form to clash with
+      if (line.slice(Math.max(0, k - 2), k).some((e) => same(e.pitch))) {
+        out.push(violation("cadence-approach", s, [lead.voice], "its natural form just before (a chromatic clash)"));
+      }
+      const before = c.slices[c.slices.indexOf(s) - 1];
+      if (before && before.notes.some((n) => n.voice !== lead.voice && same(n.pitch))) {
+        out.push(violation("cadence-approach", s, [lead.voice], "its natural form in another voice just before (a false relation)"));
+      }
     }
   }
   return out;
@@ -531,11 +564,12 @@ const PROFILES = {
   //                      fault (pp. 77-79, 110)
   //   prefer-imperfect   off: a triad holds a fifth over the bass (p. 71)
   //   full-triad         a cost for an empty chord (pp. 71-72)
+//   unison             a cost for two voices on one pitch (p. 79)
   // Parallel fifths and octaves stay faults between any two voices (p. 112: "if
   // only mistakes such as successions of two fifths or two octaves are avoided").
   "fux-relaxed": {
     base: "fux-strict",
-    "hidden-perfect": H(2, { single: "soft" }), "prefer-imperfect": false, "full-triad": S(0.5),
+    "hidden-perfect": H(2, { single: "soft" }), "prefer-imperfect": false, "full-triad": S(0.5), unison: S(0.5),
   },
   // Florid canons, as Albrechtsberger writes them (ours: species 2-4's dissonance
   // treatment, brought forward from M5 for the answer finder). Melodic faults

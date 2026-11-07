@@ -248,8 +248,8 @@ test("the finder panel's GENERATE column: each setting wired both ways to cg.gen
   const { boxes, byText, from } = wiring("patchers/cg.panel.finder.maxpat");
   const generator = byText("cg.generate");
   const finderEngine = byText("cg.finder");
-  const shows = byText("route mode notes below above voices interval delay interval2 delay2 interval3 delay3 profile "
-    + "cadence seed count taste slicems");
+  const shows = byText("route mode notes below above voices round section interval delay interval2 delay2 interval3 "
+    + "delay3 profile cadence seed count taste slicems");
   assert.ok(shows, "show <name> sets each control");
   shows.text.split(/\s+/).slice(1).forEach((name, i) => {
     const control = from(from(shows, i)[0])[0];
@@ -271,7 +271,7 @@ test("the finder panel's GENERATE column: each setting wired both ways to cg.gen
   const shown = [...boxes.values()].filter((b) => b.presentation && b.maxclass === "comment").map((b) => b.text).join("\n");
   for (const words of ["Generate: new melodies, written as canons", "A seed is a canon", "None found", "Taste (ours",
     "6|8", "doesn't read the canon panel's melody", "Answer finder: canons hidden in the canon panel's melody",
-    "Voices 3 or 4", "fux-relaxed"]) {
+    "Voices 3 or 4", "fux-relaxed", "Round (tick it)", "round, section", "C sharp in D dorian"]) {
     assert.ok(shown.includes(words), `the panel explains ${words}`);
   }
   // Two tools in one window, with a line between them.

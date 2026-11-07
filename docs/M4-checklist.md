@@ -23,8 +23,8 @@ as few notes as it can so that a canon works (§3.6).
 "Valid" means the finished canon passes the M3 analyzer (`cg-analyze`) under its rule
 profile with no hard faults: the generator and the analyzer judge with the same rules.
 
-**Status:** started 2026-10-19. Parts A, B, C, D and G are built (two to four voices):
-198 tests. Next: Max session 2 (three and four voices, below), then parts E and F.
+**Status:** started 2026-10-19. Parts A–E and G are built (canons in two to four voices;
+rounds by the block method): 206 tests. Next: Max session 3 (rounds, below), then Part F.
 
 ---
 
@@ -60,7 +60,7 @@ exists.
 - [x] **Checks, one or two per slice** before the ending:
   - **now:** the slice, the motion into it, the melodic rules on the notes that start
     there, and the begin rules, on a window of the 4 slices before it and each voice's
-    last 4 notes
+    last 4 notes (since Part E, each rule's own lookback: see Part E)
   - **next:** the rules that read the following note (a dissonance's resolution,
     `dissonance-treatment`): the same window plus the next slice
   - each counts only what the analyzer reports **at that slice**, so every violation of
@@ -214,15 +214,104 @@ counterpoint. Its one fault was always the close (bar 13).
   - **The answer finder** now finds 12 clean four-voice sets on your clip at x2 (10
     before): two sets whose only fault was a tritone between upper voices.
 
-## Part E. Rounds by the block method (Mann pp. 232–237)
-- [ ] **The block:** a round's *k* sections all sound at once once every voice is in, so
-  the round is one *k*-part block. Solve it as *k*-part counterpoint.
-- [ ] **The entries:** check the smaller groups heard while the voices pile up ("the
-  first two or three voices form a perfect setting").
-- [ ] **The joins** between sections, and the wrap-around join for perpetual rounds.
-- [ ] **The bass cadence** placed where it can't make a 6/4.
-- [ ] **Exit test:** 3- and 4-voice rounds pass, with no 6/4 on a strong beat and clean
-  perpetual joins (judged with `perpetual`, as the finder judges round canons).
+## Part E. Rounds by the block method (Mann pp. 232–237): done
+**Albrechtsberger's method.** Write a *k*-part "first draft" for equal voices, then use each
+part as one section of the round's tune:
+- the upper part first, the part with the bass cadence second
+- "the first two or three voices in themselves should form a perfect two- or three-part
+  setting" (p. 237)
+- in his four-voice example two parts swap places, or the pile-up "would produce the
+  effect of the incorrect six-four chord" (pp. 236–237)
+- a round may stop at any section end, all voices together
+
+- [x] **The block** (`round(settings)` in `cg-generate`). A round for *k* voices with
+  sections of *S* bars:
+  - the tune is *k*·*S* whole notes (first species, as all of M4)
+  - each voice enters a section after the last, at the unison
+  - judged as the finder judges perpetual canons: every voice twice through, cut at the
+    leader's end. That's a section end, so the round ends on the block's last chord.
+  - the search writes the block **column by column** (order `block`): bar *c* of every
+    section together, as *k*-part counterpoint. The cadence's two columns come first,
+    then the first column (the join into it), then the rest left to right.
+  - **Defaults:** 3 voices, sections of 4 bars, `fux-relaxed` (`fux-strict` for 2).
+- [x] **The entries, the joins and the bass cadence** are checked as the block is written.
+  - The rendered round holds every group heard while the voices pile up, every join
+    between sections, and the wrap-around join (the last section back to the first).
+  - The sections are written in their final order, so the order is chosen with the notes.
+    A placement that makes a 6/4 is a fourth over the sounding bass, which is a
+    dissonance, so the search never keeps one. There's no separate rearranging step.
+  - The round closes inside its tune: the end rules judge the block's last two bars. Some
+    two voices close by contrary step into the final, and the final is in the bass.
+- [x] **Check windows by what each rule reads** (`cg-constraints`).
+  - **Why:** every check waited for 4 bars of history. Written column by column, a
+    check near a section's start would have waited for the section's end, and with
+    sections of 4 bars or less nothing would be checked until the block was written.
+  - **Now:** each rule has a lookback (`LOOKBACK`): the chord alone (dissonance, the
+    begin and end rules), the motion into it, or a voice's notes further back. Each
+    slice has one check per lookback. The search merges those that become ready at the
+    same step into one analysis, and runs once the checks that read the same notes the
+    same way (a round's block, repeated, with its voices relabelled).
+  - Two-voice canons search exactly as before: the same canons, candidates and time.
+- [x] **Ficta in the tune** (your choice: rounds in all six modes).
+  - At a section's next-to-last note, the degree below the final is the leading note.
+    It's raised a semitone where the mode has no semitone next to its final: C♯ in D
+    dorian, F♯ in G mixolydian, G♯ in A aeolian. Not ionian or lydian (B–C and E–F
+    already are), and not phrygian, whose semitone is F–E and which "does not admit of
+    any raising" (Fux p. 81).
+  - `cadence-approach` now covers a raised note in the tune: reached by step, no natural
+    form just before in that voice or another, and rising to the final.
+  - The renderer marks a note written off its degree with that degree, as the close's
+    notes are, so the rules count steps from the note as written.
+- [x] **Found while building it:**
+  - **Cadence first.** Written left to right, the search filled the block and then
+    failed at the cadence over and over. With the cadence's columns first, every seed of
+    the first four finds a round (3 and 4 voices; sections of 3, 4 and 6 bars) in under
+    a second.
+  - **The block method is a far smaller search than the chain.** The same rounds written
+    left to right, as canons are: none in 20,000 candidates per seed. Column by column:
+    about 1,700 each.
+  - **The penultimate, tightened.** A dorian round "closed" E–G to F over D: two voices
+    closing by contrary step, but onto the third. The N-voice `penultimate` now requires
+    the pair to close on the final, as all of Fux's do.
+  - **Unisons.** Equal voices share one range, so the first rounds sat on unisons (all
+    three on D5 in a bar). A new soft rule in `fux-relaxed`, `unison` (0.5), after Fux
+    p. 79: tenor and bass "blend in a unison, which is less harmonious than the octave".
+  - **Sections of 2 bars** in 3 voices are proven impossible. Such a block is only the
+    cadence (next-to-last chord, then final), and its first two sections can't also open
+    on the final as the begin rules require. GENERATE's sections run from 2 bars, and
+    its help says 3 or more.
+- [x] **Found (12-note tunes, sections of 4 bars, the first four seeds):**
+  - **3 voices:** every seed in every mode, in 5,000–11,000 candidates for the four.
+  - **4 voices:** every seed in ionian, dorian, phrygian and lydian. Aeolian 3 of 4,
+    mixolydian 1 of 4 within 20,000 candidates per seed: more seeds, or a larger budget.
+- [x] **Mann goldens:** Ex. 218 (four voices) and Ex. 219 (five), "Turnus descendet ad
+  inferos", transcribed from the scan.
+  - **The reading:** where a half note's head was ambiguous, the harmony decided it.
+    Every section sounds at once, so the only consonant reading is C major alternating
+    with G major (C5 D5 D5 | E5 B4 B4 | C5 G4. G4 | E4).
+  - **The analysis:** both pass Albrechtsberger's `canon` rules as perpetual rounds,
+    with no 6/4. Ex. 218 has no cost at all; Ex. 219 has only soft hidden fifths.
+  - **The finder:** given only the tune, the four-voice search finds Ex. 218's round
+    (the unison, a bar apart), clean.
+  - **Not `fux-relaxed`:** they're florid, so the first-species rules don't apply (their
+    opening third and their close fail them). This is recorded, not tuned away.
+- [x] **Tests:**
+  - **The exit test:** rounds in 3 and 4 voices, in ionian, dorian, aeolian and
+    phrygian, each:
+    - found, and analyzed afresh as rendered, with no hard fault
+    - no fourth over the sounding bass anywhere (no 6/4)
+    - each group of sections alone, as a 2- or 3-part block, with no fault
+    - the wrap-around join in the analysis
+    - every voice the same tune, a section apart
+  - **Other tests:**
+    - ficta in dorian (and none in ionian or phrygian)
+    - block vs chain; the same seed gives the same round; the block order
+    - the Mann goldens
+    - the windows still agree with the whole analysis, rounds with ficta included, and a
+      column is checked once it's written
+    - the raised note's approach, false relation and rise
+    - the renderer's written degree
+    - GENERATE's round controls, and a dorian round that plays through the canon panel
 
 ## Part F. The edits toggle (`allowEdits`) in the finder
 - [ ] **Off (the default):** your melody is never changed; the finder ranks and reports,
@@ -285,7 +374,10 @@ counterpoint. Its one fault was always the close (bar 13).
   `fux-strict` for two, unless you chose another profile. `fux-relaxed` is in the finder's
   rules menu too. The canon panel's rules menu gets it when that panel is next rebuilt
   (your saved copy keeps its MIDI-out port).
-- [ ] **Rounds** (Part E): their controls.
+- [x] **Rounds** (Part E): on the Voices row, a **round** toggle and **section** (bars).
+  With round on, the tune is voices × section bars, and notes, the followers and the close
+  aren't used. Menu items read `generated: seed 1 / round for 3 voices / sections of 4
+  bars`, and a raised note shows by its name (C#5). The help says what a round is here.
 - [ ] **Recheck the time-slice budget** with a 32-note canon (session 1, below).
 
 ## Max session 1: hear the generated canons
@@ -370,6 +462,23 @@ then `git pull`.
    `done` lines.
 5. **How do they sound?** That decides the taste cost and the next part.
 
+## Max session 3: rounds (Part E)
+**First:** the finder panel was remade again (a round toggle and section on the Voices row),
+so discard your copy (`git checkout -- patchers/cg.panel.finder.maxpat`), then `git pull`.
+1. Open the canon panel and the finder panel. In GENERATE, set **voices** to 3 and tick
+   **round** (section 4). Click **run**. Each canon is a 12-note tune sung by three
+   voices, each 4 bars after the last, at the unison.
+2. **Listen to:**
+   - the voices piling up: one, then two, then three
+   - the cadence at every section end (the round can stop at any of them)
+   - the join from the last section back to the first
+3. **Dorian:** the leading note C♯ is in the tune. Mixolydian (F♯) and aeolian (G♯) have
+   theirs too. Phrygian closes on its own F–E.
+4. **Voices 4.** Mixolydian with 4 voices is the hardest: if a seed finds none, try more
+   seeds.
+5. **How do they sound?** Whole notes make chorale-like rounds; rhythm comes in M5. Are
+   the tunes singable, and is the unison cost (0.5) about right?
+
 ## Results
 
 | Check | Result | Decision |
@@ -378,7 +487,7 @@ then `git pull`.
 | same seed, same canon (Part B) | **PASS** (Node, `tests/generate.test.js`) | The seed orders equal-cost candidates |
 | 2-voice canons at the 8ve, 5th, 4th; delays 1–4 bars (Part C) | **PASS** (Node, `tests/generate.test.js`): all 24 settings, above and below, no hard faults | First-species closes 6 \| 8 and 3 \| 1, with ficta; taste orders the search |
 | `fux-relaxed` (Part D) | **PASS** (Node, `tests/analyze.test.js`, `tests/generate.test.js`): Fux's Figs. 101, 104, 105 pass and Fig. 102 fails where he says; 3-voice canons in six settings, a 4-voice canon and dorian pass afresh | Fux's three- and four-part closes in the renderer; consonance between upper voices reckoned from the bass; the penultimate made by any two voices |
-| rounds by the block method (Part E) | | |
+| rounds by the block method (Part E) | **PASS** (Node, `tests/generate.test.js`): 3- and 4-voice rounds in four modes, no hard fault, no 6/4, each group alone clean, the wrap-around join judged; Mann Ex. 218–219 pass the `canon` rules | Column by column, cadence first; check windows by rule; ficta in the tune; the penultimate closes on the final; `unison` (soft) in `fux-relaxed` |
 | edits toggle golden test (Part F) | | |
 | generated canons in Max (Part G) | First round: dorian closes skipped into the C sharp. Second round: **voice leading PASS**; a text collision in the finder panel | `cadence-approach` (hard), written degrees in the close; comments sized at 7.5 px a character, one help column per tool |
 | 32-note canon in Max within the slice budget (Part G) | | |

@@ -18,6 +18,7 @@ const fixture = (name) => JSON.parse(fs.readFileSync(path.join(FUX, name), "utf8
 const near = (actual, expected, tolerance, label) =>
   assert.ok(Math.abs(actual - expected) <= tolerance, `${label}: ${actual} is not within ${tolerance} of ${expected}`);
 const C_MAJOR = scales.fromSpec({ type: "edo", divisions: 12, mode: [0, 2, 4, 5, 7, 9, 11] });
+const D_DORIAN_SCALE = scales.fromSpec({ type: "edo", divisions: 12, mode: [0, 2, 3, 5, 7, 9, 10], ref: { step: 0, midi: 62 } });
 
 // Voices as [[pitch, dur], ...] (pitch null = a rest; a third number is the
 // note's written degree, for an altered note) -> events.
@@ -279,7 +280,22 @@ test("fux-relaxed: Fux's relaxations for more voices, each a rule switched or we
   assert.deepEqual(report.violations.filter((v) => v.rule === "full-triad").map((v) => v.bar), [2]);
 });
 
-// ---------------------------------------------------------------- M4: the approach to the leading note
+// ---------------------------------------------------------------- M4 part E: ficta in the tune
+
+test("cadence-approach in the tune: a raised leading note is reached by step, without a false relation, and rises to the final", () => {
+  const judge = (lower, upper) => run([lower, upper], {
+    system: D_DORIAN_SCALE, profile: { base: "fux-strict", only: ["cadence-approach"] }, final: 62,
+  }).violations.map((v) => `${v.detail} ${v.bar}`);
+  // D dorian: C sharp is written as C (degree -1 from D4 = 0), raised a semitone.
+  const sharp = [61, 4, -1];
+  assert.deepEqual(judge([[50, 4], [52, 4], [50, 4]], [[59, 4], sharp, [62, 4]]), [], "B C sharp D: by step");
+  assert.deepEqual(judge([[50, 4], [52, 4], [50, 4]], [[57, 4], sharp, [62, 4]]), ["the leading note is reached by a skip 2"]);
+  assert.deepEqual(judge([[48, 4], [52, 4], [50, 4]], [[59, 4], sharp, [62, 4]]),
+    ["its natural form in another voice just before (a false relation) 2"], "C3 in the bass, then C sharp");
+  assert.deepEqual(judge([[50, 4], [52, 4], [53, 4]], [[59, 4], sharp, [59, 4]]), ["the raised leading note doesn't rise to the final 3"]);
+});
+
+// ---------------------------------------------------------------- M4: the approach to the leading note// ---------------------------------------------------------------- M4: the approach to the leading note
 
 // A two-voice first-species close in D dorian (degree 0 = D4): the upper voice's
 // last notes, then C sharp (C raised, by ficta) to D; the lower voice E to D.

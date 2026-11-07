@@ -1,0 +1,94 @@
+{
+  "source": "Albrechtsberger, in Mann, The Study of Fugue (1958), p. 237, Ex. 219: 'Canon for five voices', the same tune with a fifth section, 'ad inferos, ad infe-ros'",
+  "transcription": "As Ex. 218 (degree 0 = C4, quarter = 1, bar = 4), with five one-bar sections: bar 4 becomes E4 C4 G4 G3 (quarters) and bar 5 is C4 and a half rest. Read from the 600 dpi scan with the staff lines measured, and settled by the harmony where a half note's head was ambiguous: every section sounds at once, so beats 1-2 must be consonant (C5 E5 C5 over E4 or C4: C major) and beats 3-4 are G major (D5 B4 G4). The other reading of bars 1-3 (D5 F5 D5) makes sevenths and ninths against Ex. 219's added section.",
+  "system": {
+    "type": "edo",
+    "divisions": 12,
+    "mode": [
+      0,
+      2,
+      4,
+      5,
+      7,
+      9,
+      11
+    ],
+    "ref": {
+      "step": 0,
+      "midi": 60
+    }
+  },
+  "meter": {
+    "beats": 4,
+    "strong": [
+      0
+    ]
+  },
+  "voices": 5,
+  "section": 4,
+  "dux": {
+    "source": "list",
+    "notes": [
+      {
+        "degree": 7,
+        "dur": 2
+      },
+      {
+        "degree": 8,
+        "dur": 1
+      },
+      {
+        "degree": 8,
+        "dur": 1
+      },
+      {
+        "degree": 9,
+        "dur": 2
+      },
+      {
+        "degree": 6,
+        "dur": 1
+      },
+      {
+        "degree": 6,
+        "dur": 1
+      },
+      {
+        "degree": 7,
+        "dur": 2
+      },
+      {
+        "degree": 4,
+        "dur": 1.5
+      },
+      {
+        "degree": 4,
+        "dur": 0.5
+      },
+      {
+        "degree": 2,
+        "dur": 1
+      },
+      {
+        "degree": 0,
+        "dur": 1
+      },
+      {
+        "degree": 4,
+        "dur": 1
+      },
+      {
+        "degree": -3,
+        "dur": 1
+      },
+      {
+        "degree": 0,
+        "dur": 2
+      },
+      {
+        "rest": true,
+        "dur": 2
+      }
+    ]
+  }
+}

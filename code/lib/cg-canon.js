@@ -270,12 +270,17 @@ function layout(cv, notes, ax, duxSystem) {
   return { sounding, length: cursor };
 }
 
+// A note written off its degree (an offset: a raised leading note, a bent MIDI
+// note) carries the degree it's written on, with the voice's register, as a
+// close's notes do: the rules count steps from the note as written (M4 part E).
 function event(cv, t, dur, n, pass) {
-  return {
+  const out = {
     t, dur,
     pitch: tf.pitchOf(n, cv.system) + 12 * cv.register,
     vel: cv.vel, voice: cv.index, index: n.index, pass,
   };
+  if (n.offset) out.degree = n.degree + cv.register * tuning.size(cv.system);
+  return out;
 }
 
 // Every pass of a voice; a spiral moves pass k by k times its interval.
@@ -599,3 +604,4 @@ exports.step = step;
 exports.finish = finish;
 exports.finalize = finalize;
 exports.duxMaterial = duxMaterial;
+exports.semitoneOf = semitoneOf;

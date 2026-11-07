@@ -48,7 +48,7 @@
 			{
 				"box": {
 					"maxclass": "inlet",
-					"comment": "messages: run, stop, settings, mode, notes, below, above, voices, interval, delay, interval2, delay2, interval3, delay3, profile, cadence, seed, count, taste, slicems, budget, pick, info",
+					"comment": "messages: run, stop, settings, mode, notes, below, above, voices, round, section, interval, delay, interval2, delay2, interval3, delay3, profile, cadence, seed, count, taste, slicems, budget, pick, info",
 					"index": 0,
 					"numinlets": 0,
 					"numoutlets": 1,

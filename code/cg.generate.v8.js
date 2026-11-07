@@ -18,6 +18,11 @@
 //   voices <2-4>                   show voices ...     the melody and 1-3 followers (M4 part D); the
 //                                                      rules follow: fux-strict for two voices,
 //                                                      fux-relaxed for more (unless you chose another)
+//   round <0|1>                    show round ...      a round instead (M4 part E): every voice sings
+//                                                      the tune at the unison, each a section after the
+//                                                      last; notes, the followers and the close are
+//                                                      then unused (the tune is voices x section bars)
+//   section <bars>                 show section ...    a round's section, in bars (2-16)
 //   interval <steps>               show interval ...   the first follower's interval, in scale steps
 //   delay <bars>                   show delay ...      the first follower's delay, in bars
 //   interval2|delay2 <n>           show ...            the second follower (3 or 4 voices)
@@ -65,9 +70,12 @@ const NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 // The followers' defaults (M4 part D): the fifth above a bar later, the octave
 // below four bars later, the fourth below five bars later (C, G, C, G entries,
 // as a fugue's exposition): with 12 notes every seed of the first four finds one.
+// A round's default section (M4 part E): 4 bars, so 3 voices sing a 12-note tune;
+// every seed of the first four finds one, in every mode.
 const state = {
-  mode: "ionian", notes: 12, below: 3, above: 9, voices: 2, interval: 4, delay: 1, interval2: -7, delay2: 4,
-  interval3: -3, delay3: 5, profile: "fux-strict", cadence: "6|8", seed: 1, count: 4, taste: 1, slicems: 20,
+  mode: "ionian", notes: 12, below: 3, above: 9, voices: 2, round: 0, section: 4, interval: 4, delay: 1,
+  interval2: -7, delay2: 4, interval3: -3, delay3: 5, profile: "fux-strict", cadence: "6|8", seed: 1, count: 4,
+  taste: 1, slicems: 20,
 };
 const whole = (low, high) => (v) => Number.isInteger(v) && v >= low && v <= high;
 const CHECKS = {
@@ -75,6 +83,7 @@ const CHECKS = {
   below: [whole(0, 14), "below: whole steps from 0 to 14"],
   above: [whole(0, 21), "above: whole steps from 0 to 21"],
   voices: [whole(2, 4), "voices: 2 3 or 4"],
+  section: [whole(2, 16), "section: whole bars from 2 to 16"],
   interval: [whole(-21, 21), "interval: whole scale steps from -21 to 21"],
   delay: [whole(0, 16), "delay: whole bars from 0 to 16"],
   interval2: [whole(-21, 21), "interval2: whole scale steps from -21 to 21"],
@@ -155,6 +164,12 @@ function voices(n) {
     show("profile");
   }
 }
+// A round instead of a canon with followers (M4 part E).
+function round(on) {
+  state.round = on ? 1 : 0;
+  show("round");
+}
+function section(n) { setNumber("section", n); }
 function seed(n) { setNumber("seed", n); }
 function count(n) { setNumber("count", n); }
 function slicems(ms) { setNumber("slicems", ms); }
@@ -217,12 +232,22 @@ function followers() {
 followers.local = 1;
 
 function label(seedValue) {
+  if (state.round) {
+    return `generated: seed ${seedValue} / round for ${state.voices} voices / sections of ${state.section} bars`;
+  }
   const names = followers().map((f) => `${finder.intervalName({ domain: "degree", steps: f.interval }, 7)} after ${f.delay} ${f.delay === 1 ? "bar" : "bars"}`);
   return `generated: seed ${seedValue} / ${names.join(" + ")}`;
 }
 label.local = 1;
 
 function optionsFor(w, seedValue) {
+  if (state.round) {
+    return generator.round({
+      name: label(seedValue), system: w.system, meter: w.meter, tempo: w.tempo, final: w.final,
+      voices: state.voices, section: state.section, range: [w.final - state.below, w.final + state.above],
+      profile: state.profile, taste: Boolean(state.taste), seed: seedValue, budget: extra.budget,
+    });
+  }
   return generator.strict({
     name: label(seedValue), system: w.system, meter: w.meter, tempo: w.tempo, final: w.final,
     length: state.notes, range: [w.final - state.below, w.final + state.above],
@@ -292,13 +317,15 @@ function record(seedValue, r) {
 }
 record.local = 1;
 
-// A dux as note names (12-EDO) or degrees, the first eight.
+// A dux as note names (12-EDO) or degrees, the first eight; a raised note (a
+// round's leading note) by its sounding name: C# 5.
 function notesText(r) {
   const system = scales.fromSpec(r.spec.system);
   const named = system.period_cents === 1200 && (system.steps_cents || []).every((c) => Math.abs(c / 100 - Math.round(c / 100)) < 0.01);
-  const shown = r.dux.slice(0, 8).map((d) => {
+  const shown = r.dux.slice(0, 8).map((d, i) => {
     if (!named) return String(d);
-    const midi = Math.round(tuning.degreeToPitch(system, d));
+    const offset = (r.spec.dux.notes[i] && r.spec.dux.notes[i].offset) || 0;
+    const midi = Math.round(tuning.degreeToPitch(system, d) + offset / 100);
     return NAMES[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1);
   });
   return shown.join(" ") + (r.dux.length > 8 ? " ..." : "");
@@ -351,6 +378,12 @@ function pick(index) {
 
 function info() {
   const s = state;
+  if (s.round) {
+    outlet(0, "status", "generate:", s.mode, "/ round for", s.voices, "voices / sections of", s.section, "bars / range",
+      -s.below, "to", s.above, "steps /", s.profile, "/ seeds", s.seed, "to", s.seed + s.count - 1, "/ taste",
+      s.taste ? "on" : "off", "/ slice", s.slicems, "ms");
+    return;
+  }
   const heard = followers().map((f) => `${f.interval} steps after ${f.delay} bars`).join(" + ");
   outlet(0, "status", "generate:", s.mode, "/", s.notes, "notes from", -s.below, "to", s.above, "steps /", s.voices,
     "voices: followers", heard, "/", s.profile, "/ close", s.cadence, "/ seeds", s.seed, "to",

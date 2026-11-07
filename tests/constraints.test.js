@@ -49,9 +49,17 @@ test("the skeleton: one event per note and voice, the dux's notes as the variabl
   assert.deepEqual(m.variables, [0, 1, 2, 3, 4, 5, 6, 7]);
   assert.equal(m.degrees.length, 13);
   assert.deepEqual(m.edges, { first: 4, last: m.onsets[m.onsets.length - 1] }, "the follower enters at bar 2; the cadence closes it");
-  // First species, one bar apart: the check at bar k+1 needs the dux's notes up to k.
+  // First species, one bar apart: the checks at bar k+1 need the dux's notes up to k.
   const now = m.checks.filter((c) => c.kind === "now");
-  assert.deepEqual(now.map((c) => Math.max(...c.indices)), [0, 1, 2, 3, 4, 5, 6, 7]);
+  const latest = [...new Set(now.map((c) => c.slice))].map((s) => Math.max(...now.filter((c) => c.slice === s).flatMap((c) => c.indices)));
+  assert.deepEqual(latest, [0, 1, 2, 3, 4, 5, 6, 7]);
+  // Each check holds what its rules read: the chord alone (dissonance, the begin
+  // and end rules), the motion into it, or a voice's notes further back (M4 part E).
+  const at3 = now.filter((c) => c.slice === 3);
+  assert.deepEqual(at3.map((c) => c.back), [0, 1, 2, 4]);
+  assert.deepEqual(at3[0].profile.only, ["dissonance", "begin-perfect", "end-perfect", "mode-final", "prefer-imperfect"]);
+  assert.deepEqual(at3[3].profile.only, ["parallel-imperfect-run"]);
+  assert.ok(at3.every((c, i) => i === 0 || c.events.length >= at3[i - 1].events.length), "wider windows further back");
   assert.deepEqual(m.checks.filter((c) => c.kind === "next"), [], "fux-strict has no rule that reads ahead");
   // A pitch for each event, from the tables: the follower a fifth above.
   const dux = [0, 1, 2, 3, 4, 5, 6, 7];
@@ -91,6 +99,33 @@ test("three voices, fux-relaxed: every check reports exactly what the whole cano
     }
   }
   assert.ok(hidden > 10, `hidden fifths and octaves were compared (${hidden})`);
+});
+
+// M4 part E: a round (dorian, ficta in the tune), checked column by column.
+test("rounds: every check reports what the whole round's analysis does there; a column is checked once it's written", () => {
+  const generator = require("cg-generate");
+  const dorian = { type: "edo", divisions: 12, mode: [0, 2, 3, 5, 7, 9, 10], ref: { step: 0, midi: 62 } };
+  const options = generator.round({ system: dorian, voices: 3, section: 4 });
+  const m = constraints.model(options);
+  const r = rng.create(5);
+  let raised = 0;
+  for (let k = 0; k < 15; k++) {
+    // Random tunes, with the leading note where ficta raises it now and then.
+    const dux = m.variables.map((i) => (i % 4 === 2 && r.int(3) === 0 ? 6 : -3 + r.int(13)));
+    raised += m.spec(dux).dux.notes.filter((n) => n.offset).length;
+    agree(m, options.spec, dux, 62);
+  }
+  assert.ok(raised > 3, `raised leading notes compared (${raised})`);
+  // In block order, each bar's chord (the full block, all three sections) is
+  // checked as soon as that column is written, not when the sections end.
+  const order = generator.orderOf(m.variables, "block", 4, "close");
+  const position = new Map(order.map((v, p) => [v, p]));
+  const chords = m.checks.filter((c) => c.kind === "now" && c.back === 0 && c.indices.length === 3);
+  for (const c of chords) {
+    const column = c.indices[0] % 4;
+    assert.deepEqual(c.indices, [column, column + 4, column + 8]);
+    assert.equal(Math.max(...c.indices.map((i) => position.get(i))), order.indexOf(column + 8));
+  }
 });
 
 test("with no cadence, the end rules are checked in windows too: the penultimate a slice ahead", () => {

@@ -318,3 +318,16 @@ test("closes for more voices: Fux's three- and four-part cadences, each voice wh
   const raised = close("dorian", "6|8", [0, -4, -9]).events.find((e) => name(e.pitch) === "C#");
   assert.equal(((raised.degree % 7) + 7) % 7, 6, "C sharp written as C (degree 6 above D)");
 });
+
+// M4 part E: a note written off its degree keeps that degree (a raised leading note in a round's tune).
+test("a note with an offset carries the degree it's written on, with the voice's register", () => {
+  const spec = {
+    system: { type: "edo", divisions: 12, mode: [0, 2, 3, 5, 7, 9, 10], ref: { step: 0, midi: 62 } },
+    dux: { source: "list", notes: [{ degree: 5, dur: 4 }, { degree: 6, offset: 100, dur: 4 }, { degree: 7, dur: 4 }] },
+    voices: [{}, { delay: 0, register: -1 }],
+  };
+  const events = canon.render(spec).events;
+  const sharp = events.filter((e) => e.index === 1).sort((a, b) => a.voice - b.voice);
+  assert.deepEqual(sharp.map((e) => [e.pitch, e.degree]), [[73, 6], [61, -1]]);
+  assert.ok(events.filter((e) => e.index !== 1).every((e) => e.degree === undefined), "notes on their degree stay as they were");
+});

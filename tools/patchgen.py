@@ -652,9 +652,9 @@ def generate():
     show, done, status, error."""
     p = Patch(rect=(80, 80, 680, 380))
     p.note(GENERATED_NOTE, 20, 10, 600, 1)
-    inlet = p.inlet(20, 50, "messages: run, stop, settings, mode, notes, below, above, voices, interval, delay, "
-                    "interval2, delay2, interval3, delay3, profile, cadence, seed, count, taste, slicems, budget, "
-                    "pick, info", 0)
+    inlet = p.inlet(20, 50, "messages: run, stop, settings, mode, notes, below, above, voices, round, section, "
+                    "interval, delay, interval2, delay2, interval3, delay3, profile, cadence, seed, count, taste, "
+                    "slicems, budget, pick, info", 0)
     load = p.obj("loadbang", 110, 50, 1, 1, ["bang"])
     ask = p.msg("settings", 110, 80)
     v8 = p.obj("v8 cg.generate.bundle.js", 20, 115, 1, 1)
@@ -1234,7 +1234,11 @@ def panel_finder():
     hint("steps from the final", gx + 305, 165)
     present(p.comment("Voices", gx, 200))
     gen_number("voices", gx + 160, 200, minimum=2, maximum=4)
-    hint("the melody + 1 to 3 followers", gx + 215, 200)
+    gen["round"] = p.ui("toggle", gx + 215, 200, 22, 22, 1, 1, ["int"])  # a round instead (M4 part E)
+    present(gen["round"])
+    hint("round, section", gx + 242, 200)
+    gen_number("section", gx + 362, 200, minimum=2, maximum=16)
+    hint("bars", gx + 416, 200)
     for row, (label_text, suffix, note) in enumerate([("Follower", "", ""), ("Follower 2", "2", "3+ voices"),
                                                       ("Follower 3", "3", "4 voices")]):
         y = 235 + 35 * row
@@ -1280,6 +1284,11 @@ def panel_finder():
         "Voices 3 or 4: each follower enters at its own interval and delay. The rules turn to fux-relaxed, Fux's "
         "rules for more parts: a hidden fifth or octave costs instead of failing (never two in a row), and an "
         "empty chord (no third or sixth) costs. Two followers a bar apart each can't work: a step makes a 7th.",
+        "Round (tick it): every voice sings one tune at the unison, each a section after the last, as "
+        "Albrechtsberger writes them: once all are in, the sections sound together as one block of chords. "
+        "The tune is voices x section bars; notes, the followers and the close aren't used. It ends on a "
+        "section end, closing inside the tune, with the leading note raised there where the mode needs it "
+        "(C sharp in D dorian). Sections of 3 bars or more: 2 bars is only the cadence.",
     ]:
         lines = -(-len(text) // 52) + 1  # generous, as the finder's
         present(p.note(text, gx, gen_bottom, 460, lines))

@@ -1139,12 +1139,17 @@ function layout(cv, notes, ax, duxSystem) {
   return { sounding, length: cursor };
 }
 
+// A note written off its degree (an offset: a raised leading note, a bent MIDI
+// note) carries the degree it's written on, with the voice's register, as a
+// close's notes do: the rules count steps from the note as written (M4 part E).
 function event(cv, t, dur, n, pass) {
-  return {
+  const out = {
     t, dur,
     pitch: tf.pitchOf(n, cv.system) + 12 * cv.register,
     vel: cv.vel, voice: cv.index, index: n.index, pass,
   };
+  if (n.offset) out.degree = n.degree + cv.register * tuning.size(cv.system);
+  return out;
 }
 
 // Every pass of a voice; a spiral moves pass k by k times its interval.
@@ -1468,6 +1473,7 @@ exports.step = step;
 exports.finish = finish;
 exports.finalize = finalize;
 exports.duxMaterial = duxMaterial;
+exports.semitoneOf = semitoneOf;
   };
 
   // ---- cg-consonance.js
@@ -1970,7 +1976,7 @@ RULES["mode-final"] = (c, params) => {
 // third (cantus above), the outer voices closing by contrary step. In 12-EDO the
 // sizes are checked (fux12 and ratio); in other tunings, the class and the steps.
 // With three or more voices (Fux pp. 76-82), two of the voices close that way,
-// opening to the octave or closing to the unison, and the others are free: the
+// opening to the octave or closing to the unison on the final, and the others are free: the
 // bass leaps from the fifth to the final (Figs. 101, 104: A to D under C sharp
 // and E), or itself rises or falls by step (Fig. 105: E to D; Fig. 106, phrygian:
 // D to E).
@@ -1989,12 +1995,16 @@ RULES.penultimate = (c) => {
     return Math.abs(x) === 1 && Math.abs(y) === 1 && Math.sign(x) !== Math.sign(y);
   };
   if (pen.notes.length > 2) {
-    const unison = (p) => folded(p.cents, c.period) < 15 || c.period - folded(p.cents, c.period) < 15;
+    // Into a unison or octave on the final (options.final, or the last bass):
+    // E-G closing to F over D is no cadence (M4 part E).
+    const finalPitch = c.options.final !== undefined ? c.options.final : noteOf(last, last.bass).pitch;
+    const near = (cents) => folded(cents, c.period) < 15 || c.period - folded(cents, c.period) < 15;
+    const onFinal = (p, v) => near((noteOf(last, v).pitch - finalPitch) * 100) && near(p.cents);
     const closes = pen.pairs.some((p) => {
       const after = pairIn(last, p.low, p.high);
-      return after && isImperfect(p) && contrary(p.low, p.high) && unison(after) && (!twelve || sized(p));
+      return after && isImperfect(p) && contrary(p.low, p.high) && onFinal(after, p.low) && (!twelve || sized(p));
     });
-    return closes ? [] : [violation("penultimate", pen, [lo, hi], "no two voices close by contrary step from a sixth or third")];
+    return closes ? [] : [violation("penultimate", pen, [lo, hi], "no two voices close by contrary step from a sixth or third to the final")];
   }
   const p = pairIn(pen, lo, hi);
   if (!p || !noteOf(last, lo) || !noteOf(last, hi)) return [violation("penultimate", pen, [lo, hi], "an outer voice stops before the end")];
@@ -2024,6 +2034,20 @@ RULES["full-triad"] = (c) => {
   for (const s of edges(c).inner) {
     if (s.notes.length > 2 && !s.above.some(isImperfect)) {
       out.push(violation("full-triad", s, [s.bass], "no third or sixth over the bass"));
+    }
+  }
+  return out;
+};
+
+// Fux p. 79 (Fig. 102): two voices that "blend in a unison, which is less
+// harmonious than the octave". Ours, as a cost: each pair of voices on the same
+// pitch inside the canon (the first and last chords may close on one; M4 part
+// E: a round's equal voices share one range, so unisons come easily).
+RULES.unison = (c) => {
+  const out = [];
+  for (const s of edges(c).inner) {
+    for (const p of s.pairs) {
+      if (Math.abs(p.cents) < 15) out.push(violation("unison", s, [p.low, p.high], "two voices on one pitch"));
     }
   }
   return out;
@@ -2154,10 +2178,12 @@ RULES["leap-compensation"] = (c) => {
 // Ours, after Fux's first-species closes (pp. 28-29) and musica ficta: the note
 // that leads to the final by a semitone (C sharp up to D in dorian, B up to C in
 // ionian, F down to E in phrygian) is reached by step, and, where it was raised,
-// its natural form (C for C sharp) doesn't sound
-// in that voice in the two notes before it, or in any voice in the slice just
-// before it (a false relation). At a close the renderer added (its notes are
-// marked coda). M4 session 1: generated dorian canons skipped into the C sharp.
+// its natural form (C for C sharp) doesn't sound in that voice in the two notes
+// before it, or in any voice in the slice just before it (a false relation).
+// Checked at a close the renderer added (its notes are marked coda; M4 session
+// 1: generated dorian canons skipped into the C sharp), and at any note raised
+// by ficta in the tune itself, a round's cadence (written on a degree it sounds
+// above; M4 part E).
 RULES["cadence-approach"] = (c) => {
   const out = [];
   // The final: options.final, or the bass of the last slice. A semitone to
@@ -2166,26 +2192,39 @@ RULES["cadence-approach"] = (c) => {
   const lastSlice = c.slices[c.slices.length - 1];
   const final = c.options.final !== undefined ? c.options.final : lastSlice && noteOf(lastSlice, lastSlice.bass).pitch;
   const isFinal = (p) => final === undefined || folded((p - final) * 100, c.period) < 15 || c.period - folded((p - final) * 100, c.period) < 15;
+  const naturalOf = (e) => tuning.degreeToPitch(c.system, degreeOf(c.system, e));
+  const raised = (e) => e.degree !== undefined && !e.coda && (e.pitch - naturalOf(e)) * 100 > 50 && (e.pitch - naturalOf(e)) * 100 < 150;
   for (const line of c.byVoice.values()) {
+    const leads = new Set();
     const i = line.findIndex((e) => e.coda);
-    if (i < 1 || i + 1 >= line.length) continue;
-    const lead = line[i];
-    const rise = (line[i + 1].pitch - lead.pitch) * 100;
-    if (!(Math.abs(rise) > 50 && Math.abs(rise) < 150) || !isFinal(line[i + 1].pitch)) continue; // not a leading note
-    const s = c.slices.find((x) => time.eq(x.t, lead.t));
-    const prev = line[i - 1];
-    if (touches(prev, lead) && Math.abs(degreeOf(c.system, lead) - degreeOf(c.system, prev)) !== 1) {
-      out.push(violation("cadence-approach", s, [lead.voice], "the leading note is reached by a skip"));
+    if (i >= 1 && i + 1 < line.length) {
+      const rise = (line[i + 1].pitch - line[i].pitch) * 100;
+      if (Math.abs(rise) > 50 && Math.abs(rise) < 150 && isFinal(line[i + 1].pitch)) leads.add(i);
     }
-    const natural = tuning.degreeToPitch(c.system, degreeOf(c.system, lead));
-    const same = (p) => folded((p - natural) * 100, c.period) < 15 || c.period - folded((p - natural) * 100, c.period) < 15;
-    if (same(lead.pitch)) continue; // not raised: no natural form to clash with
-    if (line.slice(Math.max(0, i - 2), i).some((e) => same(e.pitch))) {
-      out.push(violation("cadence-approach", s, [lead.voice], "its natural form just before (a chromatic clash)"));
-    }
-    const before = c.slices[c.slices.indexOf(s) - 1];
-    if (before && before.notes.some((n) => n.voice !== lead.voice && same(n.pitch))) {
-      out.push(violation("cadence-approach", s, [lead.voice], "its natural form in another voice just before (a false relation)"));
+    line.forEach((e, k) => { if (k >= 1 && raised(e)) leads.add(k); });
+    for (const k of [...leads].sort((a, b) => a - b)) {
+      const lead = line[k];
+      // A leading note raised in the tune rises to the final (reported there).
+      const after = line[k + 1];
+      if (raised(lead) && touches(lead, after) && !(isFinal(after.pitch) && after.pitch > lead.pitch)) {
+        out.push(violation("cadence-approach", c.slices.find((x) => time.eq(x.t, after.t)), [lead.voice],
+          "the raised leading note doesn't rise to the final"));
+      }
+      const s = c.slices.find((x) => time.eq(x.t, lead.t));
+      const prev = line[k - 1];
+      if (touches(prev, lead) && Math.abs(degreeOf(c.system, lead) - degreeOf(c.system, prev)) !== 1) {
+        out.push(violation("cadence-approach", s, [lead.voice], "the leading note is reached by a skip"));
+      }
+      const natural = naturalOf(lead);
+      const same = (p) => folded((p - natural) * 100, c.period) < 15 || c.period - folded((p - natural) * 100, c.period) < 15;
+      if (same(lead.pitch)) continue; // not raised: no natural form to clash with
+      if (line.slice(Math.max(0, k - 2), k).some((e) => same(e.pitch))) {
+        out.push(violation("cadence-approach", s, [lead.voice], "its natural form just before (a chromatic clash)"));
+      }
+      const before = c.slices[c.slices.indexOf(s) - 1];
+      if (before && before.notes.some((n) => n.voice !== lead.voice && same(n.pitch))) {
+        out.push(violation("cadence-approach", s, [lead.voice], "its natural form in another voice just before (a false relation)"));
+      }
     }
   }
   return out;
@@ -2269,11 +2308,12 @@ const PROFILES = {
   //                      fault (pp. 77-79, 110)
   //   prefer-imperfect   off: a triad holds a fifth over the bass (p. 71)
   //   full-triad         a cost for an empty chord (pp. 71-72)
+//   unison             a cost for two voices on one pitch (p. 79)
   // Parallel fifths and octaves stay faults between any two voices (p. 112: "if
   // only mistakes such as successions of two fifths or two octaves are avoided").
   "fux-relaxed": {
     base: "fux-strict",
-    "hidden-perfect": H(2, { single: "soft" }), "prefer-imperfect": false, "full-triad": S(0.5),
+    "hidden-perfect": H(2, { single: "soft" }), "prefer-imperfect": false, "full-triad": S(0.5), unison: S(0.5),
   },
   // Florid canons, as Albrechtsberger writes them (ours: species 2-4's dissonance
   // treatment, brought forward from M5 for the answer finder). Melodic faults
@@ -2772,13 +2812,18 @@ exports.DEFAULT_METER = DEFAULT_METER;
 // note it plays (index) and its time. Each event's pitch, for each pitch its
 // dux note could take, comes from a table rendered once per candidate degree.
 //
-// Checks, one or two per slice (an onset) before the ending:
+// Checks at each slice (an onset) before the ending, one per kind and per how
+// far back their rules read (LOOKBACK; M4 part E):
 //   now    the slice and the motion into it, the melodic rules on the notes
 //          that start there, and the begin rules: a window of the slices just
-//          before it (BACK of them) and each voice's last BACK notes
+//          before it and each voice's notes before, as far back as its rules
+//          read (the chord alone, the motion into it, a voice's last notes)
 //   next   the rules that need the following slice (a dissonance's resolution;
-//          the penultimate, at the slice before the last): the same window plus
-//          the next slice and each voice's next note
+//          the penultimate, at the slice before the last): the same, plus the
+//          next slice and each voice's next note
+// The search runs the checks of a slice that become ready at the same step as
+// one (merge), and a check that reads the same notes the same way as another
+// once (signature: a round's block, repeated, with its voices relabelled).
 // Each counts only the violations the analyzer reports at that slice, so every
 // violation of the whole canon is counted once. A check is ready as soon as
 // every dux note in its window has a pitch. The analyzer is told the whole
@@ -2791,10 +2836,12 @@ exports.DEFAULT_METER = DEFAULT_METER;
 //   model(options) -> {
 //     variables   the dux notes to give pitches (indices of non-rests)
 //     degrees     the candidate degrees, low to high
-//     checks      [{ slice, t, kind: "now"|"next", indices, profile }]
+//     checks      [{ slice, t, kind: "now"|"next", back, events, indices, profile }]
 //     check(c, dux) -> violations at the check's slice (dux: degree per note,
 //                      undefined where unassigned)
-//     spec(dux)   the canon spec with these degrees
+//     merge(list) checks of one slice and kind as one
+//     signature(c) what a check reads, up to which voice is which
+//     spec(dux)   the canon spec with these degrees (and their ficta)
 //     full(dux)   the whole canon analyzed (cg-analyze's report)
 //   }
 //   options:
@@ -2804,6 +2851,8 @@ exports.DEFAULT_METER = DEFAULT_METER;
 //     profile     the rule profile (cg-rules)
 //     consonance  a cg-consonance spec (the spec's own by default)
 //     final       the mode's final, as a degree of the dux's system
+//     ficta       dux notes where the degree below the final is raised to the
+//                 leading note (a round's sections' next-to-last notes; M4 part E)
 
 const canon = require("cg-canon");
 const analyze = require("cg-analyze");
@@ -2818,7 +2867,24 @@ const time = require("cg-time");
 const LOOKAHEAD = ["dissonance-treatment", "penultimate"];
 // Rules judged on the whole canon only: the roughness ceiling's window means.
 const AT_END = ["roughness-ceiling"];
-const BACK = 4; // slices (and each voice's notes) a check looks back
+const BACK = 4; // slices (and each voice's notes) a check looks back, for a rule not listed below
+// How far back each rule reads, in slices and in each voice's notes (M4 part E):
+// a check holds only what its rules read, so a bar's chord is checked as soon as
+// its notes are written, even when the notes before it aren't yet (the block
+// method writes a round column by column). A rule's result at a slice is the
+// same in any window that holds its lookback.
+const LOOKBACK = {
+  dissonance: 0, "begin-perfect": 0, "end-perfect": 0, "mode-final": 0, "prefer-imperfect": 0, "full-triad": 0, unison: 0,
+  penultimate: 0,
+  "parallel-perfect": 1, "hidden-perfect": 1, "melodic-leap": 1, "melodic-augmented": 1, "entry-rest": 1,
+  "phrase-seventh": 1, "dissonance-treatment": 1,
+  repeat: 2, "leap-compensation": 2, "cadence-approach": 2,
+};
+function lookback(id, params = {}) {
+  if (id === "parallel-imperfect-run") return (params.max || 3) + 1; // a run longer than max
+  if (id === "hidden-perfect" && params.single === "soft") return 2; // reads the motion before too
+  return LOOKBACK[id] !== undefined ? LOOKBACK[id] : BACK;
+}
 
 function check(condition, message) {
   if (!condition) throw new Error(message);
@@ -2842,30 +2908,69 @@ function model(options) {
   const profile = rules.resolve(options.profile);
   const ids = Object.keys(profile.rules);
   const final = options.final !== undefined ? tuning.degreeToPitch(system, options.final) : undefined;
+  // Musica ficta in the tune (M4 part E, rounds): at these notes (a section's
+  // next-to-last), the degree below the final is the leading note, raised to the
+  // tuning's own semitone below the final (C sharp in D dorian) where the mode has
+  // no semitone next to its final, as the closes do (Fux pp. 28-29): not in
+  // ionian or lydian (B-C, E-F already), and not in phrygian, whose F-E is the
+  // semitone and which "does not admit of any raising" (p. 81). cadence-approach
+  // then has it rise to the final.
+  const fictaAt = new Set(options.ficta || []);
+  const semitone = canon.semitoneOf(system);
+  const size = tuning.size(system);
+  function raise(dux, i) {
+    const d = dux[i];
+    if (!fictaAt.has(i) || semitone === null || options.final === undefined || d === undefined) return 0;
+    if ((((d + 1 - options.final) % size) + size) % size !== 0) return 0;
+    const below = tuning.degreeCents(system, d + 1) - tuning.degreeCents(system, d);
+    const above = tuning.degreeCents(system, d + 2) - tuning.degreeCents(system, d + 1);
+    return below > semitone + 10 && above > semitone + 10 ? below - semitone : 0; // cents up
+  }
   const atEnd = final === undefined ? [...AT_END, "mode-final"] : AT_END; // mode-final's final: voice 0's last note
   const subProfile = (only) => ({ ...profileSpec(options.profile), only: ids.filter(only) });
-  const nowProfile = subProfile((id) => !LOOKAHEAD.includes(id) && !atEnd.includes(id));
+  const nowRule = (id) => !LOOKAHEAD.includes(id) && !atEnd.includes(id);
   // The next check's rules at a slice: penultimate only before the last slice.
-  const nextProfileAt = (s) => subProfile((id) => LOOKAHEAD.includes(id) && !atEnd.includes(id)
-    && (id !== "penultimate" || (s + 1 < onsets.length && time.eq(onsets[s + 1], edges.last))));
+  const nextRuleAt = (s) => (id) => LOOKAHEAD.includes(id) && !atEnd.includes(id)
+    && (id !== "penultimate" || (s + 1 < onsets.length && time.eq(onsets[s + 1], edges.last)));
+  // The rules of one kind at a slice, grouped by how far back they read.
+  const byLookback = (keep) => {
+    const groups = new Map();
+    for (const id of ids.filter(keep)) {
+      const back = lookback(id, profile.rules[id]);
+      if (!groups.has(back)) groups.set(back, []);
+      groups.get(back).push(id);
+    }
+    return [...groups].sort((a, b) => a[0] - b[0]);
+  };
   const firstVar = variables[0];
 
-  const withDegrees = (dux) => ({
+  // The spec with these degrees (and the ficta they call for, unless `plain`:
+  // the pitch tables are plain, and pitchOf adds the ficta).
+  const withDegrees = (dux, plain = false) => ({
     ...spec,
-    dux: { ...spec.dux, source: "list", notes: notes.map((n, i) => (n.rest ? n : { dur: n.dur, degree: dux[i] })) },
+    dux: {
+      ...spec.dux,
+      source: "list",
+      notes: notes.map((n, i) => {
+        if (n.rest) return n;
+        const up = plain ? 0 : raise(dux, i);
+        return up ? { dur: n.dur, degree: dux[i], offset: up } : { dur: n.dur, degree: dux[i] };
+      }),
+    },
   });
 
   // The skeleton, and each event's pitch for each candidate degree of its note
   // (and of the first note: an inverting voice turns around it).
-  const skeleton = canon.render(withDegrees(notes.map(() => low))).events;
+  const skeleton = canon.render(withDegrees(notes.map(() => low), true)).events;
   const where = new Map(skeleton.map((e, i) => [key(e), i]));
   check(where.size === skeleton.length, "the skeleton has two events with the same voice, note and time");
   const table = new Map(); // `${first}:${degree}` -> pitch per skeleton event
   const inverts = (spec.voices || []).some((v) => v.transform === "I" || v.transform === "RI");
+  check(!(inverts && fictaAt.size), "ficta in the tune: not with an inverting voice (it would lower the note)");
   for (const first of inverts ? degrees : [null]) {
     for (const d of degrees) {
       const dux = notes.map((n, i) => (i === firstVar && first !== null ? first : d));
-      const events = canon.render(withDegrees(dux)).events;
+      const events = canon.render(withDegrees(dux, true)).events;
       check(events.length === skeleton.length, "a canon's rhythm changed with its pitches: the generator can't model it");
       const pitches = new Array(skeleton.length);
       for (const e of events) {
@@ -2879,7 +2984,7 @@ function model(options) {
   const pitchOf = (i, dux) => {
     const e = skeleton[i];
     const first = inverts ? dux[firstVar] : null;
-    return table.get(`${first}:${dux[e.index]}`)[i];
+    return table.get(`${first}:${dux[e.index]}`)[i] + raise(dux, e.index) / 100;
   };
 
   // Slices: each onset, and the events sounding there.
@@ -2898,30 +3003,77 @@ function model(options) {
   });
   const coda = (i) => skeleton[i].index < 0; // an ending's note, built on the last notes
 
-  function window(s, ahead) {
+  // The events a check at slice s reads: `back` slices before it (and each
+  // sounding voice's `back` notes before), and the next slice too if `ahead`.
+  function window(s, ahead, back) {
     const ids_ = new Set();
-    for (let k = Math.max(0, s - BACK); k <= s + (ahead ? 1 : 0) && k < onsets.length; k++) for (const i of sounding[k]) ids_.add(i);
+    for (let k = Math.max(0, s - back); k <= s + (ahead ? 1 : 0) && k < onsets.length; k++) for (const i of sounding[k]) ids_.add(i);
     for (const i of sounding[s]) {
       const line = lines.get(skeleton[i].voice);
       const at = line.indexOf(i);
-      for (let k = Math.max(0, at - BACK); k <= Math.min(line.length - 1, at + (ahead ? 1 : 0)); k++) ids_.add(line[k]);
+      for (let k = Math.max(0, at - back); k <= Math.min(line.length - 1, at + (ahead ? 1 : 0)); k++) ids_.add(line[k]);
     }
     return [...ids_].sort((a, b) => a - b);
   }
 
+  // The dux notes a check needs: those its events play.
+  const needed = (events) => [...new Set(events.map((i) => skeleton[i].index))].sort((a, b) => a - b);
+
+  // What a check reads, up to which voice is which: a round's voices sing alike,
+  // so its block, repeated, gives the same check again with the voices
+  // relabelled. The search runs one of each (the whole canon is still analyzed
+  // at the end). Voices count as alike when their specs differ only in delay,
+  // name and loop; the edges (where the begin and end rules apply) stay apart.
+  const voiceKind = (spec.voices || []).map((v) => {
+    const { delay, name, loop, ...rest } = v || {};
+    return JSON.stringify(rest);
+  });
+  function signature(c) {
+    // In time order, then by dux note: an order that doesn't depend on which
+    // voice sings what; voices are labelled as they first appear in it.
+    const events = c.events.map((i) => skeleton[i]).sort((a, b) => a.t - b.t || a.index - b.index || a.voice - b.voice);
+    const labels = new Map();
+    const reads = events.map((e) => {
+      if (!labels.has(e.voice)) labels.set(e.voice, labels.size);
+      return [e.index, Math.round((e.t - c.t) * 1e6), Math.round(e.dur * 1e6), labels.get(e.voice), voiceKind[e.voice] || ""].join(",");
+    });
+    const edge = time.eq(c.t, edges.first) ? "first" : time.eq(c.t, edges.last) ? "last" : "";
+    return `${c.kind}|${edge}|${c.profile.only.join(" ")}|${reads.join(";")}`;
+  }
+
   const checks = [];
   onsets.forEach((t, s) => {
-    for (const [kind, profile] of [["now", nowProfile], ["next", nextProfileAt(s)]]) {
-      if (!profile.only.length) continue;
-      const events = window(s, kind === "next");
-      if (events.some(coda)) continue; // judged with the whole canon
-      const indices = [...new Set(events.map((i) => skeleton[i].index))].sort((a, b) => a - b);
-      checks.push({ slice: s, t, kind, events, indices, profile });
+    for (const [kind, keep] of [["now", nowRule], ["next", nextRuleAt(s)]]) {
+      for (const [back, only] of byLookback(keep)) {
+        const events = window(s, kind === "next", back);
+        if (events.some(coda)) continue; // judged with the whole canon
+        checks.push({ slice: s, t, kind, back, events, indices: needed(events), profile: subProfile((id) => only.includes(id)) });
+      }
     }
   });
 
+  // Checks at one slice, of one kind, as one: their rules together, in the
+  // widest of their windows (the search runs the checks that become ready at
+  // the same step this way, one analysis each).
+  function merge(group) {
+    if (group.length === 1) return group[0];
+    const [first] = group;
+    const union = (key) => [...new Set(group.flatMap((c) => c[key]))].sort((a, b) => a - b);
+    const only = ids.filter((id) => group.some((c) => c.profile.only.includes(id)));
+    return {
+      slice: first.slice, t: first.t, kind: first.kind, back: Math.max(...group.map((c) => c.back)),
+      events: union("events"), indices: union("indices"), profile: subProfile((id) => only.includes(id)),
+    };
+  }
+
   function checkOne(c, dux) {
-    const events = c.events.map((i) => ({ ...skeleton[i], pitch: pitchOf(i, dux) }));
+    const events = c.events.map((i) => {
+      const e = skeleton[i];
+      const up = raise(dux, e.index);
+      const pitch = pitchOf(i, dux);
+      // A raised note keeps the degree it's written on, as the renderer marks it.
+      return up ? { ...e, pitch, degree: tuning.quantize(system, pitch - up / 100).degree } : { ...e, pitch };
+    });
     const report = analyze.analyze({ events }, {
       system, meter, consonance: model_, final, edges, metrics: false, profile: c.profile,
     });
@@ -2935,6 +3087,8 @@ function model(options) {
   return {
     variables, degrees, checks, skeleton, onsets, edges,
     check: checkOne,
+    merge,
+    signature,
     full,
     spec: (dux) => withDegrees(dux),
     pitchOf,
@@ -2951,6 +3105,8 @@ exports.model = model;
 exports.LOOKAHEAD = LOOKAHEAD;
 exports.AT_END = AT_END;
 exports.BACK = BACK;
+exports.LOOKBACK = LOOKBACK;
+exports.lookback = lookback;
   };
 
   // ---- cg-generate.js
@@ -2972,6 +3128,8 @@ exports.BACK = BACK;
 //   strict(settings) turns musical settings (a final, a length, followers at
 //   intervals and delays in bars) into options for a first-species canon (M4
 //   part C).
+//   round(settings) does the same for a round at the unison, written by the
+//   block method (M4 part E).
 //
 // options: everything cg-constraints.model takes (spec, degrees, profile,
 // consonance, final), plus:
@@ -2984,7 +3142,11 @@ exports.BACK = BACK;
 //             the dux's first note on the final, notes you lock)
 //   order     "auto" (default): left to right, or outside-in when a voice runs
 //             backwards (R, RI), so crab and table canons are checked early;
-//             "left" or "outside-in" to choose
+//             "left" or "outside-in" to choose; "block" for a round (M4 part E):
+//             column by column, bar c of every section, with `section` (notes per
+//             section) and `columns`: "close" (round()'s default: the cadence's two
+//             columns, then the first, then the rest), "left", or "ends" (0, S-1,
+//             1, S-2, ...)
 //   jitter    how much the seed reorders candidates, in cost units (default 0.5)
 //   prefer    (dux) -> extra soft cost for a partial dux (the edits toggle's
 //             closeness to your melody, M4 part F); default none
@@ -3004,13 +3166,33 @@ const rng = require("cg-rng");
 
 const DEFAULTS = { seed: 1, budget: 100000, beam: 0, order: "auto", jitter: 0.5 };
 
-// The order to give the dux's notes pitches.
-function orderOf(variables, how) {
-  if (how === "left") return variables.slice();
+// The ends first: a, z, b, y, ...
+function outsideIn(list) {
   const out = [];
-  for (let a = 0, b = variables.length - 1; a <= b; a++, b--) {
-    out.push(variables[a]);
-    if (a !== b) out.push(variables[b]);
+  for (let a = 0, b = list.length - 1; a <= b; a++, b--) {
+    out.push(list[a]);
+    if (a !== b) out.push(list[b]);
+  }
+  return out;
+}
+
+// The order to give the dux's notes pitches. "block" (Albrechtsberger's first
+// draft, Mann p. 232): a round's sections sound together once every voice is
+// in, so it is written as one k-part block, column by column: bar c of each
+// section, then bar c + 1 (`columns`: "close", "left" or "ends").
+function orderOf(variables, how, section, columns = "left") {
+  if (how === "left") return variables.slice();
+  if (how !== "block") return outsideIn(variables);
+  const size = section || variables.length;
+  const sections = Math.ceil(variables.length / size);
+  const cols = Array.from({ length: size }, (_, c) => c);
+  // "close": the cadence first (the last bar, the next-to-last), then the first
+  // bar (the join into it), then the rest left to right.
+  const close = size > 2 ? [size - 1, size - 2, ...cols.slice(0, size - 2)] : cols.slice().reverse();
+  const sequence = columns === "ends" ? outsideIn(cols) : columns === "close" ? close : cols;
+  const out = [];
+  for (const c of sequence) {
+    for (let k = 0; k < sections; k++) if (variables.includes(k * size + c)) out.push(k * size + c);
   }
   return out;
 }
@@ -3021,11 +3203,28 @@ function* search(input) {
   const m = constraints.model(options);
   const backwards = (options.spec.voices || []).some((v) => v.transform === "R" || v.transform === "RI");
   const how = options.order === "auto" ? (backwards ? "outside-in" : "left") : options.order;
-  const order = orderOf(m.variables, how);
+  const order = orderOf(m.variables, how, options.section, options.columns);
   const position = new Map(order.map((v, p) => [v, p]));
   // The checks that become ready at each step: all their notes assigned by then.
-  const ready = order.map(() => []);
-  for (const c of m.checks) ready[Math.max(...c.indices.map((i) => position.get(i)))].push(c);
+  // Those of one slice that become ready at the same step run as one analysis.
+  const pending = order.map(() => new Map());
+  for (const c of m.checks) {
+    const step = Math.max(...c.indices.map((i) => position.get(i)));
+    const key = `${c.slice}:${c.kind}`;
+    if (!pending[step].has(key)) pending[step].set(key, []);
+    pending[step].get(key).push(c);
+  }
+  // A check that reads the same notes the same way as another at the same step
+  // (a round's block, repeated) runs once.
+  const ready = pending.map((groups) => {
+    const seen = new Set();
+    return [...groups.values()].map((group) => m.merge(group)).filter((c) => {
+      const key = m.signature(c);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  });
   const fixed = options.fixed || {};
   const random = rng.create(options.seed);
   const rejected = {};
@@ -3210,6 +3409,57 @@ function strict(settings = {}) {
   };
 }
 
+// A round (M4 part E; Albrechtsberger's first draft, Mann pp. 232-237): `voices`
+// equal voices at the unison, each a section (`section` bars) after the last,
+// singing one tune of voices x section notes, first species. Once every voice
+// is in, the sections sound together, so the tune is written as one k-part
+// block, column by column (order "block"). Every voice goes twice through and
+// the round is cut at the leader's end, a section end, as the finder judges
+// perpetual canons: the rendering holds the voices piling up ("the first two
+// or three voices in themselves should form a perfect two- or three-part
+// setting", p. 237), every join between sections, the join from the last
+// section back to the first, and ends on the block's last chord. A placement
+// that would make a 6/4 while the voices pile up (p. 237) is a fourth over the
+// sounding bass, a dissonance, so the sections' order is chosen with the notes.
+// Ficta: where the mode needs it, the leading note rising to the final at a
+// section's end is raised in the tune (C sharp in D dorian).
+//   settings: system, meter, final, voices (3), section (2 bars), range, profile
+//     (fux-relaxed for 3+ voices), ficta (true), columns, taste, tempo, and the
+//     search's seed, budget, beam and fixed
+function round(settings = {}) {
+  const system = settings.system || MAJOR;
+  const meter = settings.meter || { beats: 4, strong: [0] };
+  const final = settings.final === undefined ? 0 : settings.final;
+  const voices = settings.voices === undefined ? 3 : settings.voices;
+  const section = settings.section === undefined ? 2 : settings.section;
+  if (!Number.isInteger(voices) || voices < 2) throw new Error(`a round needs 2 or more voices, got ${voices}`);
+  if (!Number.isInteger(section) || section < 1) throw new Error(`a round's section is a whole number of bars from 1, got ${section}`);
+  const bar = meter.beats;
+  const ficta = settings.ficta === false || section < 2 ? []
+    : Array.from({ length: voices }, (_, k) => k * section + section - 2);
+  return {
+    spec: {
+      name: settings.name || "generated round",
+      system, meter, tempo: settings.tempo,
+      dux: { source: "list", notes: Array.from({ length: voices * section }, () => ({ dur: bar })) },
+      voices: Array.from({ length: voices }, (_, k) => ({ delay: k * section * bar, interval: { steps: 0 }, loop: 2 })),
+      ending: { kind: "loop", passes: 2 },
+    },
+    degrees: settings.range || [final - 3, final + 9],
+    profile: settings.profile || (voices > 2 ? "fux-relaxed" : "fux-strict"),
+    final,
+    ficta,
+    order: settings.order || "block",
+    section,
+    columns: settings.columns || "close",
+    prefer: settings.taste === false ? undefined : melodicTaste,
+    seed: settings.seed,
+    budget: settings.budget,
+    beam: settings.beam,
+    fixed: settings.fixed,
+  };
+}
+
 function generate(options) {
   const it = search(options);
   for (;;) {
@@ -3222,6 +3472,7 @@ exports.search = search;
 exports.generate = generate;
 exports.orderOf = orderOf;
 exports.strict = strict;
+exports.round = round;
 exports.melodicTaste = melodicTaste;
   };
 
@@ -3516,6 +3767,11 @@ __cg_require.local = 1;
 //   voices <2-4>                   show voices ...     the melody and 1-3 followers (M4 part D); the
 //                                                      rules follow: fux-strict for two voices,
 //                                                      fux-relaxed for more (unless you chose another)
+//   round <0|1>                    show round ...      a round instead (M4 part E): every voice sings
+//                                                      the tune at the unison, each a section after the
+//                                                      last; notes, the followers and the close are
+//                                                      then unused (the tune is voices x section bars)
+//   section <bars>                 show section ...    a round's section, in bars (2-16)
 //   interval <steps>               show interval ...   the first follower's interval, in scale steps
 //   delay <bars>                   show delay ...      the first follower's delay, in bars
 //   interval2|delay2 <n>           show ...            the second follower (3 or 4 voices)
@@ -3563,9 +3819,12 @@ const NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 // The followers' defaults (M4 part D): the fifth above a bar later, the octave
 // below four bars later, the fourth below five bars later (C, G, C, G entries,
 // as a fugue's exposition): with 12 notes every seed of the first four finds one.
+// A round's default section (M4 part E): 4 bars, so 3 voices sing a 12-note tune;
+// every seed of the first four finds one, in every mode.
 const state = {
-  mode: "ionian", notes: 12, below: 3, above: 9, voices: 2, interval: 4, delay: 1, interval2: -7, delay2: 4,
-  interval3: -3, delay3: 5, profile: "fux-strict", cadence: "6|8", seed: 1, count: 4, taste: 1, slicems: 20,
+  mode: "ionian", notes: 12, below: 3, above: 9, voices: 2, round: 0, section: 4, interval: 4, delay: 1,
+  interval2: -7, delay2: 4, interval3: -3, delay3: 5, profile: "fux-strict", cadence: "6|8", seed: 1, count: 4,
+  taste: 1, slicems: 20,
 };
 const whole = (low, high) => (v) => Number.isInteger(v) && v >= low && v <= high;
 const CHECKS = {
@@ -3573,6 +3832,7 @@ const CHECKS = {
   below: [whole(0, 14), "below: whole steps from 0 to 14"],
   above: [whole(0, 21), "above: whole steps from 0 to 21"],
   voices: [whole(2, 4), "voices: 2 3 or 4"],
+  section: [whole(2, 16), "section: whole bars from 2 to 16"],
   interval: [whole(-21, 21), "interval: whole scale steps from -21 to 21"],
   delay: [whole(0, 16), "delay: whole bars from 0 to 16"],
   interval2: [whole(-21, 21), "interval2: whole scale steps from -21 to 21"],
@@ -3653,6 +3913,12 @@ function voices(n) {
     show("profile");
   }
 }
+// A round instead of a canon with followers (M4 part E).
+function round(on) {
+  state.round = on ? 1 : 0;
+  show("round");
+}
+function section(n) { setNumber("section", n); }
 function seed(n) { setNumber("seed", n); }
 function count(n) { setNumber("count", n); }
 function slicems(ms) { setNumber("slicems", ms); }
@@ -3715,12 +3981,22 @@ function followers() {
 followers.local = 1;
 
 function label(seedValue) {
+  if (state.round) {
+    return `generated: seed ${seedValue} / round for ${state.voices} voices / sections of ${state.section} bars`;
+  }
   const names = followers().map((f) => `${finder.intervalName({ domain: "degree", steps: f.interval }, 7)} after ${f.delay} ${f.delay === 1 ? "bar" : "bars"}`);
   return `generated: seed ${seedValue} / ${names.join(" + ")}`;
 }
 label.local = 1;
 
 function optionsFor(w, seedValue) {
+  if (state.round) {
+    return generator.round({
+      name: label(seedValue), system: w.system, meter: w.meter, tempo: w.tempo, final: w.final,
+      voices: state.voices, section: state.section, range: [w.final - state.below, w.final + state.above],
+      profile: state.profile, taste: Boolean(state.taste), seed: seedValue, budget: extra.budget,
+    });
+  }
   return generator.strict({
     name: label(seedValue), system: w.system, meter: w.meter, tempo: w.tempo, final: w.final,
     length: state.notes, range: [w.final - state.below, w.final + state.above],
@@ -3790,13 +4066,15 @@ function record(seedValue, r) {
 }
 record.local = 1;
 
-// A dux as note names (12-EDO) or degrees, the first eight.
+// A dux as note names (12-EDO) or degrees, the first eight; a raised note (a
+// round's leading note) by its sounding name: C# 5.
 function notesText(r) {
   const system = scales.fromSpec(r.spec.system);
   const named = system.period_cents === 1200 && (system.steps_cents || []).every((c) => Math.abs(c / 100 - Math.round(c / 100)) < 0.01);
-  const shown = r.dux.slice(0, 8).map((d) => {
+  const shown = r.dux.slice(0, 8).map((d, i) => {
     if (!named) return String(d);
-    const midi = Math.round(tuning.degreeToPitch(system, d));
+    const offset = (r.spec.dux.notes[i] && r.spec.dux.notes[i].offset) || 0;
+    const midi = Math.round(tuning.degreeToPitch(system, d) + offset / 100);
     return NAMES[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1);
   });
   return shown.join(" ") + (r.dux.length > 8 ? " ..." : "");
@@ -3849,6 +4127,12 @@ function pick(index) {
 
 function info() {
   const s = state;
+  if (s.round) {
+    outlet(0, "status", "generate:", s.mode, "/ round for", s.voices, "voices / sections of", s.section, "bars / range",
+      -s.below, "to", s.above, "steps /", s.profile, "/ seeds", s.seed, "to", s.seed + s.count - 1, "/ taste",
+      s.taste ? "on" : "off", "/ slice", s.slicems, "ms");
+    return;
+  }
   const heard = followers().map((f) => `${f.interval} steps after ${f.delay} bars`).join(" + ");
   outlet(0, "status", "generate:", s.mode, "/", s.notes, "notes from", -s.below, "to", s.above, "steps /", s.voices,
     "voices: followers", heard, "/", s.profile, "/ close", s.cadence, "/ seeds", s.seed, "to",

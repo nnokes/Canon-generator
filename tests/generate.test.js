@@ -9,6 +9,8 @@ const canon = require("cg-canon");
 const analyze = require("cg-analyze");
 const scales = require("cg-scales");
 const tuning = require("cg-tuning");
+const fs = require("fs");
+const path = require("path");
 
 const MAJOR = { type: "edo", divisions: 12, mode: [0, 2, 4, 5, 7, 9, 11], ref: { step: 0, midi: 60 } };
 const METER = { beats: 4, strong: [0] };
@@ -235,4 +237,137 @@ test("four voices, and in dorian; entries a bar apart twice running can't be a c
   assert.equal(none.found, false);
   assert.equal(none.complete, true);
   assert.equal(none.diagnostics.blocking, "dissonance");
+});
+
+// ---------------------------------------------------------------- part E: rounds by the block method
+
+const MODE = {
+  ionian: { type: "edo", divisions: 12, mode: [0, 2, 4, 5, 7, 9, 11], ref: { step: 0, midi: 60 } },
+  dorian: { type: "edo", divisions: 12, mode: [0, 2, 3, 5, 7, 9, 10], ref: { step: 0, midi: 62 } },
+  aeolian: { type: "edo", divisions: 12, mode: [0, 2, 3, 5, 7, 8, 10], ref: { step: 0, midi: 57 } },
+  phrygian: { type: "edo", divisions: 12, mode: [0, 1, 3, 5, 7, 8, 10], ref: { step: 0, midi: 64 } },
+};
+const RELAXED_INSIDE = { base: "fux-relaxed", rules: { "begin-perfect": false, "end-perfect": false, "mode-final": false, penultimate: false } };
+
+test("rounds: 3 and 4 voices in ionian, dorian, aeolian and phrygian, each a perfect setting as it piles up, and its joins clean", () => {
+  for (const [mode, voices, section] of [["ionian", 3, 4], ["ionian", 4, 3], ["dorian", 3, 4], ["aeolian", 4, 4], ["phrygian", 3, 4]]) {
+    const label = `${mode}, ${voices} voices, sections of ${section} bars`;
+    const system = MODE[mode];
+    const options_ = generator.round({ system, voices, section });
+    assert.equal(options_.profile, voices > 2 ? "fux-relaxed" : "fux-strict");
+    const result = generator.generate(options_);
+    assert.equal(result.found, true, `${label}: ${result.diagnostics.blocking}`);
+    const rendered = canon.render(result.spec);
+    const final = system.ref.midi;
+    const scale = scales.fromSpec(system);
+    const again = analyze.analyze(rendered, { system: scale, meter: METER, profile: "fux-relaxed", final });
+    assert.equal(again.hard, 0, `${label}: ${again.violations.filter((v) => v.hard).map((v) => `${v.rule} ${v.bar}`)}`);
+    // No 6/4 anywhere: no fourth over the sounding bass, while the voices pile up or after.
+    assert.ok(again.slices.every((s) => !s.above.some((x) => x.fourth)), `${label}: a fourth over the bass`);
+    // A round: every voice sings the tune, each a section after the last.
+    const bar = 4;
+    const tune = rendered.events.filter((e) => e.voice === 0);
+    for (const e of rendered.events.filter((x) => x.voice > 0)) {
+      const lead = tune.find((d) => Math.abs(d.t - (e.t - e.voice * section * bar)) < 1e-9);
+      if (lead) assert.equal(e.pitch, lead.pitch, label);
+    }
+    // The wrap-around join, the last section back to the first, is in the analysis.
+    const wrap = voices * section * bar;
+    assert.ok(rendered.events.some((e) => e.voice === 0 && e.pass === 1 && e.index === 0 && Math.abs(e.t - wrap) < 1e-9));
+    assert.ok(again.slices.some((s) => Math.abs(s.t - wrap) < 1e-9));
+    // It ends on a section end, on the final.
+    const last = again.slices[again.slices.length - 1];
+    assert.ok(last.notes.length === voices && Math.abs(((last.notes[0].pitch - final) % 12 + 12) % 12) < 0.01, `${label}: the last chord`);
+    // "The first two or three voices in themselves should form a perfect two- or
+    // three-part setting" (Mann p. 237): sections 1..j as a j-part block, alone.
+    for (let j = 2; j <= voices; j++) {
+      const block = {
+        system, meter: METER,
+        dux: { source: "list", notes: result.spec.dux.notes.slice(0, section) },
+        voices: Array.from({ length: j }, () => ({})),
+      };
+      // Voice k of the block sings section k: one dux per section, as voices of one spec.
+      const events = [];
+      for (let k = 0; k < j; k++) {
+        const notes = result.spec.dux.notes.slice(k * section, (k + 1) * section);
+        canon.render({ ...block, dux: { source: "list", notes }, voices: [{}] }).events
+          .forEach((e) => events.push({ ...e, voice: k }));
+      }
+      const part = analyze.analyze({ events }, { system: scale, meter: METER, profile: RELAXED_INSIDE, final });
+      assert.equal(part.hard, 0, `${label}: sections 1-${j} alone: ${part.violations.filter((v) => v.hard).map((v) => `${v.rule} ${v.bar}`)}`);
+    }
+  }
+});
+
+test("rounds: the leading note raised in the tune where the mode needs it (C sharp in D dorian), and reached by step", () => {
+  const result = generator.generate(generator.round({ system: MODE.dorian, voices: 3, section: 4 }));
+  assert.equal(result.found, true);
+  const raised = result.spec.dux.notes.map((n, i) => [n, i]).filter(([n]) => n.offset);
+  assert.ok(raised.length >= 1, "a C sharp in the tune");
+  for (const [n, i] of raised) {
+    assert.equal(((n.degree % 7) + 7) % 7, 6, "written as C (the degree below D)");
+    assert.equal(n.offset, 100, "raised a semitone");
+    assert.equal(i % 4, 2, "at a section's next-to-last note");
+    assert.equal(result.spec.dux.notes[i + 1].degree, n.degree + 1, "rising to the final");
+  }
+  const rendered = canon.render(result.spec);
+  const sharp = rendered.events.filter((e) => ((Math.round(e.pitch) % 12) + 12) % 12 === 1);
+  assert.ok(sharp.length > 0 && sharp.every((e) => e.degree !== undefined), "the renderer marks the written degree");
+  // Ionian and phrygian already have a semitone at the final: nothing raised.
+  for (const mode of ["ionian", "phrygian"]) {
+    const plain = generator.generate(generator.round({ system: MODE[mode], voices: 3, section: 4 }));
+    assert.ok(plain.spec.dux.notes.every((n) => !n.offset), mode);
+  }
+});
+
+test("rounds: the block method is a far smaller search than the chain; the same seed gives the same round", () => {
+  const block = generator.generate(generator.round({ voices: 3, section: 4, seed: 1 }));
+  assert.equal(block.found, true);
+  assert.ok(block.nodes < 5000, `${block.nodes} candidates`);
+  // Written left to right (the canon chain), the cadence and the full chords
+  // are only checked once the last section is written.
+  const chain = generator.generate(generator.round({ voices: 3, section: 4, seed: 1, order: "left", budget: 8000 }));
+  assert.equal(chain.found, false, "the chain, at 8,000 candidates");
+  assert.equal(chain.complete, false);
+  const again = generator.generate(generator.round({ voices: 3, section: 4, seed: 1 }));
+  assert.deepEqual(again.dux, block.dux);
+  const other = generator.generate(generator.round({ voices: 3, section: 4, seed: 2 }));
+  assert.notDeepEqual(other.dux, block.dux);
+  // The order: bar c of every section, the cadence's columns first.
+  assert.deepEqual(generator.orderOf([0, 1, 2, 3, 4, 5, 6, 7], "block", 4, "left"), [0, 4, 1, 5, 2, 6, 3, 7]);
+  assert.deepEqual(generator.orderOf([0, 1, 2, 3, 4, 5, 6, 7], "block", 4, "close"), [3, 7, 2, 6, 0, 4, 1, 5]);
+  // Sections of 2 bars in 3 voices: the block is only the cadence. Proven impossible.
+  const short = generator.generate(generator.round({ voices: 3, section: 2 }));
+  assert.equal(short.found, false);
+  assert.equal(short.complete, true);
+});
+
+// Mann p. 237: Albrechtsberger's two short rounds, "Turnus descendet ad inferos".
+test("Mann Ex. 218-219: Albrechtsberger's rounds pass his canon rules as perpetual rounds, piling up cleanly; the finder finds Ex. 218", () => {
+  const finder = require("cg-finder");
+  for (const name of ["ex218.json", "ex219.json"]) {
+    const fx = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "mann", name), "utf8"));
+    const roundSpec = (count) => ({
+      system: fx.system, meter: fx.meter, dux: fx.dux,
+      voices: Array.from({ length: count }, (_, k) => ({ delay: k * fx.section, loop: 2 })),
+      ending: { kind: "loop", passes: 2 },
+    });
+    const options_ = { system: scales.fromSpec(fx.system), meter: fx.meter, profile: "canon", final: 60 };
+    const report = analyze.analyze(canon.render(roundSpec(fx.voices)), options_);
+    assert.equal(report.hard, 0, `${name}: ${report.violations.filter((v) => v.hard).map((v) => `${v.rule} ${v.bar}`)}`);
+    assert.ok(!report.violations.some((v) => v.rule === "six-four"), `${name}: no 6/4`);
+    // Every group heard while the voices pile up, alone (the first j voices, perpetual).
+    for (let j = 2; j < fx.voices; j++) {
+      const part = analyze.analyze(canon.render(roundSpec(j)), options_);
+      assert.equal(part.violations.filter((v) => v.hard && v.bar <= j).length, 0, `${name}: the first ${j} voices`);
+    }
+  }
+  // Given only the tune, the four-voice search finds the round: the unison, a bar apart.
+  const fx = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "mann", "ex218.json"), "utf8"));
+  const out = finder.find({
+    dux: fx.dux, system: fx.system, meter: fx.meter, profile: "canon", perpetual: true, passes: 2,
+    voices: 4, ranges: { intervals: finder.range(-7, 7), delays: [4, 8, 12] }, keep: 50,
+  });
+  const round = out.results.find((r) => r.settings.every((x) => x.interval.steps === 0));
+  assert.ok(round && round.hard === 0 && round.cost === 0, "unison, after 4 + unison, after 8 + unison, after 12: clean");
 });

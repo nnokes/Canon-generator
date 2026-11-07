@@ -15,6 +15,8 @@
 //   strict(settings) turns musical settings (a final, a length, followers at
 //   intervals and delays in bars) into options for a first-species canon (M4
 //   part C).
+//   round(settings) does the same for a round at the unison, written by the
+//   block method (M4 part E).
 //
 // options: everything cg-constraints.model takes (spec, degrees, profile,
 // consonance, final), plus:
@@ -27,7 +29,11 @@
 //             the dux's first note on the final, notes you lock)
 //   order     "auto" (default): left to right, or outside-in when a voice runs
 //             backwards (R, RI), so crab and table canons are checked early;
-//             "left" or "outside-in" to choose
+//             "left" or "outside-in" to choose; "block" for a round (M4 part E):
+//             column by column, bar c of every section, with `section` (notes per
+//             section) and `columns`: "close" (round()'s default: the cadence's two
+//             columns, then the first, then the rest), "left", or "ends" (0, S-1,
+//             1, S-2, ...)
 //   jitter    how much the seed reorders candidates, in cost units (default 0.5)
 //   prefer    (dux) -> extra soft cost for a partial dux (the edits toggle's
 //             closeness to your melody, M4 part F); default none
@@ -47,13 +53,33 @@ const rng = require("cg-rng");
 
 const DEFAULTS = { seed: 1, budget: 100000, beam: 0, order: "auto", jitter: 0.5 };
 
-// The order to give the dux's notes pitches.
-function orderOf(variables, how) {
-  if (how === "left") return variables.slice();
+// The ends first: a, z, b, y, ...
+function outsideIn(list) {
   const out = [];
-  for (let a = 0, b = variables.length - 1; a <= b; a++, b--) {
-    out.push(variables[a]);
-    if (a !== b) out.push(variables[b]);
+  for (let a = 0, b = list.length - 1; a <= b; a++, b--) {
+    out.push(list[a]);
+    if (a !== b) out.push(list[b]);
+  }
+  return out;
+}
+
+// The order to give the dux's notes pitches. "block" (Albrechtsberger's first
+// draft, Mann p. 232): a round's sections sound together once every voice is
+// in, so it is written as one k-part block, column by column: bar c of each
+// section, then bar c + 1 (`columns`: "close", "left" or "ends").
+function orderOf(variables, how, section, columns = "left") {
+  if (how === "left") return variables.slice();
+  if (how !== "block") return outsideIn(variables);
+  const size = section || variables.length;
+  const sections = Math.ceil(variables.length / size);
+  const cols = Array.from({ length: size }, (_, c) => c);
+  // "close": the cadence first (the last bar, the next-to-last), then the first
+  // bar (the join into it), then the rest left to right.
+  const close = size > 2 ? [size - 1, size - 2, ...cols.slice(0, size - 2)] : cols.slice().reverse();
+  const sequence = columns === "ends" ? outsideIn(cols) : columns === "close" ? close : cols;
+  const out = [];
+  for (const c of sequence) {
+    for (let k = 0; k < sections; k++) if (variables.includes(k * size + c)) out.push(k * size + c);
   }
   return out;
 }
@@ -64,11 +90,28 @@ function* search(input) {
   const m = constraints.model(options);
   const backwards = (options.spec.voices || []).some((v) => v.transform === "R" || v.transform === "RI");
   const how = options.order === "auto" ? (backwards ? "outside-in" : "left") : options.order;
-  const order = orderOf(m.variables, how);
+  const order = orderOf(m.variables, how, options.section, options.columns);
   const position = new Map(order.map((v, p) => [v, p]));
   // The checks that become ready at each step: all their notes assigned by then.
-  const ready = order.map(() => []);
-  for (const c of m.checks) ready[Math.max(...c.indices.map((i) => position.get(i)))].push(c);
+  // Those of one slice that become ready at the same step run as one analysis.
+  const pending = order.map(() => new Map());
+  for (const c of m.checks) {
+    const step = Math.max(...c.indices.map((i) => position.get(i)));
+    const key = `${c.slice}:${c.kind}`;
+    if (!pending[step].has(key)) pending[step].set(key, []);
+    pending[step].get(key).push(c);
+  }
+  // A check that reads the same notes the same way as another at the same step
+  // (a round's block, repeated) runs once.
+  const ready = pending.map((groups) => {
+    const seen = new Set();
+    return [...groups.values()].map((group) => m.merge(group)).filter((c) => {
+      const key = m.signature(c);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  });
   const fixed = options.fixed || {};
   const random = rng.create(options.seed);
   const rejected = {};
@@ -253,6 +296,57 @@ function strict(settings = {}) {
   };
 }
 
+// A round (M4 part E; Albrechtsberger's first draft, Mann pp. 232-237): `voices`
+// equal voices at the unison, each a section (`section` bars) after the last,
+// singing one tune of voices x section notes, first species. Once every voice
+// is in, the sections sound together, so the tune is written as one k-part
+// block, column by column (order "block"). Every voice goes twice through and
+// the round is cut at the leader's end, a section end, as the finder judges
+// perpetual canons: the rendering holds the voices piling up ("the first two
+// or three voices in themselves should form a perfect two- or three-part
+// setting", p. 237), every join between sections, the join from the last
+// section back to the first, and ends on the block's last chord. A placement
+// that would make a 6/4 while the voices pile up (p. 237) is a fourth over the
+// sounding bass, a dissonance, so the sections' order is chosen with the notes.
+// Ficta: where the mode needs it, the leading note rising to the final at a
+// section's end is raised in the tune (C sharp in D dorian).
+//   settings: system, meter, final, voices (3), section (2 bars), range, profile
+//     (fux-relaxed for 3+ voices), ficta (true), columns, taste, tempo, and the
+//     search's seed, budget, beam and fixed
+function round(settings = {}) {
+  const system = settings.system || MAJOR;
+  const meter = settings.meter || { beats: 4, strong: [0] };
+  const final = settings.final === undefined ? 0 : settings.final;
+  const voices = settings.voices === undefined ? 3 : settings.voices;
+  const section = settings.section === undefined ? 2 : settings.section;
+  if (!Number.isInteger(voices) || voices < 2) throw new Error(`a round needs 2 or more voices, got ${voices}`);
+  if (!Number.isInteger(section) || section < 1) throw new Error(`a round's section is a whole number of bars from 1, got ${section}`);
+  const bar = meter.beats;
+  const ficta = settings.ficta === false || section < 2 ? []
+    : Array.from({ length: voices }, (_, k) => k * section + section - 2);
+  return {
+    spec: {
+      name: settings.name || "generated round",
+      system, meter, tempo: settings.tempo,
+      dux: { source: "list", notes: Array.from({ length: voices * section }, () => ({ dur: bar })) },
+      voices: Array.from({ length: voices }, (_, k) => ({ delay: k * section * bar, interval: { steps: 0 }, loop: 2 })),
+      ending: { kind: "loop", passes: 2 },
+    },
+    degrees: settings.range || [final - 3, final + 9],
+    profile: settings.profile || (voices > 2 ? "fux-relaxed" : "fux-strict"),
+    final,
+    ficta,
+    order: settings.order || "block",
+    section,
+    columns: settings.columns || "close",
+    prefer: settings.taste === false ? undefined : melodicTaste,
+    seed: settings.seed,
+    budget: settings.budget,
+    beam: settings.beam,
+    fixed: settings.fixed,
+  };
+}
+
 function generate(options) {
   const it = search(options);
   for (;;) {
@@ -265,4 +359,5 @@ exports.search = search;
 exports.generate = generate;
 exports.orderOf = orderOf;
 exports.strict = strict;
+exports.round = round;
 exports.melodicTaste = melodicTaste;

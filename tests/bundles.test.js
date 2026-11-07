@@ -804,10 +804,12 @@ test("cg.generate exposes exactly its documented messages, and echoes every sett
   const bundle = loadBundle("cg.generate");
   assert.deepEqual(bundle.handlers(), [
     "above", "below", "budget", "cadence", "count", "delay", "delay2", "delay3", "info", "interval", "interval2",
-    "interval3", "mode", "notes", "pick", "profile", "run", "seed", "settings", "slicems", "stop", "taste", "voices",
+    "interval3", "mode", "notes", "pick", "profile", "round", "run", "section", "seed", "settings", "slicems", "stop",
+    "taste", "voices",
   ]);
   assert.deepEqual(select(bundle.send("settings"), "show"), [
-    ["mode", "ionian"], ["notes", 12], ["below", 3], ["above", 9], ["voices", 2], ["interval", 4], ["delay", 1],
+    ["mode", "ionian"], ["notes", 12], ["below", 3], ["above", 9], ["voices", 2], ["round", 0], ["section", 4],
+    ["interval", 4], ["delay", 1],
     ["interval2", -7], ["delay2", 4], ["interval3", -3], ["delay3", 5],
     ["profile", "fux-strict"], ["cadence", "6|8"], ["seed", 1], ["count", 4], ["taste", 1], ["slicems", 20],
   ]);
@@ -816,6 +818,7 @@ test("cg.generate exposes exactly its documented messages, and echoes every sett
     ["notes", 1, 12, /notes: a whole number from 2 to 64/], ["mode", "locrian", "ionian", /mode: one of ionian/],
     ["cadence", "7-6|8", "6|8", /cadence: one of 6\|8 3\|1/], ["profile", "baroque", "fux-strict", /unknown rule profile/],
     ["delay", 1.5, 1, /delay: whole bars/], ["voices", 5, 2, /voices: 2 3 or 4/],
+    ["section", 1, 4, /section: whole bars from 2 to 16/],
   ]) {
     const out = bundle.send(message, value);
     assert.match(errors(out)[0], why);
@@ -900,6 +903,37 @@ test("cg.generate: three and four voices, Fux's rules for more parts, and back t
   bundle.send("profile", "fux-relaxed");
   assert.deepEqual(select(bundle.send("voices", 3), "show"), [["voices", 3]], "already fux-relaxed: nothing to change");
   assert.deepEqual(select(bundle.send("voices", 2), "show"), [["voices", 2], ["profile", "fux-strict"]]);
+});
+
+test("cg.generate: rounds, by the block method, in dorian with the C sharp in the tune; they play in the canon panel", () => {
+  const canonBundle = loadBundle("cg.canon");
+  canonBundle.send("preset", 0);
+  const bundle = loadBundle("cg.generate");
+  assert.deepEqual(select(bundle.send("round", 1), "show"), [["round", 1]]);
+  bundle.send("voices", 3);
+  bundle.send("mode", "dorian");
+  bundle.send("count", 2);
+  assert.match(select(bundle.send("info"), "status")[0].join(" "), /round for 3 voices \/ sections of 4 bars/);
+  bundle.send("run");
+  const { out } = bundle.tick();
+  const listed = select(out, "results").filter((r) => r[0] === "append").map((r) => r[1]);
+  assert.equal(listed.length, 2, select(out, "status").map((l) => l.join(" ")).join("\n"));
+  listed.forEach((item, i) => {
+    assert.ok(!/[,;]/.test(item), item);
+    bundle.send("pick", i);
+    const spec = JSON.parse(new SimDict("cg.generated").stringify());
+    assert.match(spec.name, /^generated: seed \d+ \/ round for 3 voices \/ sections of 4 bars$/);
+    assert.equal(spec.dux.notes.length, 12, "3 voices x 4 bars");
+    assert.ok(spec.voices.every((v) => v.interval.steps === 0), "at the unison");
+    const sharp = spec.dux.notes.findIndex((n) => n.offset);
+    if (sharp >= 0 && sharp < 8) assert.match(item, /C#/, "the raised note by its name (the menu shows the first 8)");
+    const rendered = canonEngine.render(spec);
+    const report = require("cg-analyze").analyze(rendered, {
+      system: require("cg-scales").fromSpec(spec.system), meter: spec.meter, profile: "fux-relaxed", final: 62,
+    });
+    assert.equal(report.hard, 0, `${item}: ${report.violations.filter((v) => v.hard).map((v) => v.rule).join(" ")}`);
+    assert.deepEqual(errors(canonBundle.send("usespec", "cg.generated")), []);
+  });
 });
 
 test("cg.generate: a setting with no canon says which rule blocks it", () => {
